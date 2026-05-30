@@ -1,9 +1,28 @@
 "use client";
 
-import { useState } from "react";
-import { AlertTriangle, Boxes, Code2, Keyboard, Lock, Move3d, Ruler } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  Boxes,
+  Code2,
+  Keyboard,
+  Lock,
+  Move3d,
+  PanelRight,
+  Ruler,
+} from "lucide-react";
+import {
+  formatWarning,
+  getLocalizedCategoryLabel,
+  getLocalizedObjectLabel,
+  getLocalizedRoomLabel,
+  t,
+} from "@/lib/i18n/translations";
+import type { Locale, MessageKey } from "@/lib/i18n/translations";
 import { useRoomStore } from "@/store/roomStore";
-import type { RoomObject } from "@/types/room";
+import { useUIStore } from "@/store/uiStore";
+import type { SidebarTab } from "@/store/uiStore";
+import type { RoomData, RoomObject } from "@/types/room";
 
 interface SelectedObjectDraft {
   positionX: string;
@@ -14,6 +33,18 @@ interface SelectedObjectDraft {
   height: string;
   color: string;
 }
+
+const sidebarTabs: Array<{
+  id: SidebarTab;
+  labelKey: MessageKey;
+  icon: typeof Move3d;
+}> = [
+  { id: "details", labelKey: "details", icon: Move3d },
+  { id: "outliner", labelKey: "outliner", icon: Boxes },
+  { id: "validation", labelKey: "validate", icon: AlertTriangle },
+  { id: "json", labelKey: "json", icon: Code2 },
+  { id: "shortcuts", labelKey: "keys", icon: Keyboard },
+];
 
 const createDraftFromObject = (object: RoomObject): SelectedObjectDraft => ({
   positionX: object.position.x.toFixed(2),
@@ -30,7 +61,31 @@ const toNumber = (value: string, fallback: number) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const createLocalizedJsonPreview = (roomData: RoomData, locale: Locale) => ({
+  ...roomData,
+  notes:
+    locale === "tr"
+      ? [
+          "Low-poly edit\u00f6r demo odas\u0131.",
+          "Sahne procedural mobilya \u00fcrete\u00e7leri ve d\u00fczenlenebilir JSON durumu kullan\u0131yor.",
+        ]
+      : roomData.notes,
+  room: {
+    ...roomData.room,
+    label: getLocalizedRoomLabel(locale, roomData.room),
+  },
+  objects: roomData.objects.map((object) => ({
+    ...object,
+    label: getLocalizedObjectLabel(locale, object),
+    category: getLocalizedCategoryLabel(locale, object.category),
+    categoryKey: object.category,
+  })),
+});
+
 export function Sidebar() {
+  const locale = useUIStore((state) => state.locale);
+  const activeSidebarTab = useUIStore((state) => state.activeSidebarTab);
+  const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
   const roomData = useRoomStore((state) => state.roomData);
   const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
   const setSelectedObjectId = useRoomStore((state) => state.setSelectedObjectId);
@@ -38,147 +93,217 @@ export function Sidebar() {
 
   const selectedObject =
     roomData.objects.find((object) => object.id === selectedObjectId) ?? null;
+  const localizedJson = useMemo(
+    () => createLocalizedJsonPreview(roomData, locale),
+    [locale, roomData],
+  );
 
   return (
-    <aside className="editor-panel scroll-area flex min-h-[760px] flex-col gap-4 overflow-y-auto p-4">
-      <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
-        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
-          <Ruler className="h-3.5 w-3.5" />
-          Scene Metrics
+    <aside className="editor-panel flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="shrink-0 border-b border-white/8 px-4 py-4">
+        <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
+          <PanelRight className="h-3.5 w-3.5" />
+          {t(locale, "inspectorPanel")}
         </div>
-        <dl className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-300">
-          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-            <dt className="text-slate-500">Width</dt>
-            <dd className="mt-1 font-semibold text-white">
-              {roomData.room.width.toFixed(2)}m
-            </dd>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-            <dt className="text-slate-500">Depth</dt>
-            <dd className="mt-1 font-semibold text-white">
-              {roomData.room.depth.toFixed(2)}m
-            </dd>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-            <dt className="text-slate-500">Height</dt>
-            <dd className="mt-1 font-semibold text-white">
-              {roomData.room.height.toFixed(2)}m
-            </dd>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-            <dt className="text-slate-500">Objects</dt>
-            <dd className="mt-1 font-semibold text-white">
-              {roomData.objects.length}
-            </dd>
-          </div>
-        </dl>
-      </section>
+        <div className="flex flex-wrap gap-2">
+          {sidebarTabs.map((tab) => {
+            const Icon = tab.icon;
+            const active = activeSidebarTab === tab.id;
 
-      <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
-        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#ffb16a]">
-          <Move3d className="h-3.5 w-3.5" />
-          Details
-        </div>
-        {selectedObject ? (
-          <SelectedObjectEditor key={selectedObject.id} object={selectedObject} />
-        ) : (
-          <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm leading-6 text-slate-400">
-            Select an object in the viewport or outliner to edit width, depth,
-            height, position, rotation, and color.
-          </div>
-        )}
-      </section>
-
-      <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
-        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
-          <Boxes className="h-3.5 w-3.5" />
-          World Outliner
-        </div>
-        <div className="mt-4 space-y-2">
-          {roomData.objects.map((object) => (
-            <button
-              key={object.id}
-              type="button"
-              onClick={() => setSelectedObjectId(object.id)}
-              className={`flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition ${
-                selectedObjectId === object.id
-                  ? "border-[#ff8c42] bg-[#2a1910] text-white"
-                  : "border-white/10 bg-[#111924] text-slate-300 hover:border-[#32516c] hover:text-white"
-              }`}
-            >
-              <div>
-                <div className="font-medium">{object.label}</div>
-                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
-                  {object.category}
-                </div>
-              </div>
-              <span
-                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                  object.locked
-                    ? "bg-[#2f1b11] text-[#ffb16a]"
-                    : "bg-[#102234] text-[#8cb9ff]"
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveSidebarTab(tab.id)}
+                aria-pressed={active}
+                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                  active
+                    ? "border-[#4ea8ff] bg-[#102234] text-white"
+                    : "border-white/10 bg-[#0d141d] text-slate-300 hover:border-[#32516c] hover:text-white"
                 }`}
               >
-                {object.locked ? "Locked" : "Open"}
-              </span>
-            </button>
-          ))}
+                <Icon className="h-4 w-4" />
+                {t(locale, tab.labelKey)}
+              </button>
+            );
+          })}
         </div>
-      </section>
+      </div>
 
-      <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
-        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#ffb16a]">
-          <AlertTriangle className="h-3.5 w-3.5" />
-          Validation
-        </div>
-        {validationWarnings.length ? (
-          <ul className="mt-4 space-y-3 text-sm leading-6 text-[#f5c28b]">
-            {validationWarnings.map((warning, index) => (
-              <li
-                key={`${warning.code}-${index}`}
-                className="rounded-xl border border-[#6d4a29] bg-[#25180f] px-3 py-3"
-              >
-                {warning.message}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="mt-4 rounded-xl border border-[#24405a] bg-[#111924] px-3 py-3 text-sm text-[#8cb9ff]">
-            No active validation issues. Door, window, and locked-object constraints
-            are clear.
+      <div className="scroll-area min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        {activeSidebarTab === "details" ? (
+          <div className="space-y-4">
+            <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
+                <Ruler className="h-3.5 w-3.5" />
+                {t(locale, "sceneMetrics")}
+              </div>
+              <dl className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-300">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <dt className="text-slate-500">{t(locale, "width")}</dt>
+                  <dd className="mt-1 font-semibold text-white">
+                    {roomData.room.width.toFixed(2)}m
+                  </dd>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <dt className="text-slate-500">{t(locale, "depth")}</dt>
+                  <dd className="mt-1 font-semibold text-white">
+                    {roomData.room.depth.toFixed(2)}m
+                  </dd>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <dt className="text-slate-500">{t(locale, "height")}</dt>
+                  <dd className="mt-1 font-semibold text-white">
+                    {roomData.room.height.toFixed(2)}m
+                  </dd>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <dt className="text-slate-500">{t(locale, "objectCount")}</dt>
+                  <dd className="mt-1 font-semibold text-white">
+                    {roomData.objects.length}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
+            <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#ffb16a]">
+                <Move3d className="h-3.5 w-3.5" />
+                {t(locale, "objectDetails")}
+              </div>
+              {selectedObject ? (
+                <SelectedObjectEditor
+                  key={selectedObject.id}
+                  locale={locale}
+                  object={selectedObject}
+                />
+              ) : (
+                <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm leading-6 text-slate-400">
+                  {t(locale, "selectObjectHint")}
+                </div>
+              )}
+            </section>
           </div>
-        )}
-      </section>
+        ) : null}
 
-      <details className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
-        <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
-          <Code2 className="h-3.5 w-3.5" />
-          Scene JSON
-        </summary>
-        <pre className="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-[#070b10] p-4 text-xs leading-6 text-slate-300">
-          {JSON.stringify(roomData, null, 2)}
-        </pre>
-      </details>
+        {activeSidebarTab === "outliner" ? (
+          <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
+              <Boxes className="h-3.5 w-3.5" />
+              {t(locale, "worldOutliner")}
+            </div>
+            <div className="mt-4 space-y-2">
+              {roomData.objects.map((object) => (
+                <button
+                  key={object.id}
+                  type="button"
+                  onClick={() => setSelectedObjectId(object.id)}
+                  className={`flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition ${
+                    selectedObjectId === object.id
+                      ? "border-[#ff8c42] bg-[#2a1910] text-white"
+                      : "border-white/10 bg-[#111924] text-slate-300 hover:border-[#32516c] hover:text-white"
+                  }`}
+                >
+                  <div>
+                    <div className="font-medium">
+                      {getLocalizedObjectLabel(locale, object)}
+                    </div>
+                    <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
+                      {getLocalizedCategoryLabel(locale, object.category)}
+                    </div>
+                  </div>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                      object.locked
+                        ? "bg-[#2f1b11] text-[#ffb16a]"
+                        : "bg-[#102234] text-[#8cb9ff]"
+                    }`}
+                  >
+                    {object.locked ? t(locale, "locked") : t(locale, "open")}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
-      <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
-        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
-          <Keyboard className="h-3.5 w-3.5" />
-          Shortcuts
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 text-sm text-slate-300">
-          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">Q Select</div>
-          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">W Move</div>
-          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">E Rotate</div>
-          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">R Toggle View</div>
-          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">Ctrl/Cmd+Z Undo</div>
-          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">Ctrl/Cmd+Y Redo</div>
-        </div>
-      </section>
+        {activeSidebarTab === "validation" ? (
+          <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#ffb16a]">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {t(locale, "validate")}
+            </div>
+            {validationWarnings.length ? (
+              <ul className="mt-4 space-y-3 text-sm leading-6 text-[#f5c28b]">
+                {validationWarnings.map((warning, index) => (
+                  <li
+                    key={`${warning.code}-${warning.objectId ?? "none"}-${warning.relatedObjectId ?? "none"}-${index}`}
+                    className="rounded-xl border border-[#6d4a29] bg-[#25180f] px-3 py-3"
+                  >
+                    {formatWarning(locale, warning, roomData)}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="mt-4 rounded-xl border border-[#24405a] bg-[#111924] px-3 py-3 text-sm text-[#8cb9ff]">
+                {t(locale, "noValidationIssues")}
+              </div>
+            )}
+          </section>
+        ) : null}
+
+        {activeSidebarTab === "json" ? (
+          <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
+              <Code2 className="h-3.5 w-3.5" />
+              {t(locale, "sceneJson")}
+            </div>
+            <pre className="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-[#070b10] p-4 text-xs leading-6 text-slate-300">
+              {JSON.stringify(localizedJson, null, 2)}
+            </pre>
+          </section>
+        ) : null}
+
+        {activeSidebarTab === "shortcuts" ? (
+          <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
+              <Keyboard className="h-3.5 w-3.5" />
+              {t(locale, "shortcuts")}
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 text-sm text-slate-300">
+              <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">
+                Q {t(locale, "selectMode")}
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">
+                W {t(locale, "moveMode")}
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">
+                E {t(locale, "rotateMode")}
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">
+                R {t(locale, "viewMode")}
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">
+                Ctrl/Cmd+Z {t(locale, "undo")}
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">
+                Ctrl/Cmd+Y {t(locale, "redo")}
+              </div>
+            </div>
+          </section>
+        ) : null}
+      </div>
     </aside>
   );
 }
 
-function SelectedObjectEditor({ object }: { object: RoomObject }) {
+function SelectedObjectEditor({
+  locale,
+  object,
+}: {
+  locale: Locale;
+  object: RoomObject;
+}) {
   const rotateObjectBy = useRoomStore((state) => state.rotateObjectBy);
   const toggleObjectLock = useRoomStore((state) => state.toggleObjectLock);
   const updateObjectProperties = useRoomStore((state) => state.updateObjectProperties);
@@ -205,9 +330,11 @@ function SelectedObjectEditor({ object }: { object: RoomObject }) {
       <div className="rounded-xl border border-white/10 bg-white/5 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-lg font-semibold text-white">{object.label}</div>
+            <div className="text-lg font-semibold text-white">
+              {getLocalizedObjectLabel(locale, object)}
+            </div>
             <div className="text-xs uppercase tracking-[0.22em] text-slate-500">
-              {object.generator}
+              {`${t(locale, "category")}: ${getLocalizedCategoryLabel(locale, object.category)}`}
             </div>
           </div>
           <span
@@ -217,14 +344,14 @@ function SelectedObjectEditor({ object }: { object: RoomObject }) {
                 : "bg-[#102234] text-[#8cb9ff]"
             }`}
           >
-            {object.locked ? "Locked" : "Editable"}
+            {object.locked ? t(locale, "locked") : t(locale, "editable")}
           </span>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3">
           <label className="space-y-1">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
-              Position X
+              {t(locale, "positionX")}
             </span>
             <input
               type="number"
@@ -242,7 +369,7 @@ function SelectedObjectEditor({ object }: { object: RoomObject }) {
           </label>
           <label className="space-y-1">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
-              Position Z
+              {t(locale, "positionZ")}
             </span>
             <input
               type="number"
@@ -260,7 +387,7 @@ function SelectedObjectEditor({ object }: { object: RoomObject }) {
           </label>
           <label className="space-y-1">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
-              Rotation
+              {t(locale, "rotation")}
             </span>
             <input
               type="number"
@@ -278,7 +405,7 @@ function SelectedObjectEditor({ object }: { object: RoomObject }) {
           </label>
           <label className="space-y-1">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
-              Color
+              {t(locale, "color")}
             </span>
             <input
               type="color"
@@ -295,7 +422,7 @@ function SelectedObjectEditor({ object }: { object: RoomObject }) {
           </label>
           <label className="space-y-1">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
-              Width
+              {t(locale, "width")}
             </span>
             <input
               type="number"
@@ -314,7 +441,7 @@ function SelectedObjectEditor({ object }: { object: RoomObject }) {
           </label>
           <label className="space-y-1">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
-              Depth
+              {t(locale, "depth")}
             </span>
             <input
               type="number"
@@ -333,7 +460,7 @@ function SelectedObjectEditor({ object }: { object: RoomObject }) {
           </label>
           <label className="space-y-1">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
-              Height
+              {t(locale, "height")}
             </span>
             <input
               type="number"
@@ -360,7 +487,7 @@ function SelectedObjectEditor({ object }: { object: RoomObject }) {
           disabled={object.locked}
           className="rounded-xl border border-[#1f4b65] bg-[#102234] px-3 py-2 font-medium text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
         >
-          Apply Values
+          {t(locale, "applyValues")}
         </button>
         <button
           type="button"
@@ -368,7 +495,7 @@ function SelectedObjectEditor({ object }: { object: RoomObject }) {
           disabled={object.locked}
           className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2 font-medium text-slate-200 transition hover:border-[#32516c] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
         >
-          Rotate -15
+          {t(locale, "rotateMinus15")}
         </button>
         <button
           type="button"
@@ -376,7 +503,7 @@ function SelectedObjectEditor({ object }: { object: RoomObject }) {
           disabled={object.locked}
           className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2 font-medium text-slate-200 transition hover:border-[#32516c] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
         >
-          Rotate +15
+          {t(locale, "rotatePlus15")}
         </button>
         <button
           type="button"
@@ -384,13 +511,13 @@ function SelectedObjectEditor({ object }: { object: RoomObject }) {
           className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#111924] px-3 py-2 font-medium text-slate-200 transition hover:border-[#32516c] hover:text-white"
         >
           <Lock className="h-4 w-4" />
-          {object.locked ? "Unlock" : "Lock"}
+          {object.locked ? t(locale, "unlock") : t(locale, "lock")}
         </button>
       </div>
 
       {object.locked ? (
         <div className="rounded-xl border border-[#6d4a29] bg-[#25180f] px-3 py-3 text-sm text-[#f5c28b]">
-          Locked objects cannot be edited until you unlock them.
+          {t(locale, "lockedEditHint")}
         </div>
       ) : null}
     </div>

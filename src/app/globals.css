@@ -36,6 +36,7 @@
 }
 
 html {
+  height: 100%;
   background:
     radial-gradient(circle at top left, rgba(77, 132, 255, 0.14), transparent 28%),
     radial-gradient(circle at top right, rgba(255, 140, 66, 0.14), transparent 24%),
@@ -43,7 +44,8 @@ html {
 }
 
 body {
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
   background: transparent;
   color: var(--foreground);
   font-family: var(--font-geist-sans), sans-serif;

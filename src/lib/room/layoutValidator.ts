@@ -22,7 +22,7 @@ export const validateRoomLayout = (roomData: RoomData): LayoutWarning[] => {
         code: "out_of_bounds",
         level: "error",
         objectId: object.id,
-        message: `${object.label} oda sınırlarını aşıyor.`,
+        message: `${object.label} exceeds the room bounds.`,
       });
     }
 
@@ -32,14 +32,18 @@ export const validateRoomLayout = (roomData: RoomData): LayoutWarning[] => {
           code: `${zone.type}_clearance`,
           level: zone.type === "door" ? "error" : "warning",
           objectId: object.id,
-          message: `${object.label}, ${zone.type === "door" ? "kapı" : zone.type === "window" ? "pencere" : "kalorifer"} alanını kısmen kapatıyor.`,
+          message: `${object.label} partially blocks the ${zone.type} area.`,
         });
       }
     });
   });
 
   for (let index = 0; index < roomData.objects.length; index += 1) {
-    for (let compareIndex = index + 1; compareIndex < roomData.objects.length; compareIndex += 1) {
+    for (
+      let compareIndex = index + 1;
+      compareIndex < roomData.objects.length;
+      compareIndex += 1
+    ) {
       const left = roomData.objects[index];
       const right = roomData.objects[compareIndex];
 
@@ -48,7 +52,8 @@ export const validateRoomLayout = (roomData: RoomData): LayoutWarning[] => {
           code: "collision",
           level: "warning",
           objectId: left.id,
-          message: `${left.label} ve ${right.label} üst üste geliyor.`,
+          relatedObjectId: right.id,
+          message: `${left.label} overlaps with ${right.label}.`,
         });
       }
     }

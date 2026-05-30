@@ -44,6 +44,7 @@ export interface Opening {
 export interface RoomDefinition {
   id: string;
   label: string;
+  labelKey: string;
   shape: RoomShape;
   width: number;
   depth: number;
@@ -63,6 +64,7 @@ export type ObjectParams = Record<string, string | number | boolean>;
 export interface RoomObject {
   id: string;
   label: string;
+  labelKey: string;
   category: ObjectCategory;
   generator: GeneratorName;
   position: {
@@ -111,4 +113,5 @@ export interface LayoutWarning {
   level: "warning" | "error";
   message: string;
   objectId?: string;
+  relatedObjectId?: string;
 }

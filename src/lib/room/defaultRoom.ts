@@ -10,6 +10,7 @@ const buildRectangleWalls = (width: number, depth: number): WallSegment[] => [
 const room: RoomDefinition = {
   id: "room_demo",
   label: "Studio Loft",
+  labelKey: "room.studioLoft",
   shape: "rectangle",
   width: 7.2,
   depth: 5.2,
@@ -59,6 +60,7 @@ export const defaultRoom: RoomData = {
     {
       id: "tv_unit_1",
       label: "TV Unit",
+      labelKey: "object.tvUnit",
       category: "tv_unit",
       generator: "TVUnitGenerator",
       position: { x: 2.1, z: 0.36 },
@@ -75,6 +77,7 @@ export const defaultRoom: RoomData = {
     {
       id: "sofa_1",
       label: "Sofa",
+      labelKey: "object.sofa",
       category: "sofa",
       generator: "SofaGenerator",
       position: { x: 2.2, z: 4.45 },
@@ -92,6 +95,7 @@ export const defaultRoom: RoomData = {
     {
       id: "carpet_1",
       label: "Carpet",
+      labelKey: "object.carpet",
       category: "carpet",
       generator: "CarpetGenerator",
       position: { x: 2.2, z: 2.78 },
@@ -107,6 +111,7 @@ export const defaultRoom: RoomData = {
     {
       id: "bed_1",
       label: "Bed",
+      labelKey: "object.bed",
       category: "bed",
       generator: "BedGenerator",
       position: { x: 5.6, z: 3.72 },
@@ -123,6 +128,7 @@ export const defaultRoom: RoomData = {
     {
       id: "wardrobe_1",
       label: "Wardrobe",
+      labelKey: "object.wardrobe",
       category: "wardrobe",
       generator: "WardrobeGenerator",
       position: { x: 6.26, z: 0.42 },
@@ -139,6 +145,7 @@ export const defaultRoom: RoomData = {
     {
       id: "table_1",
       label: "Desk",
+      labelKey: "object.desk",
       category: "table",
       generator: "TableGenerator",
       position: { x: 6.1, z: 2.02 },
@@ -155,6 +162,7 @@ export const defaultRoom: RoomData = {
     {
       id: "chair_1",
       label: "Chair",
+      labelKey: "object.chair",
       category: "chair",
       generator: "ChairGenerator",
       position: { x: 5.35, z: 2.02 },
@@ -170,6 +178,7 @@ export const defaultRoom: RoomData = {
     {
       id: "generic_1",
       label: "Storage Box",
+      labelKey: "object.storageBox",
       category: "generic_box",
       generator: "GenericObjectGenerator",
       position: { x: 0.88, z: 0.56 },

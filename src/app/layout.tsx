@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "desAIn | Odanı 3D'ye çevir, AI ile yeniden tasarla",
+  title: "desAIn | Room Editor",
   description:
-    "Low-poly 3D oda editörü, mock AI layout chat ve JSON tabanlı tasarım akışı için desAIn MVP prototipi.",
+    "desAIn MVP: a low-poly room editor with editable dimensions, dual-language UI, and Unreal-inspired controls.",
 };
 
 export default function RootLayout({
@@ -25,7 +25,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="tr"
+      lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

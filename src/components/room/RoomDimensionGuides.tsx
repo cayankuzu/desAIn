@@ -1,4 +1,8 @@
+"use client";
+
 import { Line, Text } from "@react-three/drei";
+import { t } from "@/lib/i18n/translations";
+import { useUIStore } from "@/store/uiStore";
 
 interface RoomDimensionGuidesProps {
   width: number;
@@ -11,6 +15,7 @@ export function RoomDimensionGuides({
   depth,
   height,
 }: RoomDimensionGuidesProps) {
+  const locale = useUIStore((state) => state.locale);
   const offset = 0.34;
   const textColor = "#8fc3ff";
 
@@ -45,7 +50,7 @@ export function RoomDimensionGuides({
         anchorX="center"
         anchorY="middle"
       >
-        {`W ${width.toFixed(2)}m`}
+        {`${t(locale, "widthShort")} ${width.toFixed(2)}m`}
       </Text>
       <Text
         position={[-offset - 0.12, 0.09, depth / 2]}
@@ -55,7 +60,7 @@ export function RoomDimensionGuides({
         anchorX="center"
         anchorY="middle"
       >
-        {`D ${depth.toFixed(2)}m`}
+        {`${t(locale, "depthShort")} ${depth.toFixed(2)}m`}
       </Text>
       <Text
         position={[-offset - 0.08, height / 2, -0.08]}
@@ -65,7 +70,7 @@ export function RoomDimensionGuides({
         anchorX="center"
         anchorY="middle"
       >
-        {`H ${height.toFixed(2)}m`}
+        {`${t(locale, "heightShort")} ${height.toFixed(2)}m`}
       </Text>
     </group>
   );

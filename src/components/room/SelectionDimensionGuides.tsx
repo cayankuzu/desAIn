@@ -1,4 +1,11 @@
+"use client";
+
 import { Line, Text } from "@react-three/drei";
+import {
+  getLocalizedObjectLabel,
+  t,
+} from "@/lib/i18n/translations";
+import { useUIStore } from "@/store/uiStore";
 import type { RoomObject } from "@/types/room";
 
 interface SelectionDimensionGuidesProps {
@@ -8,6 +15,7 @@ interface SelectionDimensionGuidesProps {
 export function SelectionDimensionGuides({
   object,
 }: SelectionDimensionGuidesProps) {
+  const locale = useUIStore((state) => state.locale);
   const { width, depth, height } = object.dimensions;
   const offset = 0.16;
 
@@ -47,7 +55,7 @@ export function SelectionDimensionGuides({
         anchorX="center"
         anchorY="middle"
       >
-        {`W ${width.toFixed(2)}m`}
+        {`${t(locale, "widthShort")} ${width.toFixed(2)}m`}
       </Text>
       <Text
         position={[width / 2 + offset + 0.08, 0.09, 0]}
@@ -57,7 +65,7 @@ export function SelectionDimensionGuides({
         anchorX="center"
         anchorY="middle"
       >
-        {`D ${depth.toFixed(2)}m`}
+        {`${t(locale, "depthShort")} ${depth.toFixed(2)}m`}
       </Text>
       <Text
         position={[-width / 2 - offset - 0.06, height / 2, -depth / 2]}
@@ -67,7 +75,7 @@ export function SelectionDimensionGuides({
         anchorX="center"
         anchorY="middle"
       >
-        {`H ${height.toFixed(2)}m`}
+        {`${t(locale, "heightShort")} ${height.toFixed(2)}m`}
       </Text>
 
       <Text
@@ -77,7 +85,7 @@ export function SelectionDimensionGuides({
         anchorX="center"
         anchorY="middle"
       >
-        {object.label}
+        {getLocalizedObjectLabel(locale, object)}
       </Text>
     </group>
   );
