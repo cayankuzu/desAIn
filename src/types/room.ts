@@ -24,7 +24,7 @@ export type GeneratorName =
 
 export type CameraMode = "orbit" | "top";
 
-export type TransformMode = "translate" | "rotate";
+export type TransformMode = "select" | "translate" | "rotate";
 
 export interface WallSegment {
   id: string;

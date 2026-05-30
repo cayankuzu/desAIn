@@ -9,7 +9,7 @@ const buildRectangleWalls = (width: number, depth: number): WallSegment[] => [
 
 const room: RoomDefinition = {
   id: "room_demo",
-  label: "Studio Living",
+  label: "Studio Loft",
   shape: "rectangle",
   width: 7.2,
   depth: 5.2,
@@ -52,13 +52,13 @@ export const defaultRoom: RoomData = {
     minWalkwayWidth: 0.7,
   },
   notes: [
-    "Mock demo sahnesi: mevcut eşyaları low-poly generator'larla temsil eder.",
-    "Gerçek AI yerine layout önerileri API route üstünden sahte JSON döndürür.",
+    "Low-poly editor demo room.",
+    "Scene uses procedural furniture generators and editable JSON state.",
   ],
   objects: [
     {
       id: "tv_unit_1",
-      label: "TV Ünitesi",
+      label: "TV Unit",
       category: "tv_unit",
       generator: "TVUnitGenerator",
       position: { x: 2.1, z: 0.36 },
@@ -74,7 +74,7 @@ export const defaultRoom: RoomData = {
     },
     {
       id: "sofa_1",
-      label: "Koltuk",
+      label: "Sofa",
       category: "sofa",
       generator: "SofaGenerator",
       position: { x: 2.2, z: 4.45 },
@@ -91,7 +91,7 @@ export const defaultRoom: RoomData = {
     },
     {
       id: "carpet_1",
-      label: "Halı",
+      label: "Carpet",
       category: "carpet",
       generator: "CarpetGenerator",
       position: { x: 2.2, z: 2.78 },
@@ -106,7 +106,7 @@ export const defaultRoom: RoomData = {
     },
     {
       id: "bed_1",
-      label: "Yatak",
+      label: "Bed",
       category: "bed",
       generator: "BedGenerator",
       position: { x: 5.6, z: 3.72 },
@@ -122,7 +122,7 @@ export const defaultRoom: RoomData = {
     },
     {
       id: "wardrobe_1",
-      label: "Gardırop",
+      label: "Wardrobe",
       category: "wardrobe",
       generator: "WardrobeGenerator",
       position: { x: 6.26, z: 0.42 },
@@ -138,7 +138,7 @@ export const defaultRoom: RoomData = {
     },
     {
       id: "table_1",
-      label: "Çalışma Masası",
+      label: "Desk",
       category: "table",
       generator: "TableGenerator",
       position: { x: 6.1, z: 2.02 },
@@ -154,7 +154,7 @@ export const defaultRoom: RoomData = {
     },
     {
       id: "chair_1",
-      label: "Sandalye",
+      label: "Chair",
       category: "chair",
       generator: "ChairGenerator",
       position: { x: 5.35, z: 2.02 },
@@ -169,7 +169,7 @@ export const defaultRoom: RoomData = {
     },
     {
       id: "generic_1",
-      label: "Saklama Kutusu",
+      label: "Storage Box",
       category: "generic_box",
       generator: "GenericObjectGenerator",
       position: { x: 0.88, z: 0.56 },

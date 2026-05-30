@@ -1,12 +1,11 @@
 "use client";
 
 import { create } from "zustand";
-import { buildMockLayoutResponse } from "@/lib/ai/mockResponses";
 import { clampObjectPositionToRoom, normalizeRotation } from "@/lib/room/constraints";
 import { defaultRoom } from "@/lib/room/defaultRoom";
 import { validateRoomLayout } from "@/lib/room/layoutValidator";
-import type { LayoutResponse, LayoutWarning, RoomData } from "@/types/room";
-import type { CameraMode, RoomObject, TransformMode } from "@/types/room";
+import type { LayoutWarning, RoomData, RoomObject } from "@/types/room";
+import type { CameraMode, TransformMode } from "@/types/room";
 
 const cloneRoomData = (roomData: RoomData): RoomData =>
   JSON.parse(JSON.stringify(roomData)) as RoomData;
@@ -25,6 +24,22 @@ const updateObjectInRoom = (
   }
 
   updater(target);
+};
+
+const findObjectLabel = (roomData: RoomData, objectId: string | null) => {
+  if (!objectId) {
+    return null;
+  }
+
+  return roomData.objects.find((object) => object.id === objectId)?.label ?? null;
+};
+
+const clampDimension = (value: number, fallback: number) => {
+  if (Number.isNaN(value) || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(0.05, Number(value.toFixed(2)));
 };
 
 interface RoomStore {
@@ -46,28 +61,55 @@ interface RoomStore {
     objectId: string,
     payload: Partial<Pick<RoomObject, "rotation" | "position">>,
   ) => void;
+  updateObjectProperties: (
+    objectId: string,
+    payload: {
+      position?: Partial<RoomObject["position"]>;
+      rotation?: number;
+      dimensions?: Partial<RoomObject["dimensions"]>;
+      color?: string;
+    },
+  ) => void;
   rotateObjectBy: (objectId: string, delta: number) => void;
   toggleObjectLock: (objectId: string) => void;
-  applyLayout: (layout: LayoutResponse) => void;
-  applyMockPrompt: (message: string) => LayoutResponse;
   undo: () => void;
   redo: () => void;
   resetRoom: () => void;
 }
 
-export const useRoomStore = create<RoomStore>((set, get) => ({
+export const useRoomStore = create<RoomStore>((set) => ({
   roomData: cloneRoomData(defaultRoom),
   selectedObjectId: "sofa_1",
   cameraMode: "orbit",
-  transformMode: "translate",
+  transformMode: "select",
   validationWarnings: validateRoomLayout(defaultRoom),
   historyPast: [],
   historyFuture: [],
-  lastLayoutSummary: "Demo oda yüklendi.",
+  lastLayoutSummary: "Studio Loft loaded",
   activeTransformObjectId: null,
-  setSelectedObjectId: (objectId) => set({ selectedObjectId: objectId }),
-  setCameraMode: (mode) => set({ cameraMode: mode }),
-  setTransformMode: (mode) => set({ transformMode: mode }),
+  setSelectedObjectId: (objectId) =>
+    set((state) => ({
+      selectedObjectId: objectId,
+      lastLayoutSummary: objectId
+        ? `${findObjectLabel(state.roomData, objectId) ?? "Object"} selected`
+        : "Selection cleared",
+    })),
+  setCameraMode: (mode) =>
+    set({
+      cameraMode: mode,
+      lastLayoutSummary:
+        mode === "orbit" ? "Perspective viewport enabled" : "Top viewport enabled",
+    }),
+  setTransformMode: (mode) =>
+    set({
+      transformMode: mode,
+      lastLayoutSummary:
+        mode === "select"
+          ? "Selection mode"
+          : mode === "translate"
+            ? "Move gizmo enabled"
+            : "Rotate gizmo enabled",
+    }),
   beginTransform: (objectId) =>
     set((state) => {
       if (state.activeTransformObjectId === objectId) {
@@ -81,9 +123,16 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
           cloneRoomData(state.roomData),
         ]),
         historyFuture: [],
+        lastLayoutSummary: `${findObjectLabel(state.roomData, objectId) ?? "Object"} editing`,
       };
     }),
-  endTransform: () => set({ activeTransformObjectId: null }),
+  endTransform: () =>
+    set((state) => ({
+      activeTransformObjectId: null,
+      lastLayoutSummary: state.activeTransformObjectId
+        ? `${findObjectLabel(state.roomData, state.activeTransformObjectId) ?? "Object"} updated`
+        : state.lastLayoutSummary,
+    })),
   updateObjectTransform: (objectId, payload) =>
     set((state) => {
       const roomData = cloneRoomData(state.roomData);
@@ -107,6 +156,60 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
+      };
+    }),
+  updateObjectProperties: (objectId, payload) =>
+    set((state) => {
+      const roomData = cloneRoomData(state.roomData);
+
+      updateObjectInRoom(roomData, objectId, (object) => {
+        if (object.locked || !object.movable) {
+          return;
+        }
+
+        const nextRotation = normalizeRotation(payload.rotation ?? object.rotation);
+        const nextDimensions = {
+          width: clampDimension(
+            payload.dimensions?.width ?? object.dimensions.width,
+            object.dimensions.width,
+          ),
+          depth: clampDimension(
+            payload.dimensions?.depth ?? object.dimensions.depth,
+            object.dimensions.depth,
+          ),
+          height: clampDimension(
+            payload.dimensions?.height ?? object.dimensions.height,
+            object.dimensions.height,
+          ),
+        };
+        const desiredPosition = {
+          x: payload.position?.x ?? object.position.x,
+          z: payload.position?.z ?? object.position.z,
+        };
+
+        object.dimensions = nextDimensions;
+        object.rotation = nextRotation;
+        object.position = clampObjectPositionToRoom(
+          roomData,
+          object,
+          desiredPosition,
+          nextRotation,
+        );
+
+        if (payload.color) {
+          object.color = payload.color;
+        }
+      });
+
+      return {
+        roomData,
+        validationWarnings: validateRoomLayout(roomData),
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastLayoutSummary: `${findObjectLabel(roomData, objectId) ?? "Object"} properties updated`,
       };
     }),
   rotateObjectBy: (objectId, delta) =>
@@ -136,14 +239,17 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
           cloneRoomData(state.roomData),
         ]),
         historyFuture: [],
+        lastLayoutSummary: `${findObjectLabel(roomData, objectId) ?? "Object"} rotated`,
       };
     }),
   toggleObjectLock: (objectId) =>
     set((state) => {
       const roomData = cloneRoomData(state.roomData);
+      let isLocked = false;
 
       updateObjectInRoom(roomData, objectId, (object) => {
         object.locked = !object.locked;
+        isLocked = object.locked;
       });
 
       return {
@@ -154,45 +260,9 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
           cloneRoomData(state.roomData),
         ]),
         historyFuture: [],
+        lastLayoutSummary: `${findObjectLabel(roomData, objectId) ?? "Object"} ${isLocked ? "locked" : "unlocked"}`,
       };
     }),
-  applyLayout: (layout) =>
-    set((state) => {
-      const roomData = cloneRoomData(state.roomData);
-
-      layout.objects.forEach((item) => {
-        updateObjectInRoom(roomData, item.id, (object) => {
-          if (object.locked || !object.movable) {
-            return;
-          }
-
-          const nextRotation = normalizeRotation(item.rotation);
-          object.rotation = nextRotation;
-          object.position = clampObjectPositionToRoom(
-            roomData,
-            object,
-            { x: item.x, z: item.z },
-            nextRotation,
-          );
-        });
-      });
-
-      return {
-        roomData,
-        validationWarnings: validateRoomLayout(roomData),
-        historyPast: limitHistory([
-          ...state.historyPast,
-          cloneRoomData(state.roomData),
-        ]),
-        historyFuture: [],
-        lastLayoutSummary: layout.summary,
-      };
-    }),
-  applyMockPrompt: (message) => {
-    const result = buildMockLayoutResponse(message, get().roomData);
-    get().applyLayout(result.layout);
-    return result.layout;
-  },
   undo: () =>
     set((state) => {
       const previous = state.historyPast.at(-1);
@@ -206,7 +276,7 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
         validationWarnings: validateRoomLayout(previous),
         historyPast: state.historyPast.slice(0, -1),
         historyFuture: [cloneRoomData(state.roomData), ...state.historyFuture],
-        lastLayoutSummary: "Bir adım geri alındı.",
+        lastLayoutSummary: "Undo applied",
       };
     }),
   redo: () =>
@@ -225,20 +295,22 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
           cloneRoomData(state.roomData),
         ]),
         historyFuture: remaining,
-        lastLayoutSummary: "Geri alınan adım tekrar uygulandı.",
+        lastLayoutSummary: "Redo applied",
       };
     }),
   resetRoom: () =>
     set((state) => ({
       roomData: cloneRoomData(defaultRoom),
       selectedObjectId: "sofa_1",
+      cameraMode: "orbit",
+      transformMode: "select",
       validationWarnings: validateRoomLayout(defaultRoom),
       historyPast: limitHistory([
         ...state.historyPast,
         cloneRoomData(state.roomData),
       ]),
       historyFuture: [],
-      lastLayoutSummary: "Demo oda sıfırlandı.",
+      lastLayoutSummary: "Scene reset to default layout",
       activeTransformObjectId: null,
     })),
 }));

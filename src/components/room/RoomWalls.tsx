@@ -23,7 +23,7 @@ export function RoomWalls({ room }: RoomWallsProps) {
         receiveShadow
       >
         <boxGeometry args={[room.width, wallHeight, wallThickness]} />
-        <meshStandardMaterial color="#f0e6d7" />
+        <meshStandardMaterial color="#717a85" />
       </mesh>
       <mesh
         position={[room.width, wallHeight / 2, room.depth / 2]}
@@ -31,7 +31,7 @@ export function RoomWalls({ room }: RoomWallsProps) {
         receiveShadow
       >
         <boxGeometry args={[wallThickness, wallHeight, room.depth]} />
-        <meshStandardMaterial color="#e9dece" />
+        <meshStandardMaterial color="#646d78" />
       </mesh>
       <mesh
         position={[room.width / 2, wallHeight / 2, room.depth]}
@@ -39,7 +39,7 @@ export function RoomWalls({ room }: RoomWallsProps) {
         receiveShadow
       >
         <boxGeometry args={[room.width, wallHeight, wallThickness]} />
-        <meshStandardMaterial color="#f0e6d7" />
+        <meshStandardMaterial color="#717a85" />
       </mesh>
       <mesh
         position={[0, wallHeight / 2, room.depth / 2]}
@@ -47,7 +47,7 @@ export function RoomWalls({ room }: RoomWallsProps) {
         receiveShadow
       >
         <boxGeometry args={[wallThickness, wallHeight, room.depth]} />
-        <meshStandardMaterial color="#e9dece" />
+        <meshStandardMaterial color="#646d78" />
       </mesh>
 
       {room.openings.map((opening) => {

@@ -1,12 +1,22 @@
 "use client";
 
-import { RotateCcw, RotateCw, Sparkles, Target, Undo2 } from "lucide-react";
+import {
+  BoxSelect,
+  Camera,
+  Move3d,
+  RefreshCw,
+  RotateCcw,
+  RotateCw,
+  Undo2,
+} from "lucide-react";
 import { useRoomStore } from "@/store/roomStore";
 
-const buttonBase =
-  "rounded-full border px-3 py-2 text-sm font-medium transition";
+const modeButtonBase =
+  "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition";
 
 export function Topbar() {
+  const roomData = useRoomStore((state) => state.roomData);
+  const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
   const cameraMode = useRoomStore((state) => state.cameraMode);
   const setCameraMode = useRoomStore((state) => state.setCameraMode);
   const transformMode = useRoomStore((state) => state.transformMode);
@@ -16,91 +26,118 @@ export function Topbar() {
   const resetRoom = useRoomStore((state) => state.resetRoom);
   const historyPastLength = useRoomStore((state) => state.historyPast.length);
   const historyFutureLength = useRoomStore((state) => state.historyFuture.length);
-  const lastLayoutSummary = useRoomStore((state) => state.lastLayoutSummary);
+  const validationWarnings = useRoomStore((state) => state.validationWarnings);
+
+  const selectedObject =
+    roomData.objects.find((object) => object.id === selectedObjectId) ?? null;
 
   return (
-    <header className="panel rounded-[30px] px-5 py-4">
+    <header className="editor-panel px-4 py-3">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-2 rounded-full bg-accent-soft/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-accent-strong">
-            <Sparkles className="h-3.5 w-3.5" />
-            desAIn MVP
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
+              desAIn Editor
+            </div>
+            <div className="mt-1 text-lg font-semibold text-white">
+              {roomData.room.label}
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Odani 3D&apos;ye cevir, AI ile yeniden tasarla.
-            </h1>
-            <p className="max-w-3xl text-sm leading-6 text-foreground/70">
-              Bu ilk prototip, JSON tabanli low-poly oda editoru ve mock AI layout chat akisini ayni ekranda test eder.
-            </p>
+          <div className="hidden rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2 text-sm text-slate-300 lg:block">
+            {selectedObject
+              ? `${selectedObject.label} selected`
+              : "No object selected"}
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span
-            aria-live="polite"
-            className="rounded-full border border-border/80 bg-white/60 px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-foreground/60"
+          <button
+            type="button"
+            onClick={() => setTransformMode("select")}
+            aria-pressed={transformMode === "select"}
+            className={`${modeButtonBase} ${
+              transformMode === "select"
+                ? "border-[#ff8c42] bg-[#2a1910] text-[#ffb16a]"
+                : "border-white/10 bg-[#0d141d] text-slate-300 hover:border-[#32516c] hover:text-white"
+            }`}
           >
-            {lastLayoutSummary}
-          </span>
+            <BoxSelect className="h-4 w-4" />
+            Q Select
+          </button>
+          <button
+            type="button"
+            onClick={() => setTransformMode("translate")}
+            aria-pressed={transformMode === "translate"}
+            className={`${modeButtonBase} ${
+              transformMode === "translate"
+                ? "border-[#ff8c42] bg-[#2a1910] text-[#ffb16a]"
+                : "border-white/10 bg-[#0d141d] text-slate-300 hover:border-[#32516c] hover:text-white"
+            }`}
+          >
+            <Move3d className="h-4 w-4" />
+            W Move
+          </button>
+          <button
+            type="button"
+            onClick={() => setTransformMode("rotate")}
+            aria-pressed={transformMode === "rotate"}
+            className={`${modeButtonBase} ${
+              transformMode === "rotate"
+                ? "border-[#ff8c42] bg-[#2a1910] text-[#ffb16a]"
+                : "border-white/10 bg-[#0d141d] text-slate-300 hover:border-[#32516c] hover:text-white"
+            }`}
+          >
+            <RefreshCw className="h-4 w-4" />
+            E Rotate
+          </button>
           <button
             type="button"
             onClick={() => setCameraMode(cameraMode === "orbit" ? "top" : "orbit")}
             aria-pressed={cameraMode === "top"}
-            className={`${buttonBase} border-border/80 bg-surface-strong hover:border-accent/40 hover:bg-accent-soft/30`}
+            className={`${modeButtonBase} ${
+              cameraMode === "top"
+                ? "border-[#4ea8ff] bg-[#102234] text-[#8cb9ff]"
+                : "border-white/10 bg-[#0d141d] text-slate-300 hover:border-[#32516c] hover:text-white"
+            }`}
           >
-            {cameraMode === "orbit" ? "Kusbakisi Moda Gec" : "Serbest Kameraya Don"}
+            <Camera className="h-4 w-4" />
+            R View
           </button>
-          <button
-            type="button"
-            onClick={() =>
-              setTransformMode(transformMode === "translate" ? "rotate" : "translate")
-            }
-            aria-pressed={transformMode === "rotate"}
-            className={`${buttonBase} border-border/80 bg-surface-strong hover:border-accent/40 hover:bg-accent-soft/30`}
-          >
-            {transformMode === "translate" ? "Dondurme Modu" : "Tasima Modu"}
-          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={undo}
             disabled={historyPastLength === 0}
-            className={`${buttonBase} inline-flex items-center gap-2 border-border/80 bg-surface-strong hover:border-accent/40 hover:bg-accent-soft/30 disabled:cursor-not-allowed disabled:opacity-50`}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-[#32516c] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
           >
             <Undo2 className="h-4 w-4" />
-            Geri Al
+            Undo
           </button>
           <button
             type="button"
             onClick={redo}
             disabled={historyFutureLength === 0}
-            className={`${buttonBase} inline-flex items-center gap-2 border-border/80 bg-surface-strong hover:border-accent/40 hover:bg-accent-soft/30 disabled:cursor-not-allowed disabled:opacity-50`}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-[#32516c] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
           >
             <RotateCw className="h-4 w-4" />
-            Ileri Al
+            Redo
           </button>
           <button
             type="button"
             onClick={resetRoom}
-            className={`${buttonBase} inline-flex items-center gap-2 border-accent/25 bg-accent text-white hover:bg-accent-strong`}
+            className="inline-flex items-center gap-2 rounded-xl border border-[#4f2b16] bg-[#2b170d] px-3 py-2 text-sm font-medium text-[#ffb16a] transition hover:border-[#ff8c42] hover:text-white"
           >
             <RotateCcw className="h-4 w-4" />
-            Demo Odayi Sifirla
+            Reset Scene
           </button>
+          <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2 text-sm text-slate-300">
+            {validationWarnings.length
+              ? `${validationWarnings.length} validation warnings`
+              : "Scene validated"}
+          </div>
         </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-foreground/60">
-        <span className="rounded-full border border-border/70 bg-white/60 px-3 py-1.5">
-          <Target className="mr-1 inline h-3.5 w-3.5" />
-          Surukle: gizmo ile
-        </span>
-        <span className="rounded-full border border-border/70 bg-white/60 px-3 py-1.5">
-          Snap: 0.1m / 15 derece
-        </span>
-        <span className="rounded-full border border-border/70 bg-white/60 px-3 py-1.5">
-          Kilitli obje AI ve gizmo ile oynamaz
-        </span>
       </div>
     </header>
   );

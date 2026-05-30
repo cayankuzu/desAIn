@@ -1,256 +1,398 @@
 "use client";
 
-import { Code2, MessageSquareMore, Move3d } from "lucide-react";
-import { AIChatPanel } from "@/components/chat/AIChatPanel";
+import { useState } from "react";
+import { AlertTriangle, Boxes, Code2, Keyboard, Lock, Move3d, Ruler } from "lucide-react";
 import { useRoomStore } from "@/store/roomStore";
-import { useUIStore } from "@/store/uiStore";
+import type { RoomObject } from "@/types/room";
 
-const tabItems = [
-  { id: "inspector", label: "Inspector", icon: Move3d },
-  { id: "chat", label: "AI Chat", icon: MessageSquareMore },
-  { id: "json", label: "JSON", icon: Code2 },
-] as const;
+interface SelectedObjectDraft {
+  positionX: string;
+  positionZ: string;
+  rotation: string;
+  width: string;
+  depth: string;
+  height: string;
+  color: string;
+}
+
+const createDraftFromObject = (object: RoomObject): SelectedObjectDraft => ({
+  positionX: object.position.x.toFixed(2),
+  positionZ: object.position.z.toFixed(2),
+  rotation: object.rotation.toFixed(0),
+  width: object.dimensions.width.toFixed(2),
+  depth: object.dimensions.depth.toFixed(2),
+  height: object.dimensions.height.toFixed(2),
+  color: object.color,
+});
+
+const toNumber = (value: string, fallback: number) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 
 export function Sidebar() {
-  const activeSidebarTab = useUIStore((state) => state.activeSidebarTab);
-  const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
   const roomData = useRoomStore((state) => state.roomData);
   const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
-  const rotateObjectBy = useRoomStore((state) => state.rotateObjectBy);
-  const toggleObjectLock = useRoomStore((state) => state.toggleObjectLock);
   const setSelectedObjectId = useRoomStore((state) => state.setSelectedObjectId);
   const validationWarnings = useRoomStore((state) => state.validationWarnings);
-  const cameraMode = useRoomStore((state) => state.cameraMode);
 
   const selectedObject =
     roomData.objects.find((object) => object.id === selectedObjectId) ?? null;
 
   return (
-    <aside className="panel flex min-h-[720px] flex-col rounded-[30px]">
-      <div className="border-b border-border/70 px-4 py-4">
-        <div className="mb-3 flex gap-2">
-          {tabItems.map((tab) => {
-            const Icon = tab.icon;
-            const active = activeSidebarTab === tab.id;
-
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveSidebarTab(tab.id)}
-                aria-pressed={active}
-                className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition ${
-                  active
-                    ? "bg-accent text-white"
-                    : "bg-white/60 text-foreground/70 hover:bg-accent-soft/30"
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            );
-          })}
+    <aside className="editor-panel scroll-area flex min-h-[760px] flex-col gap-4 overflow-y-auto p-4">
+      <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
+          <Ruler className="h-3.5 w-3.5" />
+          Scene Metrics
         </div>
-
-        {validationWarnings.length > 0 ? (
-          <div className="rounded-3xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm leading-6 text-warning">
-            {validationWarnings.length} validator uyarisi var. Inspector veya JSON sekmesinden detaya bakabilirsin.
+        <dl className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-300">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <dt className="text-slate-500">Width</dt>
+            <dd className="mt-1 font-semibold text-white">
+              {roomData.room.width.toFixed(2)}m
+            </dd>
           </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <dt className="text-slate-500">Depth</dt>
+            <dd className="mt-1 font-semibold text-white">
+              {roomData.room.depth.toFixed(2)}m
+            </dd>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <dt className="text-slate-500">Height</dt>
+            <dd className="mt-1 font-semibold text-white">
+              {roomData.room.height.toFixed(2)}m
+            </dd>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <dt className="text-slate-500">Objects</dt>
+            <dd className="mt-1 font-semibold text-white">
+              {roomData.objects.length}
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#ffb16a]">
+          <Move3d className="h-3.5 w-3.5" />
+          Details
+        </div>
+        {selectedObject ? (
+          <SelectedObjectEditor key={selectedObject.id} object={selectedObject} />
         ) : (
-          <div className="rounded-3xl border border-success/20 bg-success/10 px-4 py-3 text-sm leading-6 text-success">
-            Validator su an kritik bir cakisma gormuyor. Kapi, pencere ve kilitli obje kurallari aktif.
+          <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm leading-6 text-slate-400">
+            Select an object in the viewport or outliner to edit width, depth,
+            height, position, rotation, and color.
           </div>
         )}
-      </div>
+      </section>
 
-      <div className="scroll-area min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {activeSidebarTab === "chat" ? <AIChatPanel /> : null}
-
-        {activeSidebarTab === "json" ? (
-          <div className="space-y-4">
-            <div className="rounded-[28px] border border-border/80 bg-surface-strong px-4 py-3">
-              <h2 className="text-base font-semibold">Guncel Oda JSON&apos;u</h2>
-              <p className="mt-1 text-sm leading-6 text-foreground/70">
-                Sahnedeki her hareket ayni veri modeline yaziliyor. Bu yapi ileride AI analiz, kayit ve export akisi icin merkez olacak.
-              </p>
-            </div>
-            <pre className="overflow-x-auto rounded-[28px] border border-border/80 bg-[#fffdf9] p-4 text-xs leading-6 text-foreground/80">
-              {JSON.stringify(roomData, null, 2)}
-            </pre>
-            {validationWarnings.length ? (
-              <div className="rounded-[28px] border border-warning/20 bg-warning/10 p-4 text-sm leading-6 text-warning">
-                {validationWarnings.map((warning) => warning.message).join(" ")}
+      <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
+          <Boxes className="h-3.5 w-3.5" />
+          World Outliner
+        </div>
+        <div className="mt-4 space-y-2">
+          {roomData.objects.map((object) => (
+            <button
+              key={object.id}
+              type="button"
+              onClick={() => setSelectedObjectId(object.id)}
+              className={`flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition ${
+                selectedObjectId === object.id
+                  ? "border-[#ff8c42] bg-[#2a1910] text-white"
+                  : "border-white/10 bg-[#111924] text-slate-300 hover:border-[#32516c] hover:text-white"
+              }`}
+            >
+              <div>
+                <div className="font-medium">{object.label}</div>
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
+                  {object.category}
+                </div>
               </div>
-            ) : null}
+              <span
+                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                  object.locked
+                    ? "bg-[#2f1b11] text-[#ffb16a]"
+                    : "bg-[#102234] text-[#8cb9ff]"
+                }`}
+              >
+                {object.locked ? "Locked" : "Open"}
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#ffb16a]">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          Validation
+        </div>
+        {validationWarnings.length ? (
+          <ul className="mt-4 space-y-3 text-sm leading-6 text-[#f5c28b]">
+            {validationWarnings.map((warning, index) => (
+              <li
+                key={`${warning.code}-${index}`}
+                className="rounded-xl border border-[#6d4a29] bg-[#25180f] px-3 py-3"
+              >
+                {warning.message}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="mt-4 rounded-xl border border-[#24405a] bg-[#111924] px-3 py-3 text-sm text-[#8cb9ff]">
+            No active validation issues. Door, window, and locked-object constraints
+            are clear.
           </div>
-        ) : null}
+        )}
+      </section>
 
-        {activeSidebarTab === "inspector" ? (
-          <div className="space-y-4">
-            <section className="rounded-[28px] border border-border/80 bg-surface-strong p-4">
-              <h2 className="text-base font-semibold">Oda Ozeti</h2>
-              <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-2xl bg-white/60 p-3">
-                  <dt className="text-foreground/60">Boyut</dt>
-                  <dd className="mt-1 font-medium">
-                    {roomData.room.width}m x {roomData.room.depth}m
-                  </dd>
-                </div>
-                <div className="rounded-2xl bg-white/60 p-3">
-                  <dt className="text-foreground/60">Kamera</dt>
-                  <dd className="mt-1 font-medium">
-                    {cameraMode === "orbit" ? "Serbest" : "Kusbakisi"}
-                  </dd>
-                </div>
-                <div className="rounded-2xl bg-white/60 p-3">
-                  <dt className="text-foreground/60">Aciklik</dt>
-                  <dd className="mt-1 font-medium">
-                    {roomData.room.openings.length} constraint
-                  </dd>
-                </div>
-                <div className="rounded-2xl bg-white/60 p-3">
-                  <dt className="text-foreground/60">Obje Sayisi</dt>
-                  <dd className="mt-1 font-medium">{roomData.objects.length}</dd>
-                </div>
-              </dl>
-            </section>
+      <details className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+        <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
+          <Code2 className="h-3.5 w-3.5" />
+          Scene JSON
+        </summary>
+        <pre className="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-[#070b10] p-4 text-xs leading-6 text-slate-300">
+          {JSON.stringify(roomData, null, 2)}
+        </pre>
+      </details>
 
-            <section className="rounded-[28px] border border-border/80 bg-surface-strong p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-semibold">Secili Obje</h2>
-                  <p className="text-sm text-foreground/60">
-                    Tasima ve dondurme kontrolu secili obje uzerinden calisir.
-                  </p>
-                </div>
-              </div>
-
-              {selectedObject ? (
-                <div className="mt-4 space-y-4">
-                  <div className="rounded-3xl bg-white/70 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="text-lg font-semibold">{selectedObject.label}</h3>
-                        <p className="text-sm capitalize text-foreground/60">
-                          {selectedObject.category.replace("_", " ")}
-                        </p>
-                      </div>
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                          selectedObject.locked
-                            ? "bg-foreground text-white"
-                            : "bg-accent-soft text-accent-strong"
-                        }`}
-                      >
-                        {selectedObject.locked ? "Locked" : "Movable"}
-                      </span>
-                    </div>
-
-                    <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <dt className="text-foreground/60">Pozisyon</dt>
-                        <dd className="mt-1 font-medium">
-                          x {selectedObject.position.x.toFixed(2)} / z{" "}
-                          {selectedObject.position.z.toFixed(2)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-foreground/60">Donus</dt>
-                        <dd className="mt-1 font-medium">
-                          {selectedObject.rotation.toFixed(0)} derece
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-foreground/60">Olcu</dt>
-                        <dd className="mt-1 font-medium">
-                          {selectedObject.dimensions.width} x {selectedObject.dimensions.depth}m
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-foreground/60">Generator</dt>
-                        <dd className="mt-1 font-medium">{selectedObject.generator}</dd>
-                      </div>
-                    </dl>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => rotateObjectBy(selectedObject.id, -15)}
-                      className="rounded-full border border-border/80 bg-white/70 px-4 py-2 text-sm font-medium hover:border-accent/40 hover:bg-accent-soft/25"
-                    >
-                      -15 derece
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => rotateObjectBy(selectedObject.id, 15)}
-                      className="rounded-full border border-border/80 bg-white/70 px-4 py-2 text-sm font-medium hover:border-accent/40 hover:bg-accent-soft/25"
-                    >
-                      +15 derece
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleObjectLock(selectedObject.id)}
-                      className="rounded-full border border-border/80 bg-white/70 px-4 py-2 text-sm font-medium hover:border-accent/40 hover:bg-accent-soft/25"
-                    >
-                      {selectedObject.locked ? "Kilidi Ac" : "Kilitle"}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-4 rounded-3xl border border-dashed border-border/80 px-4 py-6 text-sm leading-6 text-foreground/60">
-                  Sahnedeki bir objeye tiklayarak sec. Secilen obje icin sag panelde kilit ve rotasyon kontrolleri acilir.
-                </div>
-              )}
-            </section>
-
-            <section className="rounded-[28px] border border-border/80 bg-surface-strong p-4">
-              <h2 className="text-base font-semibold">Mobilya Listesi</h2>
-              <div className="mt-4 space-y-2">
-                {roomData.objects.map((object) => (
-                  <button
-                    key={object.id}
-                    type="button"
-                    onClick={() => setSelectedObjectId(object.id)}
-                    className={`flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-left transition ${
-                      selectedObjectId === object.id
-                        ? "border-accent bg-accent-soft/25"
-                        : "border-border/80 bg-white/60 hover:border-accent/40 hover:bg-accent-soft/20"
-                    }`}
-                  >
-                    <div>
-                      <p className="font-medium">{object.label}</p>
-                      <p className="text-xs uppercase tracking-[0.18em] text-foreground/50">
-                        {object.generator}
-                      </p>
-                    </div>
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                        object.locked
-                          ? "bg-foreground text-white"
-                          : "bg-accent-soft text-accent-strong"
-                      }`}
-                    >
-                      {object.locked ? "Locked" : "Open"}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {validationWarnings.length ? (
-              <section className="rounded-[28px] border border-warning/20 bg-warning/10 p-4 text-sm leading-6 text-warning">
-                <h2 className="font-semibold">Validator Uyarilari</h2>
-                <ul className="mt-3 space-y-2">
-                  {validationWarnings.map((warning, index) => (
-                    <li key={`${warning.code}-${index}`}>{warning.message}</li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+      <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
+          <Keyboard className="h-3.5 w-3.5" />
+          Shortcuts
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 text-sm text-slate-300">
+          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">Q Select</div>
+          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">W Move</div>
+          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">E Rotate</div>
+          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">R Toggle View</div>
+          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">Ctrl/Cmd+Z Undo</div>
+          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">Ctrl/Cmd+Y Redo</div>
+        </div>
+      </section>
     </aside>
+  );
+}
+
+function SelectedObjectEditor({ object }: { object: RoomObject }) {
+  const rotateObjectBy = useRoomStore((state) => state.rotateObjectBy);
+  const toggleObjectLock = useRoomStore((state) => state.toggleObjectLock);
+  const updateObjectProperties = useRoomStore((state) => state.updateObjectProperties);
+  const [draft, setDraft] = useState<SelectedObjectDraft>(() => createDraftFromObject(object));
+
+  const applyDraft = () => {
+    updateObjectProperties(object.id, {
+      position: {
+        x: toNumber(draft.positionX, object.position.x),
+        z: toNumber(draft.positionZ, object.position.z),
+      },
+      rotation: toNumber(draft.rotation, object.rotation),
+      dimensions: {
+        width: toNumber(draft.width, object.dimensions.width),
+        depth: toNumber(draft.depth, object.dimensions.depth),
+        height: toNumber(draft.height, object.dimensions.height),
+      },
+      color: draft.color || object.color,
+    });
+  };
+
+  return (
+    <div className="mt-4 space-y-4 text-sm text-slate-300">
+      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-lg font-semibold text-white">{object.label}</div>
+            <div className="text-xs uppercase tracking-[0.22em] text-slate-500">
+              {object.generator}
+            </div>
+          </div>
+          <span
+            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+              object.locked
+                ? "bg-[#2a1910] text-[#ffb16a]"
+                : "bg-[#102234] text-[#8cb9ff]"
+            }`}
+          >
+            {object.locked ? "Locked" : "Editable"}
+          </span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <label className="space-y-1">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              Position X
+            </span>
+            <input
+              type="number"
+              step="0.05"
+              value={draft.positionX}
+              disabled={object.locked}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  positionX: event.target.value,
+                }))
+              }
+              className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              Position Z
+            </span>
+            <input
+              type="number"
+              step="0.05"
+              value={draft.positionZ}
+              disabled={object.locked}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  positionZ: event.target.value,
+                }))
+              }
+              className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              Rotation
+            </span>
+            <input
+              type="number"
+              step="15"
+              value={draft.rotation}
+              disabled={object.locked}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  rotation: event.target.value,
+                }))
+              }
+              className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              Color
+            </span>
+            <input
+              type="color"
+              value={draft.color}
+              disabled={object.locked}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  color: event.target.value,
+                }))
+              }
+              className="h-11 w-full rounded-xl border border-white/10 bg-[#111924] px-2 py-2 outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              Width
+            </span>
+            <input
+              type="number"
+              step="0.05"
+              min="0.05"
+              value={draft.width}
+              disabled={object.locked}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  width: event.target.value,
+                }))
+              }
+              className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              Depth
+            </span>
+            <input
+              type="number"
+              step="0.05"
+              min="0.05"
+              value={draft.depth}
+              disabled={object.locked}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  depth: event.target.value,
+                }))
+              }
+              className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              Height
+            </span>
+            <input
+              type="number"
+              step="0.05"
+              min="0.05"
+              value={draft.height}
+              disabled={object.locked}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  height: event.target.value,
+                }))
+              }
+              className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
+            />
+          </label>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={applyDraft}
+          disabled={object.locked}
+          className="rounded-xl border border-[#1f4b65] bg-[#102234] px-3 py-2 font-medium text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Apply Values
+        </button>
+        <button
+          type="button"
+          onClick={() => rotateObjectBy(object.id, -15)}
+          disabled={object.locked}
+          className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2 font-medium text-slate-200 transition hover:border-[#32516c] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Rotate -15
+        </button>
+        <button
+          type="button"
+          onClick={() => rotateObjectBy(object.id, 15)}
+          disabled={object.locked}
+          className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2 font-medium text-slate-200 transition hover:border-[#32516c] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Rotate +15
+        </button>
+        <button
+          type="button"
+          onClick={() => toggleObjectLock(object.id)}
+          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#111924] px-3 py-2 font-medium text-slate-200 transition hover:border-[#32516c] hover:text-white"
+        >
+          <Lock className="h-4 w-4" />
+          {object.locked ? "Unlock" : "Lock"}
+        </button>
+      </div>
+
+      {object.locked ? (
+        <div className="rounded-xl border border-[#6d4a29] bg-[#25180f] px-3 py-3 text-sm text-[#f5c28b]">
+          Locked objects cannot be edited until you unlock them.
+        </div>
+      ) : null}
+    </div>
   );
 }

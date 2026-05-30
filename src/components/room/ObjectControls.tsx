@@ -2,10 +2,12 @@ import { TransformControls } from "@react-three/drei";
 import type { Object3D } from "three";
 import type { TransformMode } from "@/types/room";
 
+type GizmoMode = Exclude<TransformMode, "select">;
+
 interface ObjectControlsProps {
   object: Object3D | null;
   enabled: boolean;
-  mode: TransformMode;
+  mode: GizmoMode;
   onBegin: () => void;
   onEnd: () => void;
   onObjectChange: () => void;
@@ -27,6 +29,8 @@ export function ObjectControls({
     <TransformControls
       object={object}
       mode={mode}
+      size={0.82}
+      space={mode === "rotate" ? "local" : "world"}
       translationSnap={0.1}
       rotationSnap={Math.PI / 12}
       showX={mode === "translate"}

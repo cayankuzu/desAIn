@@ -7,6 +7,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { CameraMode, RoomDefinition } from "@/types/room";
 
 interface CameraControlsProps {
+  enabled: boolean;
   mode: CameraMode;
   room: RoomDefinition;
 }
@@ -16,7 +17,7 @@ const viewPositions: Record<CameraMode, [number, number, number]> = {
   top: [0, 10.5, 0.01],
 };
 
-export function CameraControls({ mode, room }: CameraControlsProps) {
+export function CameraControls({ enabled, mode, room }: CameraControlsProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const { camera } = useThree();
   const targetX = 0;
@@ -41,6 +42,7 @@ export function CameraControls({ mode, room }: CameraControlsProps) {
     <OrbitControls
       ref={controlsRef}
       makeDefault
+      enabled={enabled}
       enablePan
       minDistance={mode === "top" ? 4 : 4}
       maxDistance={14}
