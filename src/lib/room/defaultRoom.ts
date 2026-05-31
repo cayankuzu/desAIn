@@ -1,11 +1,119 @@
-import type { RoomData, RoomDefinition, WallSegment } from "@/types/room";
+import type {
+  Opening,
+  RoomData,
+  RoomDefinition,
+  RoomShape,
+  WallSegment,
+} from "@/types/room";
 
-const buildRectangleWalls = (width: number, depth: number): WallSegment[] => [
+const MIN_OPENING_MARGIN = 0.2;
+
+export const buildRectangleWalls = (width: number, depth: number): WallSegment[] => [
   { id: "wall_1", from: [0, 0], to: [width, 0] },
   { id: "wall_2", from: [width, 0], to: [width, depth] },
   { id: "wall_3", from: [width, depth], to: [0, depth] },
   { id: "wall_4", from: [0, depth], to: [0, 0] },
 ];
+
+const getWallLength = (width: number, depth: number, wallId: string) => {
+  if (wallId === "wall_1" || wallId === "wall_3") {
+    return width;
+  }
+
+  return depth;
+};
+
+const clampOpeningPosition = (
+  wallLength: number,
+  openingWidth: number,
+  desiredPosition: number,
+) => {
+  const minPosition = openingWidth / 2 + MIN_OPENING_MARGIN;
+  const maxPosition = Math.max(minPosition, wallLength - openingWidth / 2 - MIN_OPENING_MARGIN);
+
+  return Math.min(maxPosition, Math.max(minPosition, desiredPosition));
+};
+
+const defaultOpenings: Opening[] = [
+  {
+    id: "door_1",
+    type: "door",
+    wallId: "wall_4",
+    position: 1.2,
+    width: 0.9,
+    clearDepth: 0.9,
+  },
+  {
+    id: "window_1",
+    type: "window",
+    wallId: "wall_2",
+    position: 3,
+    width: 1.3,
+    clearDepth: 0.6,
+  },
+  {
+    id: "radiator_1",
+    type: "radiator",
+    wallId: "wall_2",
+    position: 1.2,
+    width: 0.9,
+    clearDepth: 0.45,
+  },
+];
+
+export const resizeRoomDefinition = (
+  room: RoomDefinition,
+  payload: {
+    shape?: RoomShape;
+    width?: number;
+    depth?: number;
+    height?: number;
+  },
+): RoomDefinition => {
+  const nextShape = payload.shape ?? room.shape;
+  let nextWidth = payload.width ?? room.width;
+  let nextDepth = payload.depth ?? room.depth;
+  const nextHeight = payload.height ?? room.height;
+
+  if (nextShape === "square") {
+    if (payload.width !== undefined) {
+      nextDepth = payload.width;
+    } else if (payload.depth !== undefined) {
+      nextWidth = payload.depth;
+    } else {
+      nextDepth = nextWidth;
+    }
+  }
+
+  const width = Math.max(2.4, Number(nextWidth.toFixed(2)));
+  const depth = Math.max(2.4, Number(nextDepth.toFixed(2)));
+  const height = Math.max(2.2, Number(nextHeight.toFixed(2)));
+
+  const openings = room.openings.map((opening) => {
+    const previousWallLength = getWallLength(room.width, room.depth, opening.wallId);
+    const nextWallLength = getWallLength(width, depth, opening.wallId);
+    const ratio = previousWallLength > 0 ? opening.position / previousWallLength : 0.5;
+
+    return {
+      ...opening,
+      position: clampOpeningPosition(
+        nextWallLength,
+        opening.width,
+        ratio * nextWallLength,
+      ),
+    };
+  });
+
+  return {
+    ...room,
+    shape: nextShape,
+    width,
+    depth,
+    height,
+    walls: buildRectangleWalls(width, depth),
+    openings,
+  };
+};
 
 const room: RoomDefinition = {
   id: "room_demo",
@@ -16,32 +124,7 @@ const room: RoomDefinition = {
   depth: 5.2,
   height: 2.8,
   walls: buildRectangleWalls(7.2, 5.2),
-  openings: [
-    {
-      id: "door_1",
-      type: "door",
-      wallId: "wall_4",
-      position: 1.2,
-      width: 0.9,
-      clearDepth: 0.9,
-    },
-    {
-      id: "window_1",
-      type: "window",
-      wallId: "wall_2",
-      position: 3,
-      width: 1.3,
-      clearDepth: 0.6,
-    },
-    {
-      id: "radiator_1",
-      type: "radiator",
-      wallId: "wall_2",
-      position: 1.2,
-      width: 0.9,
-      clearDepth: 0.45,
-    },
-  ],
+  openings: defaultOpenings,
 };
 
 export const defaultRoom: RoomData = {
@@ -136,7 +219,7 @@ export const defaultRoom: RoomData = {
       dimensions: { width: 1.35, depth: 0.72, height: 2.3 },
       color: "#c9b396",
       movable: true,
-      locked: true,
+      locked: false,
       params: {
         doorCount: 3,
         mirrored: false,

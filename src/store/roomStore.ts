@@ -2,21 +2,26 @@
 
 import { create } from "zustand";
 import type { EditorStatus } from "@/lib/i18n/translations";
+import {
+  getInventoryTemplateById,
+  type InventoryTemplate,
+} from "@/lib/room/inventoryCatalog";
 import { clampObjectPositionToRoom, normalizeRotation } from "@/lib/room/constraints";
-import { defaultRoom } from "@/lib/room/defaultRoom";
+import { defaultRoom, resizeRoomDefinition } from "@/lib/room/defaultRoom";
 import { validateRoomLayout } from "@/lib/room/layoutValidator";
 import type {
   CameraMode,
   LayoutWarning,
   RoomData,
   RoomObject,
+  RoomShape,
   TransformMode,
 } from "@/types/room";
 
 const cloneRoomData = (roomData: RoomData): RoomData =>
   JSON.parse(JSON.stringify(roomData)) as RoomData;
 
-const limitHistory = (history: RoomData[]) => history.slice(-40);
+const limitHistory = (history: RoomData[]) => history.slice(-50);
 
 const updateObjectInRoom = (
   roomData: RoomData,
@@ -40,6 +45,43 @@ const clampDimension = (value: number, fallback: number) => {
   return Math.max(0.05, Number(value.toFixed(2)));
 };
 
+const createObjectId = (category: RoomObject["category"]) =>
+  `${category}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+
+const createObjectFromTemplate = (
+  template: InventoryTemplate,
+  roomData: RoomData,
+  position?: RoomObject["position"],
+): RoomObject => {
+  const baseObject: RoomObject = {
+    id: createObjectId(template.category),
+    label: template.label,
+    labelKey: template.labelKey,
+    category: template.category,
+    generator: template.generator,
+    position: position ?? {
+      x: roomData.room.width / 2,
+      z: roomData.room.depth / 2,
+    },
+    rotation: template.rotation ?? 0,
+    dimensions: { ...template.dimensions },
+    color: template.color,
+    movable: true,
+    locked: false,
+    params: { ...template.params },
+  };
+
+  return {
+    ...baseObject,
+    position: clampObjectPositionToRoom(
+      roomData,
+      baseObject,
+      baseObject.position,
+      baseObject.rotation,
+    ),
+  };
+};
+
 interface RoomStore {
   roomData: RoomData;
   selectedObjectId: string | null;
@@ -55,6 +97,12 @@ interface RoomStore {
   setTransformMode: (mode: TransformMode) => void;
   beginTransform: (objectId: string) => void;
   endTransform: () => void;
+  updateRoomProperties: (payload: {
+    shape?: RoomShape;
+    width?: number;
+    depth?: number;
+    height?: number;
+  }) => void;
   updateObjectTransform: (
     objectId: string,
     payload: Partial<Pick<RoomObject, "rotation" | "position">>,
@@ -67,6 +115,10 @@ interface RoomStore {
       dimensions?: Partial<RoomObject["dimensions"]>;
       color?: string;
     },
+  ) => void;
+  addObjectFromTemplate: (
+    templateId: string,
+    position?: RoomObject["position"],
   ) => void;
   rotateObjectBy: (objectId: string, delta: number) => void;
   toggleObjectLock: (objectId: string) => void;
@@ -132,6 +184,31 @@ export const useRoomStore = create<RoomStore>((set) => ({
         ? { key: "objectUpdated", objectId: state.activeTransformObjectId }
         : state.lastEditorStatus,
     })),
+  updateRoomProperties: (payload) =>
+    set((state) => {
+      const roomData = cloneRoomData(state.roomData);
+      roomData.room = resizeRoomDefinition(roomData.room, payload);
+      roomData.objects = roomData.objects.map((object) => ({
+        ...object,
+        position: clampObjectPositionToRoom(
+          roomData,
+          object,
+          object.position,
+          object.rotation,
+        ),
+      }));
+
+      return {
+        roomData,
+        validationWarnings: validateRoomLayout(roomData),
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastEditorStatus: { key: "roomUpdated" },
+      };
+    }),
   updateObjectTransform: (objectId, payload) =>
     set((state) => {
       const roomData = cloneRoomData(state.roomData);
@@ -209,6 +286,30 @@ export const useRoomStore = create<RoomStore>((set) => ({
         ]),
         historyFuture: [],
         lastEditorStatus: { key: "objectPropertiesUpdated", objectId },
+      };
+    }),
+  addObjectFromTemplate: (templateId, position) =>
+    set((state) => {
+      const template = getInventoryTemplateById(templateId);
+
+      if (!template) {
+        return state;
+      }
+
+      const roomData = cloneRoomData(state.roomData);
+      const newObject = createObjectFromTemplate(template, roomData, position);
+      roomData.objects.push(newObject);
+
+      return {
+        roomData,
+        selectedObjectId: newObject.id,
+        validationWarnings: validateRoomLayout(roomData),
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastEditorStatus: { key: "objectAdded", objectId: newObject.id },
       };
     }),
   rotateObjectBy: (objectId, delta) =>

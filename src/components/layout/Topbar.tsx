@@ -1,8 +1,8 @@
 "use client";
 
 import {
+  AlertTriangle,
   BoxSelect,
-  Camera,
   Languages,
   Move3d,
   RefreshCw,
@@ -24,10 +24,9 @@ const modeButtonBase =
 export function Topbar() {
   const locale = useUIStore((state) => state.locale);
   const setLocale = useUIStore((state) => state.setLocale);
+  const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
   const roomData = useRoomStore((state) => state.roomData);
   const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
-  const cameraMode = useRoomStore((state) => state.cameraMode);
-  const setCameraMode = useRoomStore((state) => state.setCameraMode);
   const transformMode = useRoomStore((state) => state.transformMode);
   const setTransformMode = useRoomStore((state) => state.setTransformMode);
   const undo = useRoomStore((state) => state.undo);
@@ -41,7 +40,7 @@ export function Topbar() {
     roomData.objects.find((object) => object.id === selectedObjectId) ?? null;
   const roomLabel = getLocalizedRoomLabel(locale, roomData.room);
   const selectedLabel = selectedObject
-    ? `${getLocalizedObjectLabel(locale, selectedObject)} ${t(locale, "selectedSuffix")}`
+    ? getLocalizedObjectLabel(locale, selectedObject)
     : t(locale, "noObjectSelected");
 
   return (
@@ -54,8 +53,14 @@ export function Topbar() {
             </div>
             <div className="mt-1 text-lg font-semibold text-white">{roomLabel}</div>
           </div>
+
           <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2 text-sm text-slate-300">
-            {selectedLabel}
+            <span className="text-slate-500">{t(locale, "selectedLabel")}:</span>{" "}
+            <span className="text-white">{selectedLabel}</span>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2 text-sm text-slate-300">
+            {`${roomData.room.width.toFixed(2)}m x ${roomData.room.depth.toFixed(2)}m x ${roomData.room.height.toFixed(2)}m`}
           </div>
         </div>
 
@@ -132,18 +137,20 @@ export function Topbar() {
             <RefreshCw className="h-4 w-4" />
             E {t(locale, "rotateMode")}
           </button>
+
           <button
             type="button"
-            onClick={() => setCameraMode(cameraMode === "orbit" ? "top" : "orbit")}
-            aria-pressed={cameraMode === "top"}
-            className={`${modeButtonBase} ${
-              cameraMode === "top"
-                ? "border-[#4ea8ff] bg-[#102234] text-[#8cb9ff]"
-                : "border-white/10 bg-[#0d141d] text-slate-300 hover:border-[#32516c] hover:text-white"
+            onClick={() => setActiveSidebarTab("validation")}
+            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition ${
+              validationWarnings.length
+                ? "border-[#6d4a29] bg-[#25180f] text-[#f5c28b] hover:border-[#ffb16a]"
+                : "border-[#24405a] bg-[#111924] text-[#8cb9ff] hover:border-[#4ea8ff] hover:text-white"
             }`}
           >
-            <Camera className="h-4 w-4" />
-            R {t(locale, "viewMode")}
+            <AlertTriangle className="h-4 w-4" />
+            {validationWarnings.length
+              ? `${validationWarnings.length} ${t(locale, "validationWarnings")}`
+              : t(locale, "sceneValidated")}
           </button>
         </div>
 
@@ -174,11 +181,6 @@ export function Topbar() {
             <RotateCcw className="h-4 w-4" />
             {t(locale, "resetScene")}
           </button>
-          <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2 text-sm text-slate-300">
-            {validationWarnings.length
-              ? `${validationWarnings.length} ${t(locale, "validationWarnings")}`
-              : t(locale, "sceneValidated")}
-          </div>
         </div>
       </div>
     </header>

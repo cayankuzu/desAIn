@@ -63,12 +63,6 @@ export function EditorHotkeys() {
         return;
       }
 
-      if (key === "r") {
-        event.preventDefault();
-        store.setCameraMode(store.cameraMode === "orbit" ? "top" : "orbit");
-        return;
-      }
-
       if (key === "escape") {
         event.preventDefault();
         store.setSelectedObjectId(null);

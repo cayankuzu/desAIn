@@ -7,8 +7,7 @@ export type SidebarTab =
   | "details"
   | "outliner"
   | "validation"
-  | "json"
-  | "shortcuts";
+  | "inventory";
 
 interface UIStore {
   activeSidebarTab: SidebarTab;
