@@ -97,6 +97,34 @@ export function InventoryPreview({ item }: { item: InventoryTemplate }) {
     );
   }
 
+  if (baseShape === "wall_tv") {
+    return (
+      <PreviewShell>
+        <div className="absolute bottom-8 left-1/2 h-11 w-20 -translate-x-1/2 rounded-lg border border-white/15 bg-[#111820] shadow-[0_16px_28px_rgba(0,0,0,0.34)]" />
+        <div className="absolute bottom-10 left-1/2 h-7 w-16 -translate-x-1/2 rounded bg-[#24465b]" />
+        <div className="absolute bottom-7 left-1/2 h-1.5 w-9 -translate-x-1/2 rounded-full bg-white/20" />
+      </PreviewShell>
+    );
+  }
+
+  if (baseShape === "pegboard") {
+    return (
+      <PreviewShell>
+        <BoxBody color={item.color} className="bottom-6 left-1/2 h-12 w-16 -translate-x-1/2" />
+        {[0, 1, 2, 3, 4, 5].map((dot) => (
+          <div
+            key={dot}
+            className="absolute h-1.5 w-1.5 rounded-full bg-[#27313a]"
+            style={{
+              left: `calc(50% + ${dot % 3 === 0 ? "-1.2rem" : dot % 3 === 1 ? "-0.1rem" : "1rem"})`,
+              bottom: dot < 3 ? "2.55rem" : "3.35rem",
+            }}
+          />
+        ))}
+      </PreviewShell>
+    );
+  }
+
   if (baseShape === "wall_panel") {
     return (
       <PreviewShell>
@@ -116,30 +144,60 @@ export function InventoryPreview({ item }: { item: InventoryTemplate }) {
     );
   }
 
+  if (baseShape === "utility_cart") {
+    return (
+      <PreviewShell>
+        <BoxBody color={item.color} className="bottom-4 left-1/2 h-12 w-14 -translate-x-1/2" />
+        <div className="absolute bottom-8 left-1/2 h-1.5 w-12 -translate-x-1/2 rounded bg-white/25" />
+        <div className="absolute bottom-11 left-1/2 h-1.5 w-12 -translate-x-1/2 rounded bg-white/25" />
+        <div className="absolute bottom-3 left-[calc(50%-1.6rem)] h-2 w-2 rounded-full bg-[#2f3438]" />
+        <div className="absolute bottom-3 left-[calc(50%+1.2rem)] h-2 w-2 rounded-full bg-[#2f3438]" />
+      </PreviewShell>
+    );
+  }
+
+  if (baseShape === "ironing_board") {
+    return (
+      <PreviewShell>
+        <div className="absolute bottom-11 left-1/2 h-3 w-24 -translate-x-1/2 rounded-full border border-white/15 shadow-[0_16px_28px_rgba(0,0,0,0.28)]" style={accentStyle} />
+        <div className="absolute bottom-4 left-[calc(50%-0.9rem)] h-8 w-1.5 rotate-[-22deg] rounded bg-[#6f6256]" />
+        <div className="absolute bottom-4 left-[calc(50%+0.9rem)] h-8 w-1.5 rotate-[22deg] rounded bg-[#6f6256]" />
+      </PreviewShell>
+    );
+  }
+
+  if (baseShape === "drying_rack") {
+    return (
+      <PreviewShell>
+        {[0, 1, 2, 3].map((rail) => (
+          <div
+            key={rail}
+            className="absolute left-1/2 h-1 w-20 -translate-x-1/2 rounded bg-[#d5d9dc]"
+            style={{ bottom: `${2.1 + rail * 0.55}rem` }}
+          />
+        ))}
+        <div className="absolute bottom-4 left-[calc(50%-2.2rem)] h-12 w-1.5 rotate-[-14deg] rounded bg-[#8a8178]" />
+        <div className="absolute bottom-4 left-[calc(50%+2rem)] h-12 w-1.5 rotate-[14deg] rounded bg-[#8a8178]" />
+      </PreviewShell>
+    );
+  }
+
+  if (baseShape === "umbrella_stand") {
+    return (
+      <PreviewShell>
+        <div className="absolute bottom-4 left-1/2 h-12 w-9 -translate-x-1/2 rounded-b-xl rounded-t-lg border border-white/15 shadow-[0_16px_28px_rgba(0,0,0,0.28)]" style={accentStyle} />
+        <div className="absolute bottom-5 left-[calc(50%-0.4rem)] h-14 w-1 rotate-[-8deg] rounded bg-[#4f565f]" />
+        <div className="absolute bottom-5 left-[calc(50%+0.5rem)] h-14 w-1 rotate-[10deg] rounded bg-[#4f565f]" />
+      </PreviewShell>
+    );
+  }
+
   if (baseShape === "kitchen_sink") {
     return (
       <PreviewShell>
         <BoxBody color={item.color} className="bottom-4 left-1/2 h-10 w-20 -translate-x-1/2" />
         <div className="absolute bottom-12 left-1/2 h-3 w-10 -translate-x-1/2 rounded-full bg-[#d8e0e5]" />
         <div className="absolute bottom-[3.45rem] left-[calc(50%+0.8rem)] h-5 w-1 rounded bg-[#d8c59d]" />
-      </PreviewShell>
-    );
-  }
-
-  if (baseShape === "cooktop") {
-    return (
-      <PreviewShell>
-        <BoxBody color={item.color} className="bottom-8 left-1/2 h-4 w-20 -translate-x-1/2" />
-        {[0, 1, 2, 3].map((burner) => (
-          <div
-            key={burner}
-            className="absolute h-3.5 w-3.5 rounded-full border border-white/35"
-            style={{
-              left: `calc(50% + ${burner % 2 === 0 ? "-1.15rem" : "0.55rem"})`,
-              bottom: burner < 2 ? "2.35rem" : "3rem",
-            }}
-          />
-        ))}
       </PreviewShell>
     );
   }

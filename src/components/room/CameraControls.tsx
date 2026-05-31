@@ -18,21 +18,27 @@ export function CameraControls({ enabled, mode, room }: CameraControlsProps) {
   const targetX = 0;
   const targetZ = 0;
   const roomSpan = Math.max(room.width, room.depth);
+  const roomSpanRef = useRef(roomSpan);
 
   useEffect(() => {
-    const orbitDistance = Math.max(7.2, roomSpan * 1.05);
-    const orbitHeight = Math.max(5.4, roomSpan * 0.72);
-    const topHeight = Math.max(9, roomSpan * 1.7);
+    roomSpanRef.current = roomSpan;
+  }, [roomSpan]);
+
+  useEffect(() => {
+    const currentRoomSpan = roomSpanRef.current;
+    const orbitDistance = Math.max(7.2, currentRoomSpan * 1.05);
+    const orbitHeight = Math.max(7.2, currentRoomSpan * 1.15);
+    const topHeight = Math.max(9, currentRoomSpan * 1.7);
 
     camera.position.set(
       mode === "top" ? 0 : orbitDistance,
       mode === "top" ? topHeight : orbitHeight,
       mode === "top" ? 0.01 : orbitDistance,
     );
-    camera.lookAt(targetX, 0.6, targetZ);
-    controlsRef.current?.target.set(targetX, 0.6, targetZ);
+    camera.lookAt(targetX, 0.45, targetZ);
+    controlsRef.current?.target.set(targetX, 0.45, targetZ);
     controlsRef.current?.update();
-  }, [camera, mode, roomSpan, targetX, targetZ]);
+  }, [camera, mode]);
 
   useFrame(() => {
     controlsRef.current?.update();

@@ -4,6 +4,11 @@ import type { ReactNode } from "react";
 import type { Group } from "three";
 import { useRoomStore } from "@/store/roomStore";
 import { useUIStore } from "@/store/uiStore";
+import {
+  getOpeningBottom,
+  getOpeningHeight,
+  getOpeningSceneTransform,
+} from "@/lib/room/openingPlacement";
 import { getWallMetrics, getWallSegment } from "@/lib/room/roomGeometry";
 import type { Opening, RoomDefinition } from "@/types/room";
 
@@ -22,15 +27,15 @@ const openingColorMap: Record<Opening["type"], string> = {
 const getOpeningCutout = (opening: Opening, roomHeight: number) => {
   if (opening.type === "door" || opening.type === "balcony_door") {
     return {
-      bottom: 0,
-      height: Math.min(2.08, Math.max(1.6, roomHeight - 0.18)),
+      bottom: getOpeningBottom(opening, roomHeight),
+      height: getOpeningHeight(opening, roomHeight),
     };
   }
 
   if (opening.type === "window") {
     return {
-      bottom: Math.min(0.9, Math.max(0.45, roomHeight * 0.28)),
-      height: Math.min(1.12, Math.max(0.55, roomHeight * 0.42)),
+      bottom: getOpeningBottom(opening, roomHeight),
+      height: getOpeningHeight(opening, roomHeight),
     };
   }
 
@@ -39,17 +44,18 @@ const getOpeningCutout = (opening: Opening, roomHeight: number) => {
 
 function OpeningVisual({
   opening,
+  roomHeight,
   selected,
 }: {
   opening: Opening;
+  roomHeight: number;
   selected: boolean;
 }) {
   const frameColor = selected ? "#ffddb2" : openingColorMap[opening.type];
   const innerDepth = 0.04;
+  const openingHeight = getOpeningHeight(opening, roomHeight);
 
   if (opening.type === "door" || opening.type === "balcony_door") {
-    const openingHeight = 2.08;
-
     return (
       <group>
         <mesh castShadow receiveShadow>
@@ -65,8 +71,6 @@ function OpeningVisual({
   }
 
   if (opening.type === "window") {
-    const openingHeight = 1.12;
-
     return (
       <group>
         <mesh castShadow receiveShadow>
@@ -87,7 +91,7 @@ function OpeningVisual({
     );
   }
 
-  const radiatorHeight = 0.52;
+  const radiatorHeight = openingHeight;
 
   return (
     <group>
@@ -224,36 +228,18 @@ export function RoomWalls({ room, onOpeningReady }: RoomWallsProps) {
           return null;
         }
 
-        const {
-          directionX,
-          directionZ,
-          inwardNormalX,
-          inwardNormalZ,
-          rotationY,
-        } = getWallMetrics(wall);
-        const alongX = wall.from[0] + directionX * opening.position;
-        const alongZ = wall.from[1] + directionZ * opening.position;
-        const wallOffset = wallThickness / 2 + 0.03;
-        const centerX = alongX + inwardNormalX * wallOffset;
-        const centerZ = alongZ + inwardNormalZ * wallOffset;
-        const openingHeight = opening.type === "radiator" ? 0.52 : opening.type === "window" ? 1.12 : 2.08;
-        const centerY =
-          opening.type === "radiator"
-            ? 0.45
-            : opening.type === "window"
-              ? 1.38
-              : openingHeight / 2;
-        const visualRotationY =
-          typeof opening.rotation === "number"
-            ? (opening.rotation * Math.PI) / 180
-            : rotationY;
+        const transform = getOpeningSceneTransform(room, opening, wallThickness);
 
         return (
           <group
             key={opening.id}
             ref={(node) => onOpeningReady?.(opening.id, node)}
-            position={[centerX, centerY, centerZ]}
-            rotation={[0, visualRotationY, 0]}
+            position={[
+              transform.position.x,
+              transform.position.y,
+              transform.position.z,
+            ]}
+            rotation={[0, transform.rotationY, 0]}
             onClick={(event) => {
               event.stopPropagation();
               handleStructureSelect("opening", opening.id);
@@ -261,6 +247,7 @@ export function RoomWalls({ room, onOpeningReady }: RoomWallsProps) {
           >
             <OpeningVisual
               opening={opening}
+              roomHeight={room.height}
               selected={selected}
             />
           </group>

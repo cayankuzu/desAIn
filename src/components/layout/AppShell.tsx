@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Boxes, Camera, Eye, Lock, Shuffle, Trash2, Ungroup } from "lucide-react";
 import {
   formatEditorStatus,
-  getLocalizedObjectLabel,
   t,
 } from "@/lib/i18n/translations";
 import {
@@ -134,7 +133,6 @@ export function AppShell() {
   const roomDataRef = useRef(roomData);
   const toastTimeoutRef = useRef<number | null>(null);
   const activeInventoryDragTemplateIdRef = useRef<string | null>(null);
-  const [isDropActive, setIsDropActive] = useState(false);
   const [dragPreview, setDragPreview] = useState<DragPreviewState>(emptyDragPreview);
   const selectedIdsSet = useMemo(
     () => new Set(selectedObjectIds),
@@ -188,7 +186,6 @@ export function AppShell() {
     };
     const handleDragEnd = () => {
       activeInventoryDragTemplateIdRef.current = null;
-      setIsDropActive(false);
       setDragPreview(emptyDragPreview);
     };
 
@@ -284,28 +281,28 @@ export function AppShell() {
           }`}
         >
           <div
-            className={`editor-panel room-canvas relative h-full min-h-0 overflow-hidden p-0 transition ${
-              isDropActive ? "ring-2 ring-[#4ea8ff]/60 ring-offset-0" : ""
-            }`}
+            className="editor-panel room-canvas relative h-full min-h-0 overflow-hidden p-0"
             onDragOver={(event) => {
-              if (event.dataTransfer.types.includes(INVENTORY_DRAG_MIME)) {
-                const bounds = event.currentTarget.getBoundingClientRect();
-                const pointerX = event.clientX - bounds.left;
-                const pointerY = event.clientY - bounds.top;
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "copy";
-                const templateId =
-                  event.dataTransfer.getData(INVENTORY_DRAG_MIME) ||
-                  event.dataTransfer.getData("text/plain") ||
-                  activeInventoryDragTemplateIdRef.current;
-                setIsDropActive(true);
-                setDragPreview({
-                  templateId,
-                  x: pointerX,
-                  y: pointerY,
-                  position: getViewportRoomPosition(roomData, pointerX, pointerY, bounds),
-                });
+              const templateId =
+                activeInventoryDragTemplateIdRef.current ||
+                event.dataTransfer.getData(INVENTORY_DRAG_MIME) ||
+                event.dataTransfer.getData("text/plain");
+
+              if (!templateId) {
+                return;
               }
+
+              const bounds = event.currentTarget.getBoundingClientRect();
+              const pointerX = event.clientX - bounds.left;
+              const pointerY = event.clientY - bounds.top;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+              setDragPreview({
+                templateId,
+                x: pointerX,
+                y: pointerY,
+                position: getViewportRoomPosition(roomData, pointerX, pointerY, bounds),
+              });
             }}
             onDragLeave={(event) => {
               const bounds = event.currentTarget.getBoundingClientRect();
@@ -316,22 +313,20 @@ export function AppShell() {
                 event.clientY >= bounds.bottom;
 
               if (outside) {
-                setIsDropActive(false);
                 setDragPreview(emptyDragPreview);
               }
             }}
             onDrop={(event) => {
               const templateId =
+                activeInventoryDragTemplateIdRef.current ||
                 event.dataTransfer.getData(INVENTORY_DRAG_MIME) ||
-                event.dataTransfer.getData("text/plain") ||
-                activeInventoryDragTemplateIdRef.current;
+                event.dataTransfer.getData("text/plain");
 
               if (!templateId) {
                 return;
               }
 
               event.preventDefault();
-              setIsDropActive(false);
 
               const bounds = event.currentTarget.getBoundingClientRect();
               const pointerX = event.clientX - bounds.left;
@@ -418,32 +413,6 @@ export function AppShell() {
                   {t(locale, "deleteSelection")}
                 </button>
               </div>
-            ) : null}
-            {isDropActive ? (
-              <div className="pointer-events-none absolute left-4 top-4 z-30 rounded-full border border-[#4ea8ff]/45 bg-[#102234]/88 px-4 py-2 text-xs font-semibold text-[#dbeafe] shadow-[0_14px_35px_rgba(0,0,0,0.28)] backdrop-blur">
-                {t(locale, "dropToViewport")}
-              </div>
-            ) : null}
-            {dragPreview.templateId ? (
-              (() => {
-                const template = getInventoryTemplateById(dragPreview.templateId);
-
-                if (!template) {
-                  return null;
-                }
-
-                return (
-                  <div
-                    className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-[145%] rounded-full border border-[#4ea8ff]/55 bg-[#102234]/92 px-3 py-1.5 text-xs font-semibold text-white shadow-[0_14px_35px_rgba(0,0,0,0.28)] backdrop-blur"
-                    style={{
-                      left: dragPreview.x,
-                      top: dragPreview.y,
-                    }}
-                  >
-                    {getLocalizedObjectLabel(locale, template)}
-                  </div>
-                );
-              })()
             ) : null}
             <ViewportHud />
             <div className="h-full">

@@ -31,10 +31,9 @@ export function ObjectControls({
     <TransformControls
       object={object}
       mode={mode}
-      size={0.82}
+      size={0.96}
       space={mode === "rotate" ? "local" : "world"}
       translationSnap={0.1}
-      rotationSnap={Math.PI / 12}
       showX={mode === "translate"}
       showY={mode === "rotate" || (mode === "translate" && showTranslateY)}
       showZ={mode === "translate"}

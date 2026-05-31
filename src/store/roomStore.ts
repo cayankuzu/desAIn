@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { boundsIntersect, getObjectBounds } from "@/lib/room/collision";
+import { getObjectBounds } from "@/lib/room/collision";
 import type { EditorStatus } from "@/lib/i18n/translations";
 import {
   getInventoryTemplateById,
@@ -13,14 +13,18 @@ import {
   getWallAttachedObjectTransform,
   isWallAttachedObject,
   normalizeRotation,
+  objectsHavePlacementCollision,
   objectIntersectsZone,
 } from "@/lib/room/constraints";
-import { defaultRoom, resizeRoomDefinition } from "@/lib/room/defaultRoom";
+import { resizeRoomDefinition } from "@/lib/room/defaultRoom";
+import { getOpeningHeight } from "@/lib/room/openingPlacement";
 import { createRoomPreset } from "@/lib/room/roomPresets";
 import { validateRoomLayout } from "@/lib/room/layoutValidator";
 import {
   findWallByRotation,
+  getWallMetrics,
   getWallLength,
+  getWallSegment,
   projectPointToWall,
   normalizeOpeningForRoom,
 } from "@/lib/room/roomGeometry";
@@ -40,11 +44,40 @@ import type {
 
 const SAVED_ROOM_KEY = "desain-saved-room-data";
 
+const createDefaultRoomData = () => createRoomPreset("rectangle", "living");
+const initialRoomData = createDefaultRoomData();
+
 const cloneRoomData = (roomData: RoomData): RoomData =>
   JSON.parse(JSON.stringify(roomData)) as RoomData;
 
 const cloneRoomObject = (object: RoomObject): RoomObject =>
   JSON.parse(JSON.stringify(object)) as RoomObject;
+
+type RandomNumberGenerator = () => number;
+
+const hashString = (input: string) => {
+  let hash = 2166136261;
+
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return hash >>> 0;
+};
+
+const createSeededRandom = (seed: string): RandomNumberGenerator => {
+  let state = hashString(seed) || 0x9e3779b9;
+
+  return () => {
+    state += 0x6d2b79f5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+};
 
 const getMountHeight = (object: Pick<RoomObject, "params">) =>
   typeof object.params.mountHeight === "number" ? object.params.mountHeight : 0;
@@ -154,14 +187,8 @@ const shouldPreferWallPlacement = (object: RoomObject) => {
   );
 };
 
-const isFloorCovering = (object: Pick<RoomObject, "category" | "dimensions">) =>
-  object.category === "carpet" || object.dimensions.height <= 0.06;
-
 const shouldIgnorePlacementCollision = (left: RoomObject, right: RoomObject) =>
-  isFloorCovering(left) ||
-  isFloorCovering(right) ||
-  isWallAttachedObject(left) ||
-  isWallAttachedObject(right);
+  !objectsHavePlacementCollision(left, right, 0.06);
 
 const canRepairRandomObject = (object: RoomObject) =>
   !isFixedDuringRandomize(object) && !isWallAttachedObject(object);
@@ -406,9 +433,31 @@ const clampOpening = (roomData: RoomData, opening: Opening): Opening => {
   const wallLength = getWallLength(roomData.room, opening.wallId);
   const minPosition = opening.width / 2 + 0.2;
   const maxPosition = Math.max(minPosition, wallLength - opening.width / 2 - 0.2);
+  const height =
+    typeof opening.height === "number"
+      ? clampDimension(opening.height, getOpeningHeight(opening, roomData.room.height), roomData.room.height)
+      : opening.height;
+  const effectiveHeight =
+    typeof height === "number"
+      ? height
+      : getOpeningHeight(opening, roomData.room.height);
+  const sillHeight =
+    typeof opening.sillHeight === "number"
+      ? clampDimension(
+          opening.sillHeight,
+          opening.type === "door" || opening.type === "balcony_door"
+            ? 0
+            : opening.type === "window"
+              ? Math.min(0.9, Math.max(0.45, roomData.room.height * 0.28))
+              : 0.18,
+          Math.max(0, roomData.room.height - effectiveHeight),
+        )
+      : opening.sillHeight;
 
   return {
     ...opening,
+    ...(typeof height === "number" ? { height } : {}),
+    ...(typeof sillHeight === "number" ? { sillHeight } : {}),
     width: Math.max(0.3, Number(opening.width.toFixed(2))),
     rotation:
       typeof opening.rotation === "number"
@@ -545,7 +594,7 @@ const resolveRandomCollisionPair = (
   const rightBounds = getObjectBounds(right);
   const padding = 0.04;
 
-  if (!boundsIntersect(leftBounds, rightBounds, padding)) {
+  if (!objectsHavePlacementCollision(left, right, padding)) {
     return false;
   }
 
@@ -735,6 +784,24 @@ type RandomLayoutOption = {
   warnings: LayoutWarning[];
 };
 
+const clearRandomLayoutCache = () => ({
+  randomLayoutOptions: [] as RandomLayoutOption[],
+  activeRandomLayoutOptionId: null as string | null,
+  randomLayoutSourceSignature: null as string | null,
+  randomLayoutOptionSignatures: [] as string[],
+  randomLayoutOptionsVisible: false,
+});
+
+const getStableParams = (params: RoomObject["params"]) =>
+  Object.fromEntries(
+    Object.entries(params)
+      .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+      .map(([key, value]) => [
+        key,
+        typeof value === "number" ? Number(value.toFixed(3)) : value,
+      ]),
+  );
+
 const getRoomDataSignature = (
   roomData: RoomData,
   objects: RoomObject[] = roomData.objects,
@@ -779,7 +846,112 @@ const getRoomDataSignature = (
       .sort((left, right) => left.id.localeCompare(right.id)),
   });
 
-const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
+const getRandomLayoutInputSignature = (roomData: RoomData) =>
+  JSON.stringify({
+    room: {
+      shape: roomData.room.shape,
+      purpose: roomData.room.purpose,
+      width: Number(roomData.room.width.toFixed(2)),
+      depth: Number(roomData.room.depth.toFixed(2)),
+      height: Number(roomData.room.height.toFixed(2)),
+      cutoutWidth: Number(roomData.room.cutoutWidth.toFixed(2)),
+      cutoutDepth: Number(roomData.room.cutoutDepth.toFixed(2)),
+      walls: roomData.room.walls
+        .map((wall) => ({
+          id: wall.id,
+          from: wall.from.map((value) => Number(value.toFixed(2))),
+          to: wall.to.map((value) => Number(value.toFixed(2))),
+        }))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+      openings: roomData.room.openings
+        .map((opening) => ({
+          ...opening,
+          position: Number(opening.position.toFixed(2)),
+          width: Number(opening.width.toFixed(2)),
+          height:
+            typeof opening.height === "number"
+              ? Number(opening.height.toFixed(2))
+              : opening.height,
+          sillHeight:
+            typeof opening.sillHeight === "number"
+              ? Number(opening.sillHeight.toFixed(2))
+              : opening.sillHeight,
+        }))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+    },
+    constraints: roomData.constraints,
+    groups: getRoomGroups(roomData)
+      .map((group) => ({
+        id: group.id,
+        label: group.label,
+        objectIds: [...group.objectIds].sort(),
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+    objects: roomData.objects
+      .map((object) => {
+        const fixed = isFixedDuringRandomize(object);
+
+        return {
+          id: object.id,
+          labelKey: object.labelKey,
+          category: object.category,
+          generator: object.generator,
+          dimensions: {
+            width: Number(object.dimensions.width.toFixed(2)),
+            depth: Number(object.dimensions.depth.toFixed(2)),
+            height: Number(object.dimensions.height.toFixed(2)),
+          },
+          movable: object.movable,
+          locked: object.locked,
+          params: getStableParams(object.params),
+          ...(fixed
+            ? {
+                position: {
+                  x: Number(object.position.x.toFixed(2)),
+                  z: Number(object.position.z.toFixed(2)),
+                },
+                rotation: Math.round(normalizeRotation(object.rotation)),
+              }
+            : {}),
+        };
+      })
+      .sort((left, right) => left.id.localeCompare(right.id)),
+  });
+
+const getRandomLayoutCacheUpdate = (
+  sourceSignature: string | null,
+  roomData: RoomData,
+) =>
+  sourceSignature === getRandomLayoutInputSignature(roomData)
+    ? { activeRandomLayoutOptionId: null as string | null }
+    : clearRandomLayoutCache();
+
+const applyLayoutToCurrentObjects = (
+  currentObjects: RoomObject[],
+  layoutObjects: RoomObject[],
+) => {
+  const layoutById = new Map(layoutObjects.map((object) => [object.id, object]));
+
+  return currentObjects.map((currentObject) => {
+    const layoutObject = layoutById.get(currentObject.id);
+
+    if (!layoutObject) {
+      return cloneRoomObject(currentObject);
+    }
+
+    return {
+      ...cloneRoomObject(currentObject),
+      position: { ...layoutObject.position },
+      rotation: layoutObject.rotation,
+    };
+  });
+};
+
+const tryRandomLayout = (
+  roomData: RoomData,
+  objects: RoomObject[],
+  random: RandomNumberGenerator = Math.random,
+) => {
   const fixedObjects = objects
     .filter((object) => isFixedDuringRandomize(object))
     .map((object) => cloneRoomObject(object));
@@ -855,10 +1027,10 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
       const rotations = [0, 90, 180, 270];
 
       for (let attempt = 0; attempt < candidateAttempts; attempt += 1) {
-        const rotation = rotations[Math.floor(Math.random() * rotations.length)];
+        const rotation = rotations[Math.floor(random() * rotations.length)];
         const desiredPosition = {
-          x: 0.3 + Math.random() * Math.max(0.4, roomData.room.width - 0.6),
-          z: 0.3 + Math.random() * Math.max(0.4, roomData.room.depth - 0.6),
+          x: 0.3 + random() * Math.max(0.4, roomData.room.width - 0.6),
+          z: 0.3 + random() * Math.max(0.4, roomData.room.depth - 0.6),
         };
         const candidate = { ...draft };
 
@@ -885,7 +1057,7 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
             return false;
           }
 
-          return boundsIntersect(getObjectBounds(existing), getObjectBounds(candidate), 0.06);
+          return objectsHavePlacementCollision(existing, candidate, 0.06);
         });
 
         if (intersects) {
@@ -1025,35 +1197,37 @@ const getLayoutSignature = (objects: RoomObject[]) =>
 
 const getRandomLayoutOptionCount = (objectCount: number) => {
   if (objectCount > 28) {
-    return 18;
+    return 44;
   }
 
   if (objectCount > 18) {
-    return 24;
+    return 56;
   }
 
   if (objectCount > 10) {
-    return 32;
+    return 64;
   }
 
-  return 40;
+  return 72;
 };
 
 const createRandomLayoutOptions = (
   roomData: RoomData,
   sourceLayoutObjects: RoomObject[],
+  seedSignature: string,
 ): RandomLayoutOption[] => {
   const optionCount = getRandomLayoutOptionCount(sourceLayoutObjects.length);
   const options: RandomLayoutOption[] = [];
   const seenSignatures = new Set<string>();
   const maxAttempts = optionCount * 10;
+  const random = createSeededRandom(`random-layout-v2:${seedSignature}`);
 
   for (
     let attempt = 0;
     attempt < maxAttempts && options.length < optionCount;
     attempt += 1
   ) {
-    const objects = tryRandomLayout(roomData, sourceLayoutObjects);
+    const objects = tryRandomLayout(roomData, sourceLayoutObjects, random);
     const signature = getLayoutSignature(objects);
 
     if (seenSignatures.has(signature)) {
@@ -1128,6 +1302,7 @@ interface RoomStore {
   activeRandomLayoutOptionId: string | null;
   randomLayoutSourceSignature: string | null;
   randomLayoutOptionSignatures: string[];
+  randomLayoutOptionsVisible: boolean;
   setSelectedObjectId: (objectId: string | null) => void;
   toggleObjectSelection: (objectId: string) => void;
   setSelectedObjectIds: (objectIds: string[]) => void;
@@ -1148,13 +1323,16 @@ interface RoomStore {
   }) => void;
   updateOpening: (
     openingId: string,
-    payload: Partial<Pick<Opening, "wallId" | "position" | "width" | "rotation">>,
+    payload: Partial<
+      Pick<Opening, "wallId" | "position" | "width" | "height" | "sillHeight" | "rotation">
+    >,
   ) => void;
   updateOpeningTransform: (
     openingId: string,
     payload: {
       position?: { x: number; z: number };
       rotationY?: number;
+      sillHeight?: number;
     },
   ) => void;
   updateWallSegment: (
@@ -1205,13 +1383,13 @@ interface RoomStore {
 }
 
 export const useRoomStore = create<RoomStore>((set) => ({
-  roomData: cloneRoomData(defaultRoom),
-  selectedObjectId: "sofa_1",
-  selectedObjectIds: ["sofa_1"],
+  roomData: cloneRoomData(initialRoomData),
+  selectedObjectId: initialRoomData.objects[0]?.id ?? null,
+  selectedObjectIds: initialRoomData.objects[0]?.id ? [initialRoomData.objects[0].id] : [],
   selectedGroupId: null,
   cameraMode: "orbit",
   transformMode: "select",
-  validationWarnings: validateRoomLayout(defaultRoom),
+  validationWarnings: validateRoomLayout(initialRoomData),
   historyPast: [],
   historyFuture: [],
   lastEditorStatus: { key: "roomLoaded" },
@@ -1221,6 +1399,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
   activeRandomLayoutOptionId: null,
   randomLayoutSourceSignature: null,
   randomLayoutOptionSignatures: [],
+  randomLayoutOptionsVisible: false,
   setSelectedObjectId: (objectId) =>
     set({
       selectedObjectId: objectId,
@@ -1345,10 +1524,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
           selectedObjectIds: selectedObjectId ? [selectedObjectId] : [],
           selectedGroupId: null,
           validationWarnings: validateRoomLayout(roomData),
-          randomLayoutOptions: [],
-          activeRandomLayoutOptionId: null,
-          randomLayoutSourceSignature: null,
-          randomLayoutOptionSignatures: [],
+          ...clearRandomLayoutCache(),
           historyPast: limitHistory([
             ...state.historyPast,
             cloneRoomData(state.roomData),
@@ -1368,10 +1544,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
-        randomLayoutSourceSignature: null,
-        randomLayoutOptionSignatures: [],
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1383,21 +1556,31 @@ export const useRoomStore = create<RoomStore>((set) => ({
   updateOpening: (openingId, payload) =>
     set((state) => {
       const roomData = cloneRoomData(state.roomData);
-      roomData.room.openings = roomData.room.openings.map((opening) =>
-        opening.id === openingId
-          ? normalizeOpeningForRoom(
-              roomData.room,
-              clampOpening(roomData, {
-                ...opening,
-                ...payload,
-              }),
-            )
-          : opening,
-      );
+      roomData.room.openings = roomData.room.openings.map((opening) => {
+        if (opening.id !== openingId) {
+          return opening;
+        }
+
+        const nextWall = getWallSegment(roomData.room, payload.wallId ?? opening.wallId);
+        const wallRotation =
+          nextWall && payload.rotation === undefined
+            ? normalizeRotation((getWallMetrics(nextWall).rotationY * 180) / Math.PI)
+            : payload.rotation;
+
+        return normalizeOpeningForRoom(
+          roomData.room,
+          clampOpening(roomData, {
+            ...opening,
+            ...payload,
+            rotation: wallRotation ?? opening.rotation,
+          }),
+        );
+      });
 
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1426,16 +1609,20 @@ export const useRoomStore = create<RoomStore>((set) => ({
             rotationWall?.id ?? opening.wallId,
           )
         : null;
+      const nextWallId = projection?.wall.id ?? rotationWall?.id ?? opening.wallId;
+      const nextWall = getWallSegment(roomData.room, nextWallId);
+      const nextWallRotation =
+        nextWall
+          ? normalizeRotation((getWallMetrics(nextWall).rotationY * 180) / Math.PI)
+          : opening.rotation;
       const nextOpening = normalizeOpeningForRoom(
         roomData.room,
         clampOpening(roomData, {
           ...opening,
-          wallId: projection?.wall.id ?? rotationWall?.id ?? opening.wallId,
+          wallId: nextWallId,
           position: projection?.along ?? opening.position,
-          rotation:
-            payload.rotationY !== undefined
-              ? normalizeRotation((payload.rotationY * 180) / Math.PI)
-              : opening.rotation,
+          rotation: nextWallRotation,
+          sillHeight: payload.sillHeight ?? opening.sillHeight,
         }),
       );
 
@@ -1446,10 +1633,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
-        randomLayoutSourceSignature: null,
-        randomLayoutOptionSignatures: [],
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
       };
     }),
   updateWallSegment: (wallId, payload) =>
@@ -1488,8 +1672,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1557,10 +1740,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
-        randomLayoutSourceSignature: null,
-        randomLayoutOptionSignatures: [],
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1613,10 +1793,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
-        randomLayoutSourceSignature: null,
-        randomLayoutOptionSignatures: [],
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
       };
     }),
   updateObjectProperties: (objectId, payload) =>
@@ -1679,10 +1856,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
-        randomLayoutSourceSignature: null,
-        randomLayoutOptionSignatures: [],
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1709,8 +1883,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
         selectedObjectIds: [newObject.id],
         selectedGroupId: null,
         validationWarnings: validateRoomLayout(roomData),
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1744,8 +1917,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
         selectedObjectIds: nextSelection ? [nextSelection] : [],
         selectedGroupId: null,
         validationWarnings: validateRoomLayout(roomData),
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1771,8 +1943,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
         selectedObjectIds: [],
         selectedGroupId: null,
         validationWarnings: validateRoomLayout(roomData),
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1811,10 +1982,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
         selectedObjectId: selectedObjectIds.at(-1) ?? null,
         selectedObjectIds,
         selectedGroupId: newGroup.id,
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
-        randomLayoutSourceSignature: null,
-        randomLayoutOptionSignatures: [],
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1843,10 +2011,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         selectedGroupId: null,
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
-        randomLayoutSourceSignature: null,
-        randomLayoutOptionSignatures: [],
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1883,8 +2048,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1930,6 +2094,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
         selectedObjectIds: roomData.objects.at(-1)?.id ? [roomData.objects.at(-1)!.id] : [],
         selectedGroupId: null,
         validationWarnings: validateRoomLayout(roomData),
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1981,8 +2146,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
         selectedObjectIds: [pasted.id],
         selectedGroupId: null,
         validationWarnings: validateRoomLayout(roomData),
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1994,29 +2158,28 @@ export const useRoomStore = create<RoomStore>((set) => ({
   randomizeLayout: () =>
     set((state) => {
       const roomData = cloneRoomData(state.roomData);
-      const currentSignature = getRoomDataSignature(roomData);
+      const currentSourceSignature = getRandomLayoutInputSignature(roomData);
+      const currentLayoutSignature = getRoomDataSignature(roomData);
       const activeOptionBySignature = state.randomLayoutOptions.find(
-        (_option, index) => state.randomLayoutOptionSignatures[index] === currentSignature,
+        (_option, index) =>
+          state.randomLayoutOptionSignatures[index] === currentLayoutSignature,
       );
 
-      if (
-        state.randomLayoutSourceSignature === currentSignature ||
-        (state.randomLayoutOptions.length &&
-          state.randomLayoutOptionSignatures.includes(currentSignature))
-      ) {
+      if (state.randomLayoutSourceSignature === currentSourceSignature) {
         return {
-          activeRandomLayoutOptionId:
-            activeOptionBySignature?.id ??
-            (state.randomLayoutSourceSignature === currentSignature
-              ? null
-              : state.activeRandomLayoutOptionId),
+          activeRandomLayoutOptionId: activeOptionBySignature?.id ?? null,
+          randomLayoutOptionsVisible: true,
           lastEditorStatus: { key: "randomLayoutOptionsReady" },
         };
       }
 
       const sourceLayoutObjects = getRandomLayoutSourceObjects(roomData);
-      const randomLayoutOptions = createRandomLayoutOptions(roomData, sourceLayoutObjects);
-      const randomLayoutSourceSignature = currentSignature;
+      const randomLayoutOptions = createRandomLayoutOptions(
+        roomData,
+        sourceLayoutObjects,
+        currentSourceSignature,
+      );
+      const randomLayoutSourceSignature = currentSourceSignature;
       const randomLayoutOptionSignatures = randomLayoutOptions.map((option) =>
         getRoomDataSignature(roomData, option.objects),
       );
@@ -2026,6 +2189,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
         activeRandomLayoutOptionId: null,
         randomLayoutSourceSignature,
         randomLayoutOptionSignatures,
+        randomLayoutOptionsVisible: true,
         lastEditorStatus: { key: "randomLayoutOptionsReady" },
       };
     }),
@@ -2037,19 +2201,22 @@ export const useRoomStore = create<RoomStore>((set) => ({
         return state;
       }
 
+      const baseRoomData = cloneRoomData(state.roomData);
       const roomData = {
-        ...cloneRoomData(state.roomData),
-        objects: option.objects.map((object) => cloneRoomObject(object)),
+        ...baseRoomData,
+        objects: applyLayoutToCurrentObjects(baseRoomData.objects, option.objects),
       };
 
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
         activeRandomLayoutOptionId: option.id,
+        randomLayoutOptionsVisible: true,
         randomLayoutOptionSignatures: state.randomLayoutOptions.map((entry) =>
-          entry.id === option.id
-            ? getRoomDataSignature(roomData, option.objects)
-            : getRoomDataSignature(state.roomData, entry.objects),
+          getRoomDataSignature(
+            baseRoomData,
+            applyLayoutToCurrentObjects(baseRoomData.objects, entry.objects),
+          ),
         ),
         historyPast: limitHistory([
           ...state.historyPast,
@@ -2061,10 +2228,8 @@ export const useRoomStore = create<RoomStore>((set) => ({
     }),
   clearRandomLayoutOptions: () =>
     set({
-      randomLayoutOptions: [],
       activeRandomLayoutOptionId: null,
-      randomLayoutSourceSignature: null,
-      randomLayoutOptionSignatures: [],
+      randomLayoutOptionsVisible: false,
     }),
   randomizeSelectedObjects: () =>
     set((state) => {
@@ -2117,8 +2282,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -2175,10 +2339,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
-        randomLayoutSourceSignature: null,
-        randomLayoutOptionSignatures: [],
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -2200,6 +2361,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -2222,6 +2384,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData: cloneRoomData(previous),
         validationWarnings: validateRoomLayout(previous),
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, previous),
         historyPast: state.historyPast.slice(0, -1),
         historyFuture: [cloneRoomData(state.roomData), ...state.historyFuture],
         lastEditorStatus: { key: "undoApplied" },
@@ -2238,6 +2401,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData: cloneRoomData(next),
         validationWarnings: validateRoomLayout(next),
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, next),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -2248,7 +2412,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
     }),
   resetRoom: (mode = "default") =>
     set((state) => {
-      let nextRoomData = cloneRoomData(defaultRoom);
+      let nextRoomData = createDefaultRoomData();
       let status: EditorStatus = { key: "sceneReset" };
 
       if (mode === "saved" && typeof window !== "undefined") {
@@ -2259,7 +2423,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
             nextRoomData = cloneRoomData(JSON.parse(savedRaw) as RoomData);
             status = { key: "sceneResetSaved" };
           } catch {
-            nextRoomData = cloneRoomData(defaultRoom);
+            nextRoomData = createDefaultRoomData();
           }
         }
       }
@@ -2280,10 +2444,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
         lastEditorStatus: status,
         activeTransformObjectId: null,
         clipboardObject: null,
-        randomLayoutOptions: [],
-        activeRandomLayoutOptionId: null,
-        randomLayoutSourceSignature: null,
-        randomLayoutOptionSignatures: [],
+        ...clearRandomLayoutCache(),
       };
     }),
 }));

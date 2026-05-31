@@ -135,7 +135,7 @@ const getInventoryCategoryIds = (item: InventoryTemplate): InventoryCategoryId[]
 
   if (
     item.previewType === "kitchen" ||
-    hasInventoryTag(item, ["kitchen", "cooktop", "sink", "cabinet", "hood"])
+    hasInventoryTag(item, ["kitchen", "sink", "cabinet", "hood"])
   ) {
     categories.add("kitchen");
   }
@@ -627,7 +627,11 @@ function OpeningEditor({
   wallIds: string[];
   selected: boolean;
   onSelect?: () => void;
-  onChange: (payload: Partial<Pick<Opening, "wallId" | "position" | "width" | "rotation">>) => void;
+  onChange: (
+    payload: Partial<
+      Pick<Opening, "wallId" | "position" | "width" | "height" | "sillHeight" | "rotation">
+    >,
+  ) => void;
 }) {
   return (
     <div
@@ -672,6 +676,25 @@ function OpeningEditor({
         </label>
         <label className="space-y-1">
           <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+            Konum Y
+          </span>
+          <input
+            type="number"
+            step="0.05"
+            min="0"
+            value={opening.sillHeight ?? 0}
+            onChange={(event) => {
+              const value = event.currentTarget.valueAsNumber;
+
+              if (!Number.isNaN(value)) {
+                onChange({ sillHeight: value });
+              }
+            }}
+            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
             {t(locale, "width")}
           </span>
           <input
@@ -680,6 +703,25 @@ function OpeningEditor({
             min="0.3"
             value={opening.width}
             onChange={(event) => onChange({ width: event.currentTarget.valueAsNumber })}
+            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+            {t(locale, "height")}
+          </span>
+          <input
+            type="number"
+            step="0.05"
+            min="0.2"
+            value={opening.height ?? ""}
+            onChange={(event) => {
+              const value = event.currentTarget.valueAsNumber;
+
+              if (!Number.isNaN(value)) {
+                onChange({ height: value });
+              }
+            }}
             className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
           />
         </label>
@@ -1570,6 +1612,10 @@ function InventoryCard({
       draggable
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "copy";
+        const dragImage = document.createElement("canvas");
+        dragImage.width = 1;
+        dragImage.height = 1;
+        event.dataTransfer.setDragImage(dragImage, 0, 0);
         event.dataTransfer.setData(INVENTORY_DRAG_MIME, item.id);
         event.dataTransfer.setData("text/plain", item.id);
         window.dispatchEvent(
@@ -1601,15 +1647,17 @@ function RandomLayoutsPanel({ locale }: { locale: Locale }) {
   const options = useRoomStore((state) => state.randomLayoutOptions);
   const activeOptionId = useRoomStore((state) => state.activeRandomLayoutOptionId);
   const sourceSignature = useRoomStore((state) => state.randomLayoutSourceSignature);
+  const optionsVisible = useRoomStore((state) => state.randomLayoutOptionsVisible);
   const applyRandomLayoutOption = useRoomStore((state) => state.applyRandomLayoutOption);
   const randomizeLayout = useRoomStore((state) => state.randomizeLayout);
   const clearRandomLayoutOptions = useRoomStore((state) => state.clearRandomLayoutOptions);
   const roomData = useRoomStore((state) => state.roomData);
-  const cleanCount = options.filter((option) => option.warnings.length === 0).length;
+  const visibleOptions = optionsVisible ? options : [];
+  const cleanCount = visibleOptions.filter((option) => option.warnings.length === 0).length;
   const helperText =
     locale === "en"
-      ? "Randomize now builds a clean option set in this right panel first. If the scene is unchanged, the same list opens; after an item change, the next request recalculates it."
-      : "Rastgele Diz önce bu sağ panelde temiz seçenek listesi oluşturur. Sahne değişmediyse aynı liste açılır; eşya değişirse sonraki istek listeyi yeniden hesaplar.";
+      ? "Randomize calculates the option set once for the same items and room structure. Closing only hides the list; adding, deleting, resizing, locking, or changing the room recalculates it."
+      : "Rastgele Diz aynı eşyalar ve oda yapısı için seçenekleri bir kez hesaplar. Kapatmak listeyi sadece gizler; ekleme, silme, boyut, kilit veya oda değişirse yeniden hesaplanır.";
 
   return (
     <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
@@ -1637,11 +1685,11 @@ function RandomLayoutsPanel({ locale }: { locale: Locale }) {
         {helperText}
       </div>
 
-      {options.length ? (
+      {visibleOptions.length ? (
         <div className="mt-4 space-y-3">
           <div className="grid grid-cols-3 gap-2 text-center text-xs">
             <div className="rounded-xl border border-white/10 bg-white/5 px-2 py-2">
-              <div className="font-semibold text-white">{options.length}</div>
+              <div className="font-semibold text-white">{visibleOptions.length}</div>
               <div className="mt-1 uppercase tracking-[0.16em] text-slate-500">
                 {locale === "en" ? "Options" : "Seçenek"}
               </div>
@@ -1664,7 +1712,7 @@ function RandomLayoutsPanel({ locale }: { locale: Locale }) {
             </button>
           </div>
 
-          {options.map((option, index) => {
+          {visibleOptions.map((option, index) => {
             const errorCount = option.warnings.filter(
               (warning) => warning.level === "error",
             ).length;
@@ -1727,10 +1775,14 @@ function RandomLayoutsPanel({ locale }: { locale: Locale }) {
         </div>
       ) : (
         <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm leading-6 text-slate-400">
-          {sourceSignature
+          {sourceSignature && optionsVisible
             ? locale === "en"
               ? "No clean random layout could be generated for this exact scene. Adjust crowded or locked items, then request a fresh list."
               : "Bu sahne için temiz rastgele düzen üretilemedi. Sıkışık veya kilitli eşyaları düzenleyip yeniden liste iste."
+            : sourceSignature
+              ? locale === "en"
+                ? "Random layout list hidden. Press Randomize to reopen the same cached list."
+                : "Rastgele düzen listesi gizlendi. Aynı kayıtlı listeyi açmak için Rastgele Diz'e bas."
             : locale === "en"
               ? "No generated layout list yet. Use Randomize to calculate clean options for the current scene."
               : "Henüz oluşturulmuş düzen listesi yok. Mevcut sahneye göre temiz seçenekleri hesaplamak için Rastgele Diz'e bas."}

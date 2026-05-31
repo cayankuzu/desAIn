@@ -33,14 +33,6 @@ const defaultOpenings: Opening[] = [
     width: 1.3,
     clearDepth: 0.6,
   },
-  {
-    id: "radiator_1",
-    type: "radiator",
-    wallId: "wall_2",
-    position: 1.2,
-    width: 0.9,
-    clearDepth: 0.45,
-  },
 ];
 
 export const resizeRoomDefinition = (
@@ -298,7 +290,7 @@ export const defaultRoom: RoomData = {
       category: "chair",
       generator: "ChairGenerator",
       position: { x: 5.35, z: 2.02 },
-      rotation: 270,
+      rotation: 90,
       dimensions: { width: 0.52, depth: 0.52, height: 0.92 },
       color: "#51727a",
       movable: true,

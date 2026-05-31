@@ -52,6 +52,8 @@ export interface Opening {
   wallId: string;
   position: number;
   width: number;
+  height?: number;
+  sillHeight?: number;
   rotation?: number;
   clearDepth?: number;
 }

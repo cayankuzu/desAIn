@@ -1,4 +1,8 @@
-import { getObjectBounds, getRotatedHalfExtents } from "@/lib/room/collision";
+import {
+  boundsIntersect,
+  getObjectBounds,
+  getRotatedHalfExtents,
+} from "@/lib/room/collision";
 import type { Bounds2D } from "@/lib/room/collision";
 import { getRoomCutoutZone, getWallSegment } from "@/lib/room/roomGeometry";
 import type { Opening, RoomData, RoomObject, WallSegment } from "@/types/room";
@@ -28,6 +32,50 @@ export const isWallAttachedObject = (object: Pick<RoomObject, "params">) => {
     baseShape === "wall_panel" ||
     baseShape === "wall_box" ||
     baseShape === "door_panel"
+  );
+};
+
+export const isFloorCovering = (
+  object: Pick<RoomObject, "category" | "dimensions">,
+) => object.category === "carpet" || object.dimensions.height <= 0.06;
+
+export const getObjectVerticalBounds = (
+  object: Pick<RoomObject, "dimensions" | "params">,
+) => {
+  const mountHeight = getMountHeight(object);
+
+  return {
+    minY: mountHeight,
+    maxY: mountHeight + object.dimensions.height,
+  };
+};
+
+export const objectVerticalBoundsIntersect = (
+  left: Pick<RoomObject, "dimensions" | "params">,
+  right: Pick<RoomObject, "dimensions" | "params">,
+  padding = 0,
+) => {
+  const leftBounds = getObjectVerticalBounds(left);
+  const rightBounds = getObjectVerticalBounds(right);
+
+  return !(
+    leftBounds.maxY <= rightBounds.minY + padding ||
+    leftBounds.minY >= rightBounds.maxY - padding
+  );
+};
+
+export const objectsHavePlacementCollision = (
+  left: RoomObject,
+  right: RoomObject,
+  padding = 0.04,
+) => {
+  if (isFloorCovering(left) || isFloorCovering(right)) {
+    return false;
+  }
+
+  return (
+    objectVerticalBoundsIntersect(left, right, 0.02) &&
+    boundsIntersect(getObjectBounds(left), getObjectBounds(right), padding)
   );
 };
 

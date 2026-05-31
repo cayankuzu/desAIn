@@ -1,14 +1,26 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { ContactShadows } from "@react-three/drei";
+import { ContactShadows, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import type { Group } from "three";
 import {
   clampObjectPositionToRoom,
+  getWallAttachedObjectTransform,
   isWallAttachedObject,
   normalizeRotation,
 } from "@/lib/room/constraints";
+import {
+  getOpeningHeight,
+  getOpeningSceneTransform,
+} from "@/lib/room/openingPlacement";
+import {
+  findWallByRotation,
+  getWallMetrics,
+  getWallSegment,
+  normalizeOpeningForRoom,
+  projectPointToWall,
+} from "@/lib/room/roomGeometry";
 import { useRoomStore } from "@/store/roomStore";
 import { useUIStore } from "@/store/uiStore";
 import { CameraControls } from "./CameraControls";
@@ -109,6 +121,35 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
       x: selectedSceneObject.position.x,
       z: selectedSceneObject.position.z,
     };
+
+    if (isWallObject) {
+      const objectForPlacement = {
+        ...selectedObject,
+        params: {
+          ...selectedObject.params,
+          mountHeight: nextMountHeight,
+        },
+      };
+      const placement = getWallAttachedObjectTransform(
+        roomData,
+        objectForPlacement,
+        desiredPosition,
+      );
+
+      selectedSceneObject.position.set(
+        placement.position.x,
+        nextMountHeight,
+        placement.position.z,
+      );
+      selectedSceneObject.rotation.set(0, (placement.rotation * Math.PI) / 180, 0);
+      updateObjectTransform(selectedObject.id, {
+        position: placement.position,
+        rotation: placement.rotation,
+        mountHeight: nextMountHeight,
+      });
+      return;
+    }
+
     const clamped = clampObjectPositionToRoom(
       roomData,
       selectedObject,
@@ -130,12 +171,48 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
       return;
     }
 
-    updateOpeningTransform(selectedOpening.id, {
-      position: {
+    const openingHeight = getOpeningHeight(selectedOpening, roomData.room.height);
+    const nextSillHeight = Math.min(
+      Math.max(0, selectedSceneOpening.position.y - openingHeight / 2),
+      Math.max(0, roomData.room.height - openingHeight),
+    );
+    const rotationWall = findWallByRotation(roomData.room, selectedSceneOpening.rotation.y);
+    const projection = projectPointToWall(
+      roomData.room,
+      {
         x: selectedSceneOpening.position.x,
         z: selectedSceneOpening.position.z,
       },
-      rotationY: selectedSceneOpening.rotation.y,
+      rotationWall?.id ?? selectedOpening.wallId,
+    );
+    const wallId = projection?.wall.id ?? rotationWall?.id ?? selectedOpening.wallId;
+    const wall = getWallSegment(roomData.room, wallId);
+    const wallRotation =
+      wall
+        ? normalizeRotation((getWallMetrics(wall).rotationY * 180) / Math.PI)
+        : selectedOpening.rotation;
+    const projectedOpening = normalizeOpeningForRoom(roomData.room, {
+      ...selectedOpening,
+      wallId,
+      position: projection?.along ?? selectedOpening.position,
+      rotation: wallRotation,
+      sillHeight: nextSillHeight,
+    });
+    const transform = getOpeningSceneTransform(roomData.room, projectedOpening);
+
+    selectedSceneOpening.position.set(
+      transform.position.x,
+      transform.position.y,
+      transform.position.z,
+    );
+    selectedSceneOpening.rotation.set(0, transform.rotationY, 0);
+    updateOpeningTransform(selectedOpening.id, {
+      position: {
+        x: transform.position.x,
+        z: transform.position.z,
+      },
+      rotationY: transform.rotationY,
+      sillHeight: nextSillHeight,
     });
   };
 
@@ -200,6 +277,7 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
           endTransform();
         }}
         onObjectChange={syncSelectedOpeningFromScene}
+        showTranslateY
       />
 
       <group position={roomOffset}>
@@ -232,6 +310,12 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
       </group>
 
       <CameraControls enabled={!isTransforming} mode={cameraMode} room={roomData.room} />
+      <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
+        <GizmoViewport
+          axisColors={["#ef4444", "#22c55e", "#3b82f6"]}
+          labelColor="#f8fafc"
+        />
+      </GizmoHelper>
     </Canvas>
   );
 }

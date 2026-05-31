@@ -112,6 +112,197 @@ export function GenericObjectGenerator({
     );
   }
 
+  if (baseShape === "bunk_bed") {
+    const frameColor = selected ? "#d6ad7a" : primaryColor;
+
+    return (
+      <group>
+        {[0.28, 0.72].map((heightRatio) => (
+          <group key={heightRatio} position={[0, height * heightRatio, 0]}>
+            <mesh castShadow receiveShadow>
+              <boxGeometry args={[width, height * 0.12, depth]} />
+              <meshStandardMaterial color="#a07454" />
+            </mesh>
+            <mesh position={[0, height * 0.08, 0]} castShadow receiveShadow>
+              <boxGeometry args={[width * 0.94, height * 0.08, depth * 0.9]} />
+              <meshStandardMaterial color="#efe2d6" />
+            </mesh>
+            <mesh position={[0, height * 0.16, -depth / 2 + 0.04]} castShadow>
+              <boxGeometry args={[width, height * 0.16, depth * 0.08]} />
+              <meshStandardMaterial color={frameColor} />
+            </mesh>
+          </group>
+        ))}
+        {[-0.46, 0.46].map((offset) => (
+          <mesh key={offset} position={[offset * width, height / 2, 0]} castShadow receiveShadow>
+            <boxGeometry args={[width * 0.05, height, depth * 0.08]} />
+            <meshStandardMaterial color={frameColor} />
+          </mesh>
+        ))}
+        <mesh position={[width * 0.44, height * 0.46, depth * 0.42]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.08, height * 0.72, depth * 0.06]} />
+          <meshStandardMaterial color="#6f4f37" />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "crib") {
+    return (
+      <group>
+        <mesh position={[0, height * 0.28, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height * 0.18, depth]} />
+          <meshStandardMaterial color="#efe2d6" />
+        </mesh>
+        {[-0.48, -0.24, 0, 0.24, 0.48].map((offset) => (
+          <mesh key={offset} position={[offset * width, height * 0.56, depth / 2]} castShadow>
+            <boxGeometry args={[width * 0.035, height * 0.52, depth * 0.045]} />
+            <meshStandardMaterial color={primaryColor} />
+          </mesh>
+        ))}
+        <mesh position={[0, height * 0.82, depth / 2]} castShadow receiveShadow>
+          <boxGeometry args={[width, height * 0.08, depth * 0.06]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height * 0.82, -depth / 2]} castShadow receiveShadow>
+          <boxGeometry args={[width, height * 0.08, depth * 0.06]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "laundry_basket") {
+    return (
+      <group>
+        <mesh position={[0, height * 0.42, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[width * 0.42, width * 0.34, height * 0.82, 24]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height * 0.86, 0]} castShadow>
+          <torusGeometry args={[width * 0.39, width * 0.035, 10, 28]} />
+          <meshStandardMaterial color="#d5c2a5" />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "utility_cart") {
+    return (
+      <group>
+        {[0.18, 0.52, 0.84].map((ratio) => (
+          <mesh key={ratio} position={[0, height * ratio, 0]} castShadow receiveShadow>
+            <boxGeometry args={[width, height * 0.055, depth]} />
+            <meshStandardMaterial color={ratio === 0.84 ? primaryColor : "#b7a18a"} />
+          </mesh>
+        ))}
+        {[-0.42, 0.42].flatMap((xOffset) =>
+          [-0.34, 0.34].map((zOffset) => (
+            <mesh
+              key={`${xOffset}-${zOffset}`}
+              position={[xOffset * width, height * 0.5, zOffset * depth]}
+              castShadow
+              receiveShadow
+            >
+              <boxGeometry args={[width * 0.04, height * 0.78, depth * 0.04]} />
+              <meshStandardMaterial color="#6b5a4a" />
+            </mesh>
+          )),
+        )}
+        {[-0.36, 0.36].flatMap((xOffset) =>
+          [-0.3, 0.3].map((zOffset) => (
+            <mesh key={`wheel-${xOffset}-${zOffset}`} position={[xOffset * width, height * 0.04, zOffset * depth]} castShadow>
+              <cylinderGeometry args={[width * 0.055, width * 0.055, depth * 0.05, 14]} />
+              <meshStandardMaterial color="#2f3438" />
+            </mesh>
+          )),
+        )}
+      </group>
+    );
+  }
+
+  if (baseShape === "ironing_board") {
+    return (
+      <group>
+        <mesh position={[0, height * 0.82, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height * 0.07, depth]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[width * 0.42, height * 0.82, 0]} castShadow receiveShadow>
+          <sphereGeometry args={[depth * 0.5, 18, 10]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        {[-1, 1].map((direction) => (
+          <mesh
+            key={direction}
+            position={[direction * width * 0.18, height * 0.42, 0]}
+            rotation={[0, 0, direction * 0.45]}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry args={[width * 0.06, height * 0.82, depth * 0.08]} />
+            <meshStandardMaterial color="#6f6256" />
+          </mesh>
+        ))}
+        <mesh position={[-width * 0.34, height * 0.09, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.28, height * 0.06, depth * 0.18]} />
+          <meshStandardMaterial color="#6f6256" />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "drying_rack") {
+    return (
+      <group>
+        {[-0.42, 0.42].map((xOffset) => (
+          <mesh key={xOffset} position={[xOffset * width, height * 0.46, 0]} rotation={[0, 0, xOffset > 0 ? -0.28 : 0.28]} castShadow>
+            <boxGeometry args={[width * 0.04, height * 0.88, depth * 0.04]} />
+            <meshStandardMaterial color="#8a8178" />
+          </mesh>
+        ))}
+        {[0.28, 0.42, 0.56, 0.7].map((ratio) => (
+          <mesh key={ratio} position={[0, height * ratio, 0]} castShadow receiveShadow>
+            <boxGeometry args={[width * 0.86, height * 0.025, depth * 0.04]} />
+            <meshStandardMaterial color={primaryColor} />
+          </mesh>
+        ))}
+        {[-0.3, 0, 0.3].map((xOffset) => (
+          <mesh key={xOffset} position={[xOffset * width, height * 0.72, 0]} castShadow>
+            <boxGeometry args={[width * 0.025, height * 0.025, depth * 0.78]} />
+            <meshStandardMaterial color="#d5d9dc" />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+
+  if (baseShape === "umbrella_stand") {
+    return (
+      <group>
+        <mesh position={[0, height * 0.38, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[width * 0.34, width * 0.42, height * 0.76, 24]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height * 0.78, 0]} castShadow>
+          <torusGeometry args={[width * 0.34, width * 0.025, 8, 24]} />
+          <meshStandardMaterial color="#d3bd95" />
+        </mesh>
+        {[-0.16, 0.08, 0.22].map((offset, index) => (
+          <mesh
+            key={offset}
+            position={[offset * width, height * 0.72, (index - 1) * depth * 0.08]}
+            rotation={[0, 0, offset > 0 ? -0.16 : 0.12]}
+            castShadow
+          >
+            <boxGeometry args={[width * 0.035, height * 0.58, depth * 0.035]} />
+            <meshStandardMaterial color="#4f565f" />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+
   if (baseShape === "kitchen_sink") {
     return (
       <group>
@@ -190,12 +381,28 @@ export function GenericObjectGenerator({
   if (baseShape === "toilet") {
     return (
       <group>
-        <mesh position={[0, height * 0.22, depth * 0.08]} castShadow receiveShadow>
-          <cylinderGeometry args={[width * 0.32, width * 0.25, height * 0.32, 24]} />
+        <mesh position={[0, height * 0.13, depth * 0.02]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.42, height * 0.26, depth * 0.38]} />
           <meshStandardMaterial color={primaryColor} />
         </mesh>
-        <mesh position={[0, height * 0.55, -depth * 0.24]} castShadow receiveShadow>
-          <boxGeometry args={[width * 0.76, height * 0.42, depth * 0.18]} />
+        <mesh position={[0, height * 0.34, depth * 0.08]} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+          <torusGeometry args={[width * 0.25, width * 0.06, 16, 32]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height * 0.335, depth * 0.08]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[width * 0.16, width * 0.16, depth * 0.035, 24]} />
+          <meshStandardMaterial color="#bfd5df" />
+        </mesh>
+        <mesh position={[0, height * 0.48, -depth * 0.24]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.78, height * 0.38, depth * 0.18]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height * 0.7, -depth * 0.245]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.82, height * 0.08, depth * 0.2]} />
+          <meshStandardMaterial color="#f2f6f8" />
+        </mesh>
+        <mesh position={[0, height * 0.05, depth * 0.28]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.55, height * 0.09, depth * 0.26]} />
           <meshStandardMaterial color={primaryColor} />
         </mesh>
       </group>
@@ -462,6 +669,52 @@ export function GenericObjectGenerator({
     );
   }
 
+  if (baseShape === "wall_tv") {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height, Math.max(depth, 0.06)]} />
+          <meshStandardMaterial color="#111820" />
+        </mesh>
+        <mesh position={[0, height / 2, Math.max(depth, 0.06) / 2 + 0.012]} castShadow>
+          <boxGeometry args={[width * 0.88, height * 0.78, 0.018]} />
+          <meshStandardMaterial color={selected ? "#2e83a8" : primaryColor} emissive="#12344a" emissiveIntensity={0.12} />
+        </mesh>
+        <mesh position={[0, height * 0.08, Math.max(depth, 0.06) / 2 + 0.014]} castShadow>
+          <boxGeometry args={[width * 0.42, height * 0.035, 0.018]} />
+          <meshStandardMaterial color="#3a444c" />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "pegboard") {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height, Math.max(depth, 0.06)]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        {[-0.3, -0.1, 0.1, 0.3].flatMap((xOffset) =>
+          [0.28, 0.5, 0.72].map((yRatio) => (
+            <mesh
+              key={`${xOffset}-${yRatio}`}
+              position={[xOffset * width, height * yRatio, Math.max(depth, 0.06) / 2 + 0.014]}
+              castShadow
+            >
+              <cylinderGeometry args={[width * 0.018, width * 0.018, 0.02, 10]} />
+              <meshStandardMaterial color="#27313a" />
+            </mesh>
+          )),
+        )}
+        <mesh position={[width * 0.18, height * 0.36, Math.max(depth, 0.06) / 2 + 0.03]} rotation={[0.45, 0, 0]} castShadow>
+          <boxGeometry args={[width * 0.22, height * 0.035, depth * 0.08]} />
+          <meshStandardMaterial color="#d8b37d" />
+        </mesh>
+      </group>
+    );
+  }
+
   if (baseShape === "floor_mirror") {
     return (
       <group>
@@ -502,6 +755,28 @@ export function GenericObjectGenerator({
     );
   }
 
+  if (baseShape === "wall_hook") {
+    return (
+      <group>
+        <mesh position={[0, height * 0.62, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height * 0.22, Math.max(depth, 0.08)]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        {[-0.32, 0, 0.32].map((offset) => (
+          <mesh
+            key={offset}
+            position={[offset * width, height * 0.34, Math.max(depth, 0.08) / 2 + 0.03]}
+            rotation={[0.55, 0, 0]}
+            castShadow
+          >
+            <boxGeometry args={[width * 0.08, height * 0.38, depth * 0.08]} />
+            <meshStandardMaterial color="#d6b37d" />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+
   if (baseShape === "door_panel") {
     return (
       <group>
@@ -515,29 +790,6 @@ export function GenericObjectGenerator({
         >
           <sphereGeometry args={[0.04, 12, 12]} />
           <meshStandardMaterial color="#e7c17f" />
-        </mesh>
-      </group>
-    );
-  }
-
-  if (baseShape === "monitor") {
-    return (
-      <group>
-        <mesh position={[0, height * 0.62, 0]} castShadow receiveShadow>
-          <boxGeometry args={[width, height * 0.62, Math.max(depth * 0.28, 0.04)]} />
-          <meshStandardMaterial color={primaryColor} />
-        </mesh>
-        <mesh position={[0, height * 0.62, Math.max(depth * 0.16, 0.03)]} castShadow>
-          <boxGeometry args={[width * 0.86, height * 0.48, 0.018]} />
-          <meshStandardMaterial color="#1f87b7" emissive="#1a5e85" emissiveIntensity={0.12} />
-        </mesh>
-        <mesh position={[0, height * 0.22, 0]} castShadow receiveShadow>
-          <boxGeometry args={[width * 0.12, height * 0.32, depth * 0.14]} />
-          <meshStandardMaterial color="#303840" />
-        </mesh>
-        <mesh position={[0, height * 0.05, 0]} castShadow receiveShadow>
-          <boxGeometry args={[width * 0.42, height * 0.1, depth * 0.55]} />
-          <meshStandardMaterial color="#303840" />
         </mesh>
       </group>
     );
