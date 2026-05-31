@@ -3,20 +3,31 @@ import {
   getActiveClearanceZones,
   objectIntersectsZone,
 } from "@/lib/room/constraints";
+import { getRoomCutoutZone } from "@/lib/room/roomGeometry";
 import type { LayoutWarning, RoomData } from "@/types/room";
 
 export const validateRoomLayout = (roomData: RoomData): LayoutWarning[] => {
   const warnings: LayoutWarning[] = [];
   const zones = getActiveClearanceZones(roomData);
+  const cutout = getRoomCutoutZone(roomData.room);
 
   roomData.objects.forEach((object) => {
     const bounds = getObjectBounds(object);
+    const overlapsCutout =
+      cutout &&
+      !(
+        bounds.maxX <= cutout.minX ||
+        bounds.minX >= cutout.maxX ||
+        bounds.maxZ <= cutout.minZ ||
+        bounds.minZ >= cutout.maxZ
+      );
 
     if (
       bounds.minX < 0 ||
       bounds.minZ < 0 ||
       bounds.maxX > roomData.room.width ||
-      bounds.maxZ > roomData.room.depth
+      bounds.maxZ > roomData.room.depth ||
+      overlapsCutout
     ) {
       warnings.push({
         code: "out_of_bounds",

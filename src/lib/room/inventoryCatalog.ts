@@ -2,6 +2,22 @@ import type { GeneratorName, ObjectCategory, RoomObject } from "@/types/room";
 
 export const INVENTORY_DRAG_MIME = "application/x-desain-object-template";
 
+export type InventoryPreviewType =
+  | "cube"
+  | "column"
+  | "sofa"
+  | "bed"
+  | "table"
+  | "chair"
+  | "wardrobe"
+  | "tv"
+  | "rug"
+  | "stairs"
+  | "lamp"
+  | "appliance"
+  | "storage"
+  | "decor";
+
 export interface InventoryTemplate {
   id: string;
   label: string;
@@ -12,10 +28,54 @@ export interface InventoryTemplate {
   dimensions: RoomObject["dimensions"];
   rotation?: number;
   params: RoomObject["params"];
+  previewType: InventoryPreviewType;
+  featured?: boolean;
+  tags: string[];
 }
 
+const makeTemplate = (template: InventoryTemplate) => template;
+
 export const inventoryCatalog: InventoryTemplate[] = [
-  {
+  makeTemplate({
+    id: "template_cube",
+    label: "Cube",
+    labelKey: "object.cube",
+    category: "generic_box",
+    generator: "GenericObjectGenerator",
+    color: "#7a8696",
+    dimensions: { width: 1, depth: 1, height: 1 },
+    params: { baseShape: "box" },
+    previewType: "cube",
+    featured: true,
+    tags: ["cube", "primitive", "box", "block"],
+  }),
+  makeTemplate({
+    id: "template_round_column",
+    label: "Round Column",
+    labelKey: "object.roundColumn",
+    category: "generic_box",
+    generator: "GenericObjectGenerator",
+    color: "#c5c1ba",
+    dimensions: { width: 0.55, depth: 0.55, height: 2.6 },
+    params: { baseShape: "cylinder" },
+    previewType: "column",
+    featured: true,
+    tags: ["column", "pillar", "round", "support"],
+  }),
+  makeTemplate({
+    id: "template_square_column",
+    label: "Square Column",
+    labelKey: "object.squareColumn",
+    category: "generic_box",
+    generator: "GenericObjectGenerator",
+    color: "#b8b2aa",
+    dimensions: { width: 0.5, depth: 0.5, height: 2.6 },
+    params: { baseShape: "box" },
+    previewType: "column",
+    featured: true,
+    tags: ["column", "pillar", "square", "support"],
+  }),
+  makeTemplate({
     id: "template_sofa_straight",
     label: "Sofa",
     labelKey: "object.sofa",
@@ -24,8 +84,11 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#66776d",
     dimensions: { width: 2.2, depth: 0.92, height: 0.84 },
     params: { shape: "straight", cushionCount: 3, hasArmrests: true },
-  },
-  {
+    previewType: "sofa",
+    featured: true,
+    tags: ["sofa", "couch", "living"],
+  }),
+  makeTemplate({
     id: "template_sofa_lounge",
     label: "Lounge Sofa",
     labelKey: "object.loungeSofa",
@@ -34,8 +97,10 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#56657a",
     dimensions: { width: 2.6, depth: 1.02, height: 0.82 },
     params: { shape: "straight", cushionCount: 4, hasArmrests: true },
-  },
-  {
+    previewType: "sofa",
+    tags: ["sofa", "lounge", "couch"],
+  }),
+  makeTemplate({
     id: "template_bed_double",
     label: "Double Bed",
     labelKey: "object.doubleBed",
@@ -44,8 +109,11 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#c89b6a",
     dimensions: { width: 1.8, depth: 2.1, height: 1.04 },
     params: { pillows: 2, headboard: true },
-  },
-  {
+    previewType: "bed",
+    featured: true,
+    tags: ["bed", "double", "sleep"],
+  }),
+  makeTemplate({
     id: "template_bed_single",
     label: "Single Bed",
     labelKey: "object.singleBed",
@@ -54,8 +122,10 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#d2a97a",
     dimensions: { width: 1, depth: 2, height: 0.95 },
     params: { pillows: 1, headboard: true },
-  },
-  {
+    previewType: "bed",
+    tags: ["bed", "single", "sleep"],
+  }),
+  makeTemplate({
     id: "template_desk",
     label: "Desk",
     labelKey: "object.desk",
@@ -64,8 +134,11 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#956844",
     dimensions: { width: 1.2, depth: 0.6, height: 0.76 },
     params: { legStyle: "straight", thickness: "medium" },
-  },
-  {
+    previewType: "table",
+    featured: true,
+    tags: ["desk", "work", "table"],
+  }),
+  makeTemplate({
     id: "template_dining_table",
     label: "Dining Table",
     labelKey: "object.diningTable",
@@ -74,8 +147,22 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#a97955",
     dimensions: { width: 1.45, depth: 0.82, height: 0.76 },
     params: { legStyle: "straight", thickness: "medium" },
-  },
-  {
+    previewType: "table",
+    tags: ["dining", "table", "kitchen"],
+  }),
+  makeTemplate({
+    id: "template_counter",
+    label: "Counter",
+    labelKey: "object.counter",
+    category: "table",
+    generator: "TableGenerator",
+    color: "#8c6b52",
+    dimensions: { width: 1.8, depth: 0.65, height: 0.92 },
+    params: { legStyle: "straight", thickness: "thick" },
+    previewType: "table",
+    tags: ["counter", "kitchen", "bench"],
+  }),
+  makeTemplate({
     id: "template_side_table",
     label: "Side Table",
     labelKey: "object.sideTable",
@@ -84,8 +171,22 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#8d6b4f",
     dimensions: { width: 0.55, depth: 0.55, height: 0.58 },
     params: { legStyle: "straight", thickness: "thin" },
-  },
-  {
+    previewType: "table",
+    tags: ["side", "table", "coffee"],
+  }),
+  makeTemplate({
+    id: "template_coffee_table",
+    label: "Coffee Table",
+    labelKey: "object.sideTable",
+    category: "table",
+    generator: "TableGenerator",
+    color: "#7a5b43",
+    dimensions: { width: 1, depth: 0.55, height: 0.42 },
+    params: { legStyle: "straight", thickness: "medium" },
+    previewType: "table",
+    tags: ["coffee", "table", "living"],
+  }),
+  makeTemplate({
     id: "template_chair_office",
     label: "Office Chair",
     labelKey: "object.officeChair",
@@ -94,8 +195,10 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#4e7080",
     dimensions: { width: 0.56, depth: 0.56, height: 0.94 },
     params: { hasBackrest: true },
-  },
-  {
+    previewType: "chair",
+    tags: ["chair", "office", "seat"],
+  }),
+  makeTemplate({
     id: "template_chair_dining",
     label: "Dining Chair",
     labelKey: "object.diningChair",
@@ -104,8 +207,10 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#64707a",
     dimensions: { width: 0.5, depth: 0.5, height: 0.88 },
     params: { hasBackrest: true },
-  },
-  {
+    previewType: "chair",
+    tags: ["chair", "dining", "seat"],
+  }),
+  makeTemplate({
     id: "template_wardrobe_tall",
     label: "Tall Wardrobe",
     labelKey: "object.tallWardrobe",
@@ -114,8 +219,10 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#c7b18d",
     dimensions: { width: 1.4, depth: 0.7, height: 2.28 },
     params: { doorCount: 3, mirrored: false },
-  },
-  {
+    previewType: "wardrobe",
+    tags: ["wardrobe", "closet", "storage"],
+  }),
+  makeTemplate({
     id: "template_bookshelf",
     label: "Bookshelf",
     labelKey: "object.bookshelf",
@@ -124,8 +231,22 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#a98c6c",
     dimensions: { width: 0.95, depth: 0.36, height: 2.1 },
     params: { doorCount: 0, mirrored: false },
-  },
-  {
+    previewType: "wardrobe",
+    tags: ["bookshelf", "shelf", "storage"],
+  }),
+  makeTemplate({
+    id: "template_fridge",
+    label: "Fridge",
+    labelKey: "object.fridge",
+    category: "wardrobe",
+    generator: "WardrobeGenerator",
+    color: "#cfd3d7",
+    dimensions: { width: 0.9, depth: 0.72, height: 1.95 },
+    params: { doorCount: 2, mirrored: false },
+    previewType: "appliance",
+    tags: ["fridge", "appliance", "kitchen"],
+  }),
+  makeTemplate({
     id: "template_media_console",
     label: "Media Console",
     labelKey: "object.mediaConsole",
@@ -134,8 +255,10 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#a96f53",
     dimensions: { width: 1.8, depth: 0.42, height: 1.18 },
     params: { shelves: 2, screenRatio: "wide" },
-  },
-  {
+    previewType: "tv",
+    tags: ["tv", "media", "console"],
+  }),
+  makeTemplate({
     id: "template_tv_stand",
     label: "TV Stand",
     labelKey: "object.tvStand",
@@ -144,8 +267,10 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#8c5f48",
     dimensions: { width: 1.4, depth: 0.4, height: 1.06 },
     params: { shelves: 1, screenRatio: "wide" },
-  },
-  {
+    previewType: "tv",
+    tags: ["tv", "stand", "console"],
+  }),
+  makeTemplate({
     id: "template_carpet_large",
     label: "Large Rug",
     labelKey: "object.largeRug",
@@ -154,8 +279,10 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#d4c09b",
     dimensions: { width: 2.6, depth: 1.9, height: 0.03 },
     params: { border: true },
-  },
-  {
+    previewType: "rug",
+    tags: ["rug", "carpet", "floor"],
+  }),
+  makeTemplate({
     id: "template_carpet_runner",
     label: "Runner Rug",
     labelKey: "object.runnerRug",
@@ -164,8 +291,10 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#c6b39c",
     dimensions: { width: 0.9, depth: 2.2, height: 0.03 },
     params: { border: false },
-  },
-  {
+    previewType: "rug",
+    tags: ["runner", "rug", "carpet"],
+  }),
+  makeTemplate({
     id: "template_storage_box",
     label: "Storage Box",
     labelKey: "object.storageBox",
@@ -174,8 +303,10 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#86786f",
     dimensions: { width: 0.65, depth: 0.45, height: 0.48 },
     params: { baseShape: "box" },
-  },
-  {
+    previewType: "storage",
+    tags: ["box", "storage", "crate"],
+  }),
+  makeTemplate({
     id: "template_storage_bench",
     label: "Storage Bench",
     labelKey: "object.storageBench",
@@ -184,8 +315,108 @@ export const inventoryCatalog: InventoryTemplate[] = [
     color: "#9c8571",
     dimensions: { width: 1.1, depth: 0.42, height: 0.52 },
     params: { baseShape: "box" },
-  },
+    previewType: "storage",
+    tags: ["bench", "storage", "seat"],
+  }),
+  makeTemplate({
+    id: "template_floor_lamp",
+    label: "Floor Lamp",
+    labelKey: "object.floorLamp",
+    category: "generic_box",
+    generator: "GenericObjectGenerator",
+    color: "#d7b37a",
+    dimensions: { width: 0.38, depth: 0.38, height: 1.75 },
+    params: { baseShape: "lamp" },
+    previewType: "lamp",
+    tags: ["lamp", "light", "floor"],
+  }),
+  makeTemplate({
+    id: "template_spiral_stairs",
+    label: "Spiral Stair",
+    labelKey: "object.spiralStair",
+    category: "generic_box",
+    generator: "GenericObjectGenerator",
+    color: "#7a6f67",
+    dimensions: { width: 1.4, depth: 1.4, height: 2.8 },
+    params: { baseShape: "spiral_stairs" },
+    previewType: "stairs",
+    tags: ["stairs", "spiral", "vertical"],
+  }),
+  makeTemplate({
+    id: "template_straight_stairs",
+    label: "Straight Stair",
+    labelKey: "object.straightStair",
+    category: "generic_box",
+    generator: "GenericObjectGenerator",
+    color: "#8b7e72",
+    dimensions: { width: 1.1, depth: 2.6, height: 2.8 },
+    params: { baseShape: "stairs" },
+    previewType: "stairs",
+    tags: ["stairs", "straight", "ladder"],
+  }),
+  makeTemplate({
+    id: "template_split_ac",
+    label: "AC Unit",
+    labelKey: "object.acUnit",
+    category: "generic_box",
+    generator: "GenericObjectGenerator",
+    color: "#d6dde2",
+    dimensions: { width: 1.15, depth: 0.28, height: 0.34 },
+    params: { baseShape: "box" },
+    previewType: "appliance",
+    tags: ["ac", "air conditioner", "appliance"],
+  }),
+  makeTemplate({
+    id: "template_window_frame",
+    label: "Window Frame",
+    labelKey: "object.windowFrame",
+    category: "generic_box",
+    generator: "GenericObjectGenerator",
+    color: "#a4bfd3",
+    dimensions: { width: 1.25, depth: 0.08, height: 1.1 },
+    params: { baseShape: "box" },
+    previewType: "decor",
+    tags: ["window", "frame", "wall"],
+  }),
+  makeTemplate({
+    id: "template_framed_art",
+    label: "Framed Art",
+    labelKey: "object.framedArt",
+    category: "generic_box",
+    generator: "GenericObjectGenerator",
+    color: "#7b614d",
+    dimensions: { width: 0.85, depth: 0.08, height: 0.6 },
+    params: { baseShape: "box" },
+    previewType: "decor",
+    tags: ["frame", "art", "wall"],
+  }),
+  makeTemplate({
+    id: "template_guitar_case",
+    label: "Guitar Stand",
+    labelKey: "object.guitarStand",
+    category: "generic_box",
+    generator: "GenericObjectGenerator",
+    color: "#8e6c53",
+    dimensions: { width: 0.55, depth: 0.35, height: 1.2 },
+    params: { baseShape: "box" },
+    previewType: "decor",
+    tags: ["guitar", "music", "stand"],
+  }),
+  makeTemplate({
+    id: "template_door_panel",
+    label: "Door Panel",
+    labelKey: "object.doorPanel",
+    category: "generic_box",
+    generator: "GenericObjectGenerator",
+    color: "#915f43",
+    dimensions: { width: 0.9, depth: 0.08, height: 2.1 },
+    params: { baseShape: "box" },
+    previewType: "decor",
+    tags: ["door", "panel", "entry"],
+  }),
 ];
+
+export const featuredInventory = inventoryCatalog.filter((item) => item.featured);
 
 export const getInventoryTemplateById = (templateId: string) =>
   inventoryCatalog.find((item) => item.id === templateId) ?? null;

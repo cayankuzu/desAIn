@@ -14,6 +14,7 @@ import { RoomScene } from "@/components/room/RoomScene";
 export function AppShell() {
   const locale = useUIStore((state) => state.locale);
   const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
+  const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
   const roomData = useRoomStore((state) => state.roomData);
   const addObjectFromTemplate = useRoomStore((state) => state.addObjectFromTemplate);
   const [isDropActive, setIsDropActive] = useState(false);
@@ -29,7 +30,7 @@ export function AppShell() {
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[1820px] flex-col gap-4">
         <Topbar />
 
-        <section className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <section className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_500px]">
           <div
             className={`editor-panel relative h-full min-h-0 overflow-hidden p-0 transition ${
               isDropActive ? "ring-2 ring-[#4ea8ff]/60 ring-offset-0" : ""
@@ -71,6 +72,7 @@ export function AppShell() {
                 x: ratioX * roomData.room.width,
                 z: ratioZ * roomData.room.depth,
               });
+              setSelectedStructure(null);
               setActiveSidebarTab("details");
             }}
           >

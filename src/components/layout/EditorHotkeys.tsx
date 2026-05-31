@@ -45,6 +45,30 @@ export function EditorHotkeys() {
         return;
       }
 
+      if ((event.metaKey || event.ctrlKey) && key === "c") {
+        event.preventDefault();
+        store.copySelectedObject();
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && key === "x") {
+        event.preventDefault();
+        store.cutSelectedObject();
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && key === "v") {
+        event.preventDefault();
+        store.pasteClipboardObject();
+        return;
+      }
+
+      if (key === "delete" || key === "backspace") {
+        event.preventDefault();
+        store.deleteObject();
+        return;
+      }
+
       if (key === "q") {
         event.preventDefault();
         store.setTransformMode("select");

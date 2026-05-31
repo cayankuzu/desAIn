@@ -6,6 +6,7 @@ import { Canvas } from "@react-three/fiber";
 import type { Group } from "three";
 import { clampObjectPositionToRoom, normalizeRotation } from "@/lib/room/constraints";
 import { useRoomStore } from "@/store/roomStore";
+import { useUIStore } from "@/store/uiStore";
 import { CameraControls } from "./CameraControls";
 import { ObjectControls } from "./ObjectControls";
 import { RoomDimensionGuides } from "./RoomDimensionGuides";
@@ -22,6 +23,7 @@ export function RoomScene() {
   const endTransform = useRoomStore((state) => state.endTransform);
   const updateObjectTransform = useRoomStore((state) => state.updateObjectTransform);
   const setSelectedObjectId = useRoomStore((state) => state.setSelectedObjectId);
+  const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
   const [isTransforming, setIsTransforming] = useState(false);
   const [objectMap, setObjectMap] = useState<Record<string, Group | null>>({});
 
@@ -83,7 +85,10 @@ export function RoomScene() {
     <Canvas
       shadows
       camera={{ position: [6.4, 5.8, 6.4], fov: 40 }}
-      onPointerMissed={() => setSelectedObjectId(null)}
+      onPointerMissed={() => {
+        setSelectedStructure(null);
+        setSelectedObjectId(null);
+      }}
     >
       <color attach="background" args={["#0b1016"]} />
       <fog attach="fog" args={["#0b1016", 11, 22]} />
@@ -119,7 +124,7 @@ export function RoomScene() {
       />
 
       <group position={roomOffset}>
-        <RoomFloor width={roomData.room.width} depth={roomData.room.depth} />
+        <RoomFloor room={roomData.room} />
         <RoomWalls room={roomData.room} />
         <RoomDimensionGuides
           width={roomData.room.width}

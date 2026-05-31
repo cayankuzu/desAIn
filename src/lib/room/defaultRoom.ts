@@ -3,36 +3,17 @@ import type {
   RoomData,
   RoomDefinition,
   RoomShape,
-  WallSegment,
 } from "@/types/room";
-
-const MIN_OPENING_MARGIN = 0.2;
-
-export const buildRectangleWalls = (width: number, depth: number): WallSegment[] => [
-  { id: "wall_1", from: [0, 0], to: [width, 0] },
-  { id: "wall_2", from: [width, 0], to: [width, depth] },
-  { id: "wall_3", from: [width, depth], to: [0, depth] },
-  { id: "wall_4", from: [0, depth], to: [0, 0] },
-];
-
-const getWallLength = (width: number, depth: number, wallId: string) => {
-  if (wallId === "wall_1" || wallId === "wall_3") {
-    return width;
-  }
-
-  return depth;
-};
-
-const clampOpeningPosition = (
-  wallLength: number,
-  openingWidth: number,
-  desiredPosition: number,
-) => {
-  const minPosition = openingWidth / 2 + MIN_OPENING_MARGIN;
-  const maxPosition = Math.max(minPosition, wallLength - openingWidth / 2 - MIN_OPENING_MARGIN);
-
-  return Math.min(maxPosition, Math.max(minPosition, desiredPosition));
-};
+import {
+  buildRoomWalls,
+  clampRoomHeight,
+  clampRoomWidth,
+  clampRoomDepth,
+  getWallLength,
+  normalizeOpeningForRoom,
+  remapWallIdForShape,
+  sanitizeShapeConfig,
+} from "@/lib/room/roomGeometry";
 
 const defaultOpenings: Opening[] = [
   {
@@ -68,6 +49,8 @@ export const resizeRoomDefinition = (
     width?: number;
     depth?: number;
     height?: number;
+    cutoutWidth?: number;
+    cutoutDepth?: number;
   },
 ): RoomDefinition => {
   const nextShape = payload.shape ?? room.shape;
@@ -85,32 +68,50 @@ export const resizeRoomDefinition = (
     }
   }
 
-  const width = Math.max(2.4, Number(nextWidth.toFixed(2)));
-  const depth = Math.max(2.4, Number(nextDepth.toFixed(2)));
-  const height = Math.max(2.2, Number(nextHeight.toFixed(2)));
+  const width = clampRoomWidth(nextWidth);
+  const depth = clampRoomDepth(nextDepth);
+  const height = clampRoomHeight(nextHeight);
+  const safeShape = nextShape === "square" ? "square" : nextShape;
+  const shapeConfig = sanitizeShapeConfig(
+    safeShape,
+    width,
+    depth,
+    payload.cutoutWidth ?? room.cutoutWidth,
+    payload.cutoutDepth ?? room.cutoutDepth,
+  );
+  const nextRoom: RoomDefinition = {
+    ...room,
+    shape: safeShape,
+    width: shapeConfig.width,
+    depth: shapeConfig.depth,
+    height,
+    cutoutWidth: shapeConfig.cutoutWidth,
+    cutoutDepth: shapeConfig.cutoutDepth,
+    walls: buildRoomWalls(
+      safeShape,
+      shapeConfig.width,
+      shapeConfig.depth,
+      shapeConfig.cutoutWidth,
+      shapeConfig.cutoutDepth,
+    ),
+    openings: [],
+  };
 
   const openings = room.openings.map((opening) => {
-    const previousWallLength = getWallLength(room.width, room.depth, opening.wallId);
-    const nextWallLength = getWallLength(width, depth, opening.wallId);
+    const previousWallLength = getWallLength(room, opening.wallId);
+    const nextWallId = remapWallIdForShape(nextRoom.shape, opening.wallId);
+    const nextWallLength = getWallLength(nextRoom, nextWallId);
     const ratio = previousWallLength > 0 ? opening.position / previousWallLength : 0.5;
 
-    return {
+    return normalizeOpeningForRoom(nextRoom, {
       ...opening,
-      position: clampOpeningPosition(
-        nextWallLength,
-        opening.width,
-        ratio * nextWallLength,
-      ),
-    };
+      wallId: nextWallId,
+      position: ratio * nextWallLength,
+    });
   });
 
   return {
-    ...room,
-    shape: nextShape,
-    width,
-    depth,
-    height,
-    walls: buildRectangleWalls(width, depth),
+    ...nextRoom,
     openings,
   };
 };
@@ -123,7 +124,9 @@ const room: RoomDefinition = {
   width: 7.2,
   depth: 5.2,
   height: 2.8,
-  walls: buildRectangleWalls(7.2, 5.2),
+  cutoutWidth: 2.2,
+  cutoutDepth: 1.6,
+  walls: buildRoomWalls("rectangle", 7.2, 5.2, 2.2, 1.6),
   openings: defaultOpenings,
 };
 

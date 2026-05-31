@@ -49,6 +49,8 @@ export interface RoomDefinition {
   width: number;
   depth: number;
   height: number;
+  cutoutWidth: number;
+  cutoutDepth: number;
   walls: WallSegment[];
   openings: Opening[];
 }

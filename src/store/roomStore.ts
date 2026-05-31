@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { boundsIntersect, getObjectBounds } from "@/lib/room/collision";
 import type { EditorStatus } from "@/lib/i18n/translations";
 import {
   getInventoryTemplateById,
@@ -9,17 +10,27 @@ import {
 import { clampObjectPositionToRoom, normalizeRotation } from "@/lib/room/constraints";
 import { defaultRoom, resizeRoomDefinition } from "@/lib/room/defaultRoom";
 import { validateRoomLayout } from "@/lib/room/layoutValidator";
+import {
+  getWallLength,
+  normalizeOpeningForRoom,
+} from "@/lib/room/roomGeometry";
 import type {
   CameraMode,
   LayoutWarning,
+  Opening,
   RoomData,
   RoomObject,
   RoomShape,
   TransformMode,
 } from "@/types/room";
 
+const SAVED_ROOM_KEY = "desain-saved-room-data";
+
 const cloneRoomData = (roomData: RoomData): RoomData =>
   JSON.parse(JSON.stringify(roomData)) as RoomData;
+
+const cloneRoomObject = (object: RoomObject): RoomObject =>
+  JSON.parse(JSON.stringify(object)) as RoomObject;
 
 const limitHistory = (history: RoomData[]) => history.slice(-50);
 
@@ -37,22 +48,69 @@ const updateObjectInRoom = (
   updater(target);
 };
 
-const clampDimension = (value: number, fallback: number) => {
+const clampDimension = (value: number, fallback: number, maximum?: number) => {
   if (Number.isNaN(value) || !Number.isFinite(value)) {
     return fallback;
   }
 
-  return Math.max(0.05, Number(value.toFixed(2)));
+  const clamped = Math.max(0.05, Number(value.toFixed(2)));
+
+  if (maximum === undefined) {
+    return clamped;
+  }
+
+  return Math.min(clamped, Number(maximum.toFixed(2)));
 };
 
 const createObjectId = (category: RoomObject["category"]) =>
   `${category}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+
+const clampOpening = (roomData: RoomData, opening: Opening): Opening => {
+  const wallLength = getWallLength(roomData.room, opening.wallId);
+  const minPosition = opening.width / 2 + 0.2;
+  const maxPosition = Math.max(minPosition, wallLength - opening.width / 2 - 0.2);
+
+  return {
+    ...opening,
+    width: Math.max(0.3, Number(opening.width.toFixed(2))),
+    position: Math.min(maxPosition, Math.max(minPosition, Number(opening.position.toFixed(2)))),
+  };
+};
+
+const normalizeRoomObjects = (roomData: RoomData, objects: RoomObject[]) =>
+  objects.map((object) => {
+    const safeHeight = clampDimension(
+      object.dimensions.height,
+      object.dimensions.height,
+      roomData.room.height,
+    );
+    const normalizedObject: RoomObject = {
+      ...object,
+      dimensions: {
+        width: clampDimension(object.dimensions.width, object.dimensions.width),
+        depth: clampDimension(object.dimensions.depth, object.dimensions.depth),
+        height: safeHeight,
+      },
+    };
+
+    return {
+      ...normalizedObject,
+      position: clampObjectPositionToRoom(
+        roomData,
+        normalizedObject,
+        normalizedObject.position,
+        normalizedObject.rotation,
+      ),
+    };
+  });
 
 const createObjectFromTemplate = (
   template: InventoryTemplate,
   roomData: RoomData,
   position?: RoomObject["position"],
 ): RoomObject => {
+  const structural = Boolean(template.params.structural);
+  const height = Math.min(template.dimensions.height, roomData.room.height);
   const baseObject: RoomObject = {
     id: createObjectId(template.category),
     label: template.label,
@@ -64,10 +122,13 @@ const createObjectFromTemplate = (
       z: roomData.room.depth / 2,
     },
     rotation: template.rotation ?? 0,
-    dimensions: { ...template.dimensions },
+    dimensions: {
+      ...template.dimensions,
+      height,
+    },
     color: template.color,
-    movable: true,
-    locked: false,
+    movable: !structural,
+    locked: structural,
     params: { ...template.params },
   };
 
@@ -82,6 +143,59 @@ const createObjectFromTemplate = (
   };
 };
 
+const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
+  const fixedObjects = objects.filter((object) => object.locked || !object.movable);
+  const movableObjects = objects.filter((object) => !object.locked && object.movable);
+  const nextObjects: RoomObject[] = fixedObjects.map((object) => cloneRoomObject(object));
+
+  movableObjects.forEach((object) => {
+    const draft = cloneRoomObject(object);
+    let placed = false;
+
+    for (let attempt = 0; attempt < 45; attempt += 1) {
+      const rotation = [0, 90, 180, 270][Math.floor(Math.random() * 4)];
+      const desiredPosition = {
+        x: 0.3 + Math.random() * Math.max(0.4, roomData.room.width - 0.6),
+        z: 0.3 + Math.random() * Math.max(0.4, roomData.room.depth - 0.6),
+      };
+      const clampedPosition = clampObjectPositionToRoom(
+        roomData,
+        draft,
+        desiredPosition,
+        rotation,
+      );
+      const candidate = {
+        ...draft,
+        rotation,
+        position: clampedPosition,
+      };
+      const intersects = nextObjects.some((existing) =>
+        boundsIntersect(getObjectBounds(existing), getObjectBounds(candidate), 0.06),
+      );
+
+      if (!intersects) {
+        nextObjects.push(candidate);
+        placed = true;
+        break;
+      }
+    }
+
+    if (!placed) {
+      nextObjects.push({
+        ...draft,
+        position: clampObjectPositionToRoom(
+          roomData,
+          draft,
+          draft.position,
+          draft.rotation,
+        ),
+      });
+    }
+  });
+
+  return nextObjects;
+};
+
 interface RoomStore {
   roomData: RoomData;
   selectedObjectId: string | null;
@@ -92,6 +206,7 @@ interface RoomStore {
   historyFuture: RoomData[];
   lastEditorStatus: EditorStatus;
   activeTransformObjectId: string | null;
+  clipboardObject: RoomObject | null;
   setSelectedObjectId: (objectId: string | null) => void;
   setCameraMode: (mode: CameraMode) => void;
   setTransformMode: (mode: TransformMode) => void;
@@ -102,7 +217,13 @@ interface RoomStore {
     width?: number;
     depth?: number;
     height?: number;
+    cutoutWidth?: number;
+    cutoutDepth?: number;
   }) => void;
+  updateOpening: (
+    openingId: string,
+    payload: Partial<Pick<Opening, "wallId" | "position" | "width">>,
+  ) => void;
   updateObjectTransform: (
     objectId: string,
     payload: Partial<Pick<RoomObject, "rotation" | "position">>,
@@ -120,6 +241,12 @@ interface RoomStore {
     templateId: string,
     position?: RoomObject["position"],
   ) => void;
+  deleteObject: (objectId?: string) => void;
+  copySelectedObject: () => void;
+  cutSelectedObject: () => void;
+  pasteClipboardObject: () => void;
+  randomizeLayout: () => void;
+  saveRoomSnapshot: () => void;
   rotateObjectBy: (objectId: string, delta: number) => void;
   toggleObjectLock: (objectId: string) => void;
   undo: () => void;
@@ -137,6 +264,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
   historyFuture: [],
   lastEditorStatus: { key: "roomLoaded" },
   activeTransformObjectId: null,
+  clipboardObject: null,
   setSelectedObjectId: (objectId) =>
     set({
       selectedObjectId: objectId,
@@ -188,15 +316,36 @@ export const useRoomStore = create<RoomStore>((set) => ({
     set((state) => {
       const roomData = cloneRoomData(state.roomData);
       roomData.room = resizeRoomDefinition(roomData.room, payload);
-      roomData.objects = roomData.objects.map((object) => ({
-        ...object,
-        position: clampObjectPositionToRoom(
-          roomData,
-          object,
-          object.position,
-          object.rotation,
-        ),
-      }));
+      roomData.room.openings = roomData.room.openings.map((opening) =>
+        normalizeOpeningForRoom(roomData.room, clampOpening(roomData, opening)),
+      );
+      roomData.objects = normalizeRoomObjects(roomData, roomData.objects);
+
+      return {
+        roomData,
+        validationWarnings: validateRoomLayout(roomData),
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastEditorStatus: { key: "roomUpdated" },
+      };
+    }),
+  updateOpening: (openingId, payload) =>
+    set((state) => {
+      const roomData = cloneRoomData(state.roomData);
+      roomData.room.openings = roomData.room.openings.map((opening) =>
+        opening.id === openingId
+          ? normalizeOpeningForRoom(
+              roomData.room,
+              clampOpening(roomData, {
+                ...opening,
+                ...payload,
+              }),
+            )
+          : opening,
+      );
 
       return {
         roomData,
@@ -256,6 +405,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
           height: clampDimension(
             payload.dimensions?.height ?? object.dimensions.height,
             object.dimensions.height,
+            roomData.room.height,
           ),
         };
         const desiredPosition = {
@@ -310,6 +460,161 @@ export const useRoomStore = create<RoomStore>((set) => ({
         ]),
         historyFuture: [],
         lastEditorStatus: { key: "objectAdded", objectId: newObject.id },
+      };
+    }),
+  deleteObject: (objectId) =>
+    set((state) => {
+      const targetId = objectId ?? state.selectedObjectId;
+
+      if (!targetId) {
+        return state;
+      }
+
+      const existingTarget = state.roomData.objects.find((object) => object.id === targetId);
+
+      if (!existingTarget) {
+        return state;
+      }
+
+      const roomData = cloneRoomData(state.roomData);
+      roomData.objects = roomData.objects.filter((object) => object.id !== targetId);
+      const nextSelection = roomData.objects.at(-1)?.id ?? null;
+
+      return {
+        roomData,
+        selectedObjectId: nextSelection,
+        validationWarnings: validateRoomLayout(roomData),
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastEditorStatus: { key: "objectUpdated", objectId: targetId },
+      };
+    }),
+  copySelectedObject: () =>
+    set((state) => {
+      const selectedObject = state.roomData.objects.find(
+        (object) => object.id === state.selectedObjectId,
+      );
+
+      if (!selectedObject) {
+        return state;
+      }
+
+      return {
+        clipboardObject: cloneRoomObject(selectedObject),
+      };
+    }),
+  cutSelectedObject: () =>
+    set((state) => {
+      const selectedObject = state.roomData.objects.find(
+        (object) => object.id === state.selectedObjectId,
+      );
+
+      if (!selectedObject) {
+        return state;
+      }
+
+      const roomData = cloneRoomData(state.roomData);
+      roomData.objects = roomData.objects.filter(
+        (object) => object.id !== selectedObject.id,
+      );
+
+      return {
+        clipboardObject: cloneRoomObject(selectedObject),
+        roomData,
+        selectedObjectId: roomData.objects.at(-1)?.id ?? null,
+        validationWarnings: validateRoomLayout(roomData),
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+      };
+    }),
+  pasteClipboardObject: () =>
+    set((state) => {
+      if (!state.clipboardObject) {
+        return state;
+      }
+
+      const roomData = cloneRoomData(state.roomData);
+      const pasted = {
+        ...cloneRoomObject(state.clipboardObject),
+        id: createObjectId(state.clipboardObject.category),
+        locked: false,
+        movable: true,
+      };
+      pasted.position = clampObjectPositionToRoom(
+        roomData,
+        pasted,
+        {
+          x: pasted.position.x + 0.35,
+          z: pasted.position.z + 0.35,
+        },
+        pasted.rotation,
+      );
+
+      roomData.objects.push(pasted);
+
+      return {
+        roomData,
+        selectedObjectId: pasted.id,
+        validationWarnings: validateRoomLayout(roomData),
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastEditorStatus: { key: "objectAdded", objectId: pasted.id },
+      };
+    }),
+  randomizeLayout: () =>
+    set((state) => {
+      const roomData = cloneRoomData(state.roomData);
+      let sourceRoom = roomData;
+
+      if (typeof window !== "undefined") {
+        const savedRaw = window.localStorage.getItem(SAVED_ROOM_KEY);
+
+        if (savedRaw) {
+          try {
+            const parsed = JSON.parse(savedRaw) as RoomData;
+            sourceRoom = {
+              ...roomData,
+              objects: normalizeRoomObjects(roomData, parsed.objects),
+            };
+          } catch {
+            sourceRoom = roomData;
+          }
+        }
+      }
+
+      roomData.objects = tryRandomLayout(roomData, sourceRoom.objects);
+
+      return {
+        roomData,
+        validationWarnings: validateRoomLayout(roomData),
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastEditorStatus: { key: "roomUpdated" },
+      };
+    }),
+  saveRoomSnapshot: () =>
+    set((state) => {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(
+          SAVED_ROOM_KEY,
+          JSON.stringify(cloneRoomData(state.roomData)),
+        );
+      }
+
+      return {
+        lastEditorStatus: { key: "roomUpdated" },
       };
     }),
   rotateObjectBy: (objectId, delta) =>
@@ -415,5 +720,6 @@ export const useRoomStore = create<RoomStore>((set) => ({
       historyFuture: [],
       lastEditorStatus: { key: "sceneReset" },
       activeTransformObjectId: null,
+      clipboardObject: null,
     })),
 }));

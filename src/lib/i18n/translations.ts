@@ -1,4 +1,10 @@
-import type { LayoutWarning, ObjectCategory, RoomData, RoomObject } from "@/types/room";
+import type {
+  LayoutWarning,
+  ObjectCategory,
+  OpeningType,
+  RoomData,
+  RoomObject,
+} from "@/types/room";
 
 export type Locale = "en" | "tr";
 
@@ -56,11 +62,15 @@ export type MessageKey =
   | "shape"
   | "rectangle"
   | "square"
+  | "lShape"
+  | "cutoutWidth"
+  | "cutoutDepth"
   | "inspectorPanel"
   | "details"
   | "outliner"
   | "inventory"
   | "validate"
+  | "shortcuts"
   | "roomSettings"
   | "sceneMetrics"
   | "objectDetails"
@@ -74,6 +84,7 @@ export type MessageKey =
   | "rotation"
   | "color"
   | "category"
+  | "wall"
   | "rotateMinus15"
   | "rotatePlus15"
   | "unlock"
@@ -86,7 +97,15 @@ export type MessageKey =
   | "searchInventory"
   | "inventoryHint"
   | "dropToViewport"
-  | "selectedLabel";
+  | "selectedLabel"
+  | "recommended"
+  | "saveRoom"
+  | "randomizeRoom"
+  | "deleteObject"
+  | "copyAction"
+  | "pasteAction"
+  | "cutAction"
+  | "removeAction";
 
 const translations: Record<Locale, Record<MessageKey, string>> = {
   en: {
@@ -118,11 +137,15 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     shape: "Shape",
     rectangle: "Rectangle",
     square: "Square",
+    lShape: "L-Shape",
+    cutoutWidth: "L Cut Width",
+    cutoutDepth: "L Cut Depth",
     inspectorPanel: "Inspector Panel",
     details: "Details",
     outliner: "Outliner",
     inventory: "Inventory",
     validate: "Validation",
+    shortcuts: "Shortcuts",
     roomSettings: "Room Settings",
     sceneMetrics: "Scene Metrics",
     objectDetails: "Object Details",
@@ -137,6 +160,7 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     rotation: "Rotation",
     color: "Color",
     category: "Category",
+    wall: "Wall",
     rotateMinus15: "Rotate -15",
     rotatePlus15: "Rotate +15",
     unlock: "Unlock",
@@ -151,6 +175,14 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     inventoryHint: "Drag any item into the viewport to create it instantly.",
     dropToViewport: "Drop into the viewport to add this object",
     selectedLabel: "Selected",
+    recommended: "Recommended",
+    saveRoom: "Save Room",
+    randomizeRoom: "Randomize",
+    deleteObject: "Delete",
+    copyAction: "Copy",
+    pasteAction: "Paste",
+    cutAction: "Cut",
+    removeAction: "Remove",
   },
   tr: {
     appTitle: "desAIn | 3D Oda Edit\u00f6r\u00fc",
@@ -181,11 +213,15 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     shape: "Oda Tipi",
     rectangle: "Dikd\u00f6rtgen",
     square: "Kare",
+    lShape: "L Tipi",
+    cutoutWidth: "L Kesit En",
+    cutoutDepth: "L Kesit Boy",
     inspectorPanel: "\u0130nceleme Paneli",
     details: "Detaylar",
     outliner: "Outliner",
     inventory: "Envanter",
     validate: "Do\u011frulama",
+    shortcuts: "K\u0131sayollar",
     roomSettings: "Oda Ayarlar\u0131",
     sceneMetrics: "Sahne \u00d6l\u00e7\u00fcleri",
     objectDetails: "\u00d6\u011fe Detaylar\u0131",
@@ -200,6 +236,7 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     rotation: "D\u00f6n\u00fc\u015f",
     color: "Renk",
     category: "Kategori",
+    wall: "Duvar",
     rotateMinus15: "-15 D\u00f6nd\u00fcr",
     rotatePlus15: "+15 D\u00f6nd\u00fcr",
     unlock: "Kilidi A\u00e7",
@@ -214,6 +251,14 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     inventoryHint: "Herhangi bir \u00f6\u011feyi viewport'a s\u00fcr\u00fckleyip an\u0131nda ekleyebilirsin.",
     dropToViewport: "Eklemek i\u00e7in viewport'a b\u0131rak",
     selectedLabel: "Se\u00e7ili",
+    recommended: "\u00d6nerilenler",
+    saveRoom: "Oday\u0131 Kaydet",
+    randomizeRoom: "Rastgele Diz",
+    deleteObject: "Sil",
+    copyAction: "Kopyala",
+    pasteAction: "Yap\u0131\u015ft\u0131r",
+    cutAction: "Kes",
+    removeAction: "Kald\u0131r",
   },
 };
 
@@ -241,6 +286,19 @@ const labelTranslations: Record<string, Record<Locale, string>> = {
   "object.tvStand": { en: "TV Stand", tr: "TV Sehpas\u0131" },
   "object.storageBox": { en: "Storage Box", tr: "Saklama Kutusu" },
   "object.storageBench": { en: "Storage Bench", tr: "Saklama Bank\u0131" },
+  "object.cube": { en: "Cube", tr: "K\u00fcp" },
+  "object.roundColumn": { en: "Round Column", tr: "Yuvarlak Kolon" },
+  "object.squareColumn": { en: "Square Column", tr: "Kare Kolon" },
+  "object.counter": { en: "Counter", tr: "Tezgah" },
+  "object.fridge": { en: "Fridge", tr: "Buzdolab\u0131" },
+  "object.floorLamp": { en: "Floor Lamp", tr: "Ayakl\u0131 Lambader" },
+  "object.spiralStair": { en: "Spiral Stair", tr: "Dairesel Merdiven" },
+  "object.straightStair": { en: "Straight Stair", tr: "D\u00fcz Merdiven" },
+  "object.acUnit": { en: "AC Unit", tr: "Klima" },
+  "object.framedArt": { en: "Framed Art", tr: "\u00c7er\u00e7eveli Tablo" },
+  "object.windowFrame": { en: "Window Frame", tr: "Pencere \u00c7er\u00e7evesi" },
+  "object.guitarStand": { en: "Guitar Stand", tr: "Gitar Stand\u0131" },
+  "object.doorPanel": { en: "Door Panel", tr: "Kap\u0131 Paneli" },
 };
 
 const categoryTranslations: Record<ObjectCategory, Record<Locale, string>> = {
@@ -270,6 +328,20 @@ export const getLocalizedCategoryLabel = (
   locale: Locale,
   category: ObjectCategory,
 ) => categoryTranslations[category][locale];
+
+export const getLocalizedOpeningType = (
+  locale: Locale,
+  openingType: OpeningType,
+) => {
+  const translationsByType: Record<OpeningType, Record<Locale, string>> = {
+    door: { en: "Door", tr: "Kapı" },
+    window: { en: "Window", tr: "Pencere" },
+    balcony_door: { en: "Balcony Door", tr: "Balkon Kapısı" },
+    radiator: { en: "Radiator", tr: "Kalorifer" },
+  };
+
+  return translationsByType[openingType][locale];
+};
 
 const getObjectById = (roomData: RoomData, objectId?: string | null) => {
   if (!objectId) {

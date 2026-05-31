@@ -5,13 +5,16 @@ import {
   BoxSelect,
   Languages,
   Move3d,
+  Save,
   RefreshCw,
   RotateCcw,
   RotateCw,
+  Shuffle,
   Undo2,
 } from "lucide-react";
 import {
   getLocalizedObjectLabel,
+  getLocalizedOpeningType,
   getLocalizedRoomLabel,
   t,
 } from "@/lib/i18n/translations";
@@ -25,6 +28,7 @@ export function Topbar() {
   const locale = useUIStore((state) => state.locale);
   const setLocale = useUIStore((state) => state.setLocale);
   const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
+  const selectedStructure = useUIStore((state) => state.selectedStructure);
   const roomData = useRoomStore((state) => state.roomData);
   const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
   const transformMode = useRoomStore((state) => state.transformMode);
@@ -32,6 +36,8 @@ export function Topbar() {
   const undo = useRoomStore((state) => state.undo);
   const redo = useRoomStore((state) => state.redo);
   const resetRoom = useRoomStore((state) => state.resetRoom);
+  const saveRoomSnapshot = useRoomStore((state) => state.saveRoomSnapshot);
+  const randomizeLayout = useRoomStore((state) => state.randomizeLayout);
   const historyPastLength = useRoomStore((state) => state.historyPast.length);
   const historyFutureLength = useRoomStore((state) => state.historyFuture.length);
   const validationWarnings = useRoomStore((state) => state.validationWarnings);
@@ -39,9 +45,16 @@ export function Topbar() {
   const selectedObject =
     roomData.objects.find((object) => object.id === selectedObjectId) ?? null;
   const roomLabel = getLocalizedRoomLabel(locale, roomData.room);
+  const selectedOpening = selectedStructure?.type === "opening"
+    ? roomData.room.openings.find((opening) => opening.id === selectedStructure.id) ?? null
+    : null;
   const selectedLabel = selectedObject
     ? getLocalizedObjectLabel(locale, selectedObject)
-    : t(locale, "noObjectSelected");
+    : selectedOpening
+      ? `${getLocalizedOpeningType(locale, selectedOpening.type)} / ${selectedOpening.id}`
+      : selectedStructure?.type === "wall"
+        ? selectedStructure.id
+        : t(locale, "noObjectSelected");
 
   return (
     <header className="editor-panel px-4 py-3">
@@ -180,6 +193,22 @@ export function Topbar() {
           >
             <RotateCcw className="h-4 w-4" />
             {t(locale, "resetScene")}
+          </button>
+          <button
+            type="button"
+            onClick={saveRoomSnapshot}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-[#32516c] hover:text-white"
+          >
+            <Save className="h-4 w-4" />
+            {t(locale, "saveRoom")}
+          </button>
+          <button
+            type="button"
+            onClick={randomizeLayout}
+            className="inline-flex items-center gap-2 rounded-xl border border-[#1f4b65] bg-[#102234] px-3 py-2 text-sm font-medium text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white"
+          >
+            <Shuffle className="h-4 w-4" />
+            {t(locale, "randomizeRoom")}
           </button>
         </div>
       </div>

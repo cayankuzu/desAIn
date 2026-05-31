@@ -12,6 +12,20 @@ export type SidebarTab =
 interface UIStore {
   activeSidebarTab: SidebarTab;
   setActiveSidebarTab: (tab: SidebarTab) => void;
+  selectedStructure:
+    | {
+        type: "wall" | "opening";
+        id: string;
+      }
+    | null;
+  setSelectedStructure: (
+    selection:
+      | {
+          type: "wall" | "opening";
+          id: string;
+        }
+      | null,
+  ) => void;
   locale: Locale;
   setLocale: (locale: Locale) => void;
 }
@@ -28,6 +42,8 @@ const getInitialLocale = (): Locale => {
 export const useUIStore = create<UIStore>((set) => ({
   activeSidebarTab: "details",
   setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
+  selectedStructure: null,
+  setSelectedStructure: (selectedStructure) => set({ selectedStructure }),
   locale: getInitialLocale(),
   setLocale: (locale) => {
     if (typeof window !== "undefined") {

@@ -1,5 +1,9 @@
 import { getObjectBounds, getRotatedHalfExtents } from "@/lib/room/collision";
 import type { Bounds2D } from "@/lib/room/collision";
+import {
+  getRoomCutoutZone,
+  getWallSegment,
+} from "@/lib/room/roomGeometry";
 import type { Opening, RoomData, RoomObject } from "@/types/room";
 
 const EDGE_PADDING = 0.06;
@@ -26,7 +30,7 @@ export const clampObjectPositionToRoom = (
     rotation,
   );
 
-  return {
+  const clamped = {
     x: Math.min(
       roomData.room.width - halfWidth - EDGE_PADDING,
       Math.max(halfWidth + EDGE_PADDING, desiredPosition.x),
@@ -35,6 +39,45 @@ export const clampObjectPositionToRoom = (
       roomData.room.depth - halfDepth - EDGE_PADDING,
       Math.max(halfDepth + EDGE_PADDING, desiredPosition.z),
     ),
+  };
+
+  const cutout = getRoomCutoutZone(roomData.room);
+
+  if (!cutout) {
+    return clamped;
+  }
+
+  const intersectsCutout =
+    clamped.x + halfWidth > cutout.minX &&
+    clamped.x - halfWidth < cutout.maxX &&
+    clamped.z + halfDepth > cutout.minZ &&
+    clamped.z - halfDepth < cutout.maxZ;
+
+  if (!intersectsCutout) {
+    return clamped;
+  }
+
+  const moveLeftX = Math.max(
+    halfWidth + EDGE_PADDING,
+    cutout.minX - halfWidth - EDGE_PADDING,
+  );
+  const moveDownZ = Math.max(
+    halfDepth + EDGE_PADDING,
+    cutout.minZ - halfDepth - EDGE_PADDING,
+  );
+  const leftDelta = Math.abs(desiredPosition.x - moveLeftX);
+  const downDelta = Math.abs(desiredPosition.z - moveDownZ);
+
+  if (leftDelta <= downDelta) {
+    return {
+      x: Math.min(clamped.x, moveLeftX),
+      z: clamped.z,
+    };
+  }
+
+  return {
+    x: clamped.x,
+    z: Math.min(clamped.z, moveDownZ),
   };
 };
 
@@ -45,47 +88,57 @@ const buildZoneFromOpening = (
   const padding = 0.16;
   const depth = opening.clearDepth ?? 0.65;
   const halfOpening = opening.width / 2 + padding;
+  const wall = getWallSegment(roomData.room, opening.wallId);
 
-  if (opening.wallId === "wall_1") {
+  if (!wall) {
     return {
       id: opening.id,
       type: opening.type,
-      minX: opening.position - halfOpening,
-      maxX: opening.position + halfOpening,
+      minX: 0,
+      maxX: 0,
       minZ: 0,
-      maxZ: depth,
+      maxZ: 0,
     };
   }
 
-  if (opening.wallId === "wall_2") {
+  const fromX = wall.from[0];
+  const fromZ = wall.from[1];
+  const toX = wall.to[0];
+  const toZ = wall.to[1];
+  const horizontal = Math.abs(toX - fromX) >= Math.abs(toZ - fromZ);
+
+  if (horizontal) {
+    const directionX = Math.sign(toX - fromX);
+    const centerX = fromX + directionX * opening.position;
+    const wallZ = fromZ;
+    const inwardPositiveZ = wallZ <= 0.001;
+    const zoneMinZ = inwardPositiveZ ? wallZ : wallZ - depth;
+    const zoneMaxZ = inwardPositiveZ ? wallZ + depth : wallZ;
+
     return {
       id: opening.id,
       type: opening.type,
-      minX: roomData.room.width - depth,
-      maxX: roomData.room.width,
-      minZ: opening.position - halfOpening,
-      maxZ: opening.position + halfOpening,
+      minX: centerX - halfOpening,
+      maxX: centerX + halfOpening,
+      minZ: zoneMinZ,
+      maxZ: zoneMaxZ,
     };
   }
 
-  if (opening.wallId === "wall_3") {
-    return {
-      id: opening.id,
-      type: opening.type,
-      minX: opening.position - halfOpening,
-      maxX: opening.position + halfOpening,
-      minZ: roomData.room.depth - depth,
-      maxZ: roomData.room.depth,
-    };
-  }
+  const directionZ = Math.sign(toZ - fromZ);
+  const centerZ = fromZ + directionZ * opening.position;
+  const wallX = fromX;
+  const inwardPositiveX = wallX <= 0.001;
+  const zoneMinX = inwardPositiveX ? wallX : wallX - depth;
+  const zoneMaxX = inwardPositiveX ? wallX + depth : wallX;
 
   return {
     id: opening.id,
     type: opening.type,
-    minX: 0,
-    maxX: depth,
-    minZ: opening.position - halfOpening,
-    maxZ: opening.position + halfOpening,
+    minX: zoneMinX,
+    maxX: zoneMaxX,
+    minZ: centerZ - halfOpening,
+    maxZ: centerZ + halfOpening,
   };
 };
 
