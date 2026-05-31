@@ -1,4 +1,4 @@
-export type RoomShape = "rectangle" | "square" | "l_shape";
+export type RoomShape = "rectangle" | "square" | "l_shape" | "custom";
 
 export type OpeningType = "door" | "window" | "balcony_door" | "radiator";
 
@@ -38,6 +38,7 @@ export interface Opening {
   wallId: string;
   position: number;
   width: number;
+  rotation?: number;
   clearDepth?: number;
 }
 

@@ -197,6 +197,142 @@ export function GenericObjectGenerator({
     );
   }
 
+  if (baseShape === "radiator") {
+    return (
+      <group>
+        {[-0.36, -0.18, 0, 0.18, 0.36].map((offset) => (
+          <mesh
+            key={offset}
+            position={[offset * width, height / 2, 0]}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry args={[width * 0.12, height, Math.max(depth, 0.1)]} />
+            <meshStandardMaterial color={primaryColor} />
+          </mesh>
+        ))}
+        <mesh position={[0, height * 0.12, Math.max(depth, 0.1) / 2]} castShadow>
+          <boxGeometry args={[width, height * 0.08, 0.035]} />
+          <meshStandardMaterial color="#e4b174" />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "window_panel") {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height, Math.max(depth, 0.06)]} />
+          <meshStandardMaterial color={primaryColor} transparent opacity={0.55} />
+        </mesh>
+        <mesh position={[0, height / 2, Math.max(depth, 0.06) / 2 + 0.012]} castShadow>
+          <boxGeometry args={[width * 0.05, height, 0.024]} />
+          <meshStandardMaterial color="#e8f1f6" />
+        </mesh>
+        <mesh position={[0, height / 2, Math.max(depth, 0.06) / 2 + 0.014]} castShadow>
+          <boxGeometry args={[width, height * 0.045, 0.024]} />
+          <meshStandardMaterial color="#e8f1f6" />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "ceiling_light") {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[width * 0.48, width * 0.36, height, 28]} />
+          <meshStandardMaterial color={primaryColor} emissive="#f1d8a7" emissiveIntensity={0.32} />
+        </mesh>
+        <pointLight position={[0, -0.08, 0]} intensity={0.45} color="#ffdca8" distance={4} />
+      </group>
+    );
+  }
+
+  if (baseShape === "wall_sconce") {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height, Math.max(depth, 0.12)]} />
+          <meshStandardMaterial color="#6f5b47" />
+        </mesh>
+        <mesh position={[0, height * 0.6, Math.max(depth, 0.12) / 2 + 0.04]} castShadow>
+          <sphereGeometry args={[Math.min(width, height) * 0.28, 18, 12]} />
+          <meshStandardMaterial color={primaryColor} emissive="#f1d8a7" emissiveIntensity={0.26} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "low_shelf") {
+    return (
+      <group>
+        {[0.22, 0.5, 0.78].map((ratio) => (
+          <mesh key={ratio} position={[0, height * ratio, 0]} castShadow receiveShadow>
+            <boxGeometry args={[width, height * 0.06, depth]} />
+            <meshStandardMaterial color={primaryColor} />
+          </mesh>
+        ))}
+        {[-0.45, 0, 0.45].map((offset) => (
+          <mesh key={offset} position={[offset * width, height / 2, 0]} castShadow receiveShadow>
+            <boxGeometry args={[width * 0.05, height, depth]} />
+            <meshStandardMaterial color="#6d5140" />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+
+  if (baseShape === "coat_stand") {
+    return (
+      <group>
+        <mesh position={[0, 0.04, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[width * 0.38, width * 0.46, 0.08, 20]} />
+          <meshStandardMaterial color="#655448" />
+        </mesh>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[width * 0.055, width * 0.055, height, 16]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        {[0, 1, 2, 3].map((index) => (
+          <mesh
+            key={index}
+            position={[
+              Math.cos((index * Math.PI) / 2) * width * 0.24,
+              height * 0.82,
+              Math.sin((index * Math.PI) / 2) * depth * 0.24,
+            ]}
+            rotation={[0, (index * Math.PI) / 2, 0.45]}
+            castShadow
+          >
+            <boxGeometry args={[width * 0.42, height * 0.035, depth * 0.055]} />
+            <meshStandardMaterial color="#d1b48a" />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+
+  if (baseShape === "room_divider") {
+    return (
+      <group>
+        {[-0.32, 0, 0.32].map((offset, index) => (
+          <mesh
+            key={offset}
+            position={[offset * width, height / 2, index === 1 ? 0 : depth * 0.1]}
+            rotation={[0, index === 1 ? 0 : offset > 0 ? -0.18 : 0.18, 0]}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry args={[width * 0.31, height, Math.max(depth, 0.08)]} />
+            <meshStandardMaterial color={index === 1 ? primaryColor : "#c8b08e"} />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+
   if (baseShape === "stairs" || baseShape === "spiral_stairs") {
     const stepCount = 6;
 

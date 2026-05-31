@@ -1,8 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import {
   AlertTriangle,
   BoxSelect,
+  Camera,
+  Eye,
+  EyeOff,
   Languages,
   Move3d,
   Save,
@@ -24,7 +28,17 @@ import { useUIStore } from "@/store/uiStore";
 const modeButtonBase =
   "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition";
 
-export function Topbar() {
+interface TopbarProps {
+  panelsHidden: boolean;
+  onTogglePanels: () => void;
+  onCaptureScreenshot: () => void;
+}
+
+export function Topbar({
+  panelsHidden,
+  onTogglePanels,
+  onCaptureScreenshot,
+}: TopbarProps) {
   const locale = useUIStore((state) => state.locale);
   const setLocale = useUIStore((state) => state.setLocale);
   const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
@@ -41,6 +55,14 @@ export function Topbar() {
   const historyPastLength = useRoomStore((state) => state.historyPast.length);
   const historyFutureLength = useRoomStore((state) => state.historyFuture.length);
   const validationWarnings = useRoomStore((state) => state.validationWarnings);
+  const [resetMenuOpen, setResetMenuOpen] = useState(false);
+  const [hasSavedLayout, setHasSavedLayout] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return Boolean(window.localStorage.getItem("desain-saved-room-data"));
+  });
 
   const selectedObject =
     roomData.objects.find((object) => object.id === selectedObjectId) ?? null;
@@ -59,7 +81,7 @@ export function Topbar() {
         : t(locale, "noObjectSelected");
 
   return (
-    <header className="editor-panel px-4 py-3">
+    <header className="editor-panel relative px-4 py-3">
       <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
           <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2">
@@ -190,15 +212,49 @@ export function Topbar() {
           </button>
           <button
             type="button"
-            onClick={resetRoom}
+            onClick={() => setResetMenuOpen((current) => !current)}
             className="inline-flex items-center gap-2 rounded-xl border border-[#4f2b16] bg-[#2b170d] px-3 py-2 text-sm font-medium text-[#ffb16a] transition hover:border-[#ff8c42] hover:text-white"
           >
             <RotateCcw className="h-4 w-4" />
             {t(locale, "resetScene")}
           </button>
+          {resetMenuOpen ? (
+            <div className="absolute right-4 top-[calc(100%+0.5rem)] z-40 w-64 rounded-2xl border border-white/10 bg-[#0d141d] p-3 text-sm shadow-[0_18px_45px_rgba(0,0,0,0.42)]">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                {t(locale, "resetSceneOptions")}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  resetRoom("default");
+                  setResetMenuOpen(false);
+                }}
+                className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-left text-slate-200 transition hover:border-[#32516c] hover:text-white"
+              >
+                {t(locale, "resetDefault")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  resetRoom("saved");
+                  setResetMenuOpen(false);
+                }}
+                disabled={!hasSavedLayout}
+                className="mt-2 flex w-full items-center justify-between rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-left text-slate-200 transition hover:border-[#32516c] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <span>{t(locale, "resetSaved")}</span>
+                <span className="text-[11px] text-slate-500">
+                  {hasSavedLayout ? t(locale, "savedLayout") : t(locale, "noSavedLayout")}
+                </span>
+              </button>
+            </div>
+          ) : null}
           <button
             type="button"
-            onClick={saveRoomSnapshot}
+            onClick={() => {
+              saveRoomSnapshot();
+              setHasSavedLayout(true);
+            }}
             className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-[#32516c] hover:text-white"
           >
             <Save className="h-4 w-4" />
@@ -211,6 +267,23 @@ export function Topbar() {
           >
             <Shuffle className="h-4 w-4" />
             {t(locale, "randomizeRoom")}
+          </button>
+          <button
+            type="button"
+            onClick={onCaptureScreenshot}
+            title={t(locale, "captureScreenshot")}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-[#0d141d] text-slate-300 transition hover:border-[#32516c] hover:text-white"
+          >
+            <Camera className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onTogglePanels}
+            title={panelsHidden ? t(locale, "showPanels") : t(locale, "hidePanels")}
+            aria-pressed={panelsHidden}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-[#0d141d] text-slate-300 transition hover:border-[#32516c] hover:text-white"
+          >
+            {panelsHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
           </button>
         </div>
       </div>

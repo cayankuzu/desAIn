@@ -79,6 +79,24 @@ export const buildRoomWalls = (
   ];
 };
 
+export const getWallMetrics = (wall: WallSegment) => {
+  const dx = wall.to[0] - wall.from[0];
+  const dz = wall.to[1] - wall.from[1];
+  const length = Math.hypot(dx, dz) || 1;
+
+  return {
+    dx,
+    dz,
+    length,
+    horizontal: Math.abs(dx) >= Math.abs(dz),
+    directionX: dx / length,
+    directionZ: dz / length,
+    inwardNormalX: -dz / length,
+    inwardNormalZ: dx / length,
+    rotationY: Math.atan2(-dz / length, dx / length),
+  };
+};
+
 export const getRoomOutlinePoints = (room: RoomDefinition): Array<[number, number]> => {
   const start = room.walls[0]?.from;
   const points = room.walls.map((wall) => wall.from);
@@ -103,6 +121,67 @@ export const getWallLength = (room: RoomDefinition, wallId: string) => {
   return Math.hypot(wall.to[0] - wall.from[0], wall.to[1] - wall.from[1]);
 };
 
+export const projectPointToWall = (
+  room: RoomDefinition,
+  point: { x: number; z: number },
+  preferredWallId?: string,
+) => {
+  const candidates = room.walls.map((wall) => {
+    const metrics = getWallMetrics(wall);
+    const desiredAlong =
+      (point.x - wall.from[0]) * metrics.directionX +
+      (point.z - wall.from[1]) * metrics.directionZ;
+    const along = Math.min(metrics.length, Math.max(0, desiredAlong));
+    const x = wall.from[0] + metrics.directionX * along;
+    const z = wall.from[1] + metrics.directionZ * along;
+
+    return {
+      wall,
+      metrics,
+      along,
+      point: { x, z },
+      distance: Math.hypot(point.x - x, point.z - z),
+      preferred: preferredWallId === wall.id,
+    };
+  });
+
+  return (
+    candidates.sort((left, right) => {
+      if (left.preferred && left.distance < 0.42) {
+        return -1;
+      }
+
+      if (right.preferred && right.distance < 0.42) {
+        return 1;
+      }
+
+      return left.distance - right.distance;
+    })[0] ?? null
+  );
+};
+
+export const findWallByRotation = (room: RoomDefinition, rotationY: number) => {
+  const normalize = (value: number) => {
+    const wrapped = value % (Math.PI * 2);
+    return wrapped < 0 ? wrapped + Math.PI * 2 : wrapped;
+  };
+  const target = normalize(rotationY);
+
+  return (
+    room.walls
+      .map((wall) => {
+        const wallRotation = normalize(getWallMetrics(wall).rotationY);
+        const delta = Math.abs(target - wallRotation);
+
+        return {
+          wall,
+          score: Math.min(delta, Math.PI * 2 - delta),
+        };
+      })
+      .sort((left, right) => left.score - right.score)[0]?.wall ?? null
+  );
+};
+
 export const clampOpeningPosition = (
   wallLength: number,
   openingWidth: number,
@@ -115,6 +194,10 @@ export const clampOpeningPosition = (
 };
 
 export const remapWallIdForShape = (shape: RoomShape, wallId: string) => {
+  if (shape === "custom") {
+    return wallId;
+  }
+
   if (shape === "l_shape") {
     if (wallId === "wall_3") {
       return "wall_5";

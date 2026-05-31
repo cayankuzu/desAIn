@@ -1,13 +1,15 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { Group } from "three";
 import { useRoomStore } from "@/store/roomStore";
 import { useUIStore } from "@/store/uiStore";
-import { getWallSegment } from "@/lib/room/roomGeometry";
-import type { Opening, RoomDefinition, WallSegment } from "@/types/room";
+import { getWallMetrics, getWallSegment } from "@/lib/room/roomGeometry";
+import type { Opening, RoomDefinition } from "@/types/room";
 
 interface RoomWallsProps {
   room: RoomDefinition;
+  onOpeningReady?: (openingId: string, node: Group | null) => void;
 }
 
 const openingColorMap: Record<Opening["type"], string> = {
@@ -15,23 +17,6 @@ const openingColorMap: Record<Opening["type"], string> = {
   window: "#7cb7cf",
   balcony_door: "#7cb7cf",
   radiator: "#c2803e",
-};
-
-const getWallMetrics = (wall: WallSegment) => {
-  const dx = wall.to[0] - wall.from[0];
-  const dz = wall.to[1] - wall.from[1];
-  const length = Math.hypot(dx, dz) || 1;
-
-  return {
-    dx,
-    dz,
-    length,
-    horizontal: Math.abs(dx) >= Math.abs(dz),
-    directionX: dx / length,
-    directionZ: dz / length,
-    inwardNormalX: -dz / length,
-    inwardNormalZ: dx / length,
-  };
 };
 
 const getOpeningCutout = (opening: Opening, roomHeight: number) => {
@@ -54,15 +39,13 @@ const getOpeningCutout = (opening: Opening, roomHeight: number) => {
 
 function OpeningVisual({
   opening,
-  horizontal,
   selected,
 }: {
   opening: Opening;
-  horizontal: boolean;
   selected: boolean;
 }) {
   const frameColor = selected ? "#ffddb2" : openingColorMap[opening.type];
-  const innerDepth = horizontal ? 0.04 : 0.04;
+  const innerDepth = 0.04;
 
   if (opening.type === "door" || opening.type === "balcony_door") {
     const openingHeight = 2.08;
@@ -70,26 +53,11 @@ function OpeningVisual({
     return (
       <group>
         <mesh castShadow receiveShadow>
-          <boxGeometry
-            args={
-              horizontal
-                ? [opening.width, openingHeight, 0.08]
-                : [0.08, openingHeight, opening.width]
-            }
-          />
+          <boxGeometry args={[opening.width, openingHeight, 0.08]} />
           <meshStandardMaterial color={frameColor} />
         </mesh>
-        <mesh
-          castShadow
-          position={horizontal ? [0, 0, 0.05] : [0.05, 0, 0]}
-        >
-          <boxGeometry
-            args={
-              horizontal
-                ? [Math.max(0.2, opening.width - 0.08), openingHeight - 0.08, 0.02]
-                : [0.02, openingHeight - 0.08, Math.max(0.2, opening.width - 0.08)]
-            }
-          />
+        <mesh castShadow position={[0, 0, 0.05]}>
+          <boxGeometry args={[Math.max(0.2, opening.width - 0.08), openingHeight - 0.08, 0.02]} />
           <meshStandardMaterial color={selected ? "#f9d9b7" : "#f1cfaa"} />
         </mesh>
       </group>
@@ -102,23 +70,11 @@ function OpeningVisual({
     return (
       <group>
         <mesh castShadow receiveShadow>
-          <boxGeometry
-            args={
-              horizontal
-                ? [opening.width, openingHeight, 0.08]
-                : [0.08, openingHeight, opening.width]
-            }
-          />
+          <boxGeometry args={[opening.width, openingHeight, 0.08]} />
           <meshStandardMaterial color={frameColor} />
         </mesh>
-        <mesh castShadow position={horizontal ? [0, 0, innerDepth] : [innerDepth, 0, 0]}>
-          <boxGeometry
-            args={
-              horizontal
-                ? [Math.max(0.22, opening.width - 0.14), openingHeight - 0.14, 0.02]
-                : [0.02, openingHeight - 0.14, Math.max(0.22, opening.width - 0.14)]
-            }
-          />
+        <mesh castShadow position={[0, 0, innerDepth]}>
+          <boxGeometry args={[Math.max(0.22, opening.width - 0.14), openingHeight - 0.14, 0.02]} />
           <meshStandardMaterial
             color="#d8eef7"
             transparent
@@ -140,35 +96,21 @@ function OpeningVisual({
           key={offset}
           castShadow
           receiveShadow
-          position={
-            horizontal
-              ? [offset * opening.width, 0, 0]
-              : [0, 0, offset * opening.width]
-          }
+          position={[offset * opening.width, 0, 0]}
         >
-          <boxGeometry
-            args={
-              horizontal
-                ? [opening.width * 0.12, radiatorHeight, 0.08]
-                : [0.08, radiatorHeight, opening.width * 0.12]
-            }
-          />
+          <boxGeometry args={[opening.width * 0.12, radiatorHeight, 0.08]} />
           <meshStandardMaterial color={frameColor} />
         </mesh>
       ))}
-      <mesh castShadow receiveShadow position={horizontal ? [0, -0.2, 0] : [0, -0.2, 0]}>
-        <boxGeometry
-          args={
-            horizontal ? [opening.width, 0.05, 0.09] : [0.09, 0.05, opening.width]
-          }
-        />
+      <mesh castShadow receiveShadow position={[0, -0.2, 0]}>
+        <boxGeometry args={[opening.width, 0.05, 0.09]} />
         <meshStandardMaterial color={selected ? "#f7c78c" : "#d69d54"} />
       </mesh>
     </group>
   );
 }
 
-export function RoomWalls({ room }: RoomWallsProps) {
+export function RoomWalls({ room, onOpeningReady }: RoomWallsProps) {
   const selectedStructure = useUIStore((state) => state.selectedStructure);
   const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
   const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
@@ -185,7 +127,7 @@ export function RoomWalls({ room }: RoomWallsProps) {
   return (
     <group>
       {room.walls.map((wall, index) => {
-        const { horizontal, length, directionX, directionZ } = getWallMetrics(wall);
+        const { length, directionX, directionZ, rotationY } = getWallMetrics(wall);
         const selected =
           selectedStructure?.type === "wall" && selectedStructure.id === wall.id;
         const wallColor = selected ? "#8cb9ff" : index % 2 === 0 ? "#717a85" : "#646d78";
@@ -223,6 +165,7 @@ export function RoomWalls({ room }: RoomWallsProps) {
             <mesh
               key={key}
               position={[centerX, bottom + height / 2, centerZ]}
+              rotation={[0, rotationY, 0]}
               castShadow
               receiveShadow
               onClick={(event) => {
@@ -230,13 +173,7 @@ export function RoomWalls({ room }: RoomWallsProps) {
                 handleStructureSelect("wall", wall.id);
               }}
             >
-              <boxGeometry
-                args={
-                  horizontal
-                    ? [pieceLength, height, wallThickness]
-                    : [wallThickness, height, pieceLength]
-                }
-              />
+              <boxGeometry args={[pieceLength, height, wallThickness]} />
               <meshStandardMaterial color={wallColor} />
             </mesh>
           );
@@ -288,11 +225,11 @@ export function RoomWalls({ room }: RoomWallsProps) {
         }
 
         const {
-          horizontal,
           directionX,
           directionZ,
           inwardNormalX,
           inwardNormalZ,
+          rotationY,
         } = getWallMetrics(wall);
         const alongX = wall.from[0] + directionX * opening.position;
         const alongZ = wall.from[1] + directionZ * opening.position;
@@ -306,11 +243,17 @@ export function RoomWalls({ room }: RoomWallsProps) {
             : opening.type === "window"
               ? 1.38
               : openingHeight / 2;
+        const visualRotationY =
+          typeof opening.rotation === "number"
+            ? (opening.rotation * Math.PI) / 180
+            : rotationY;
 
         return (
           <group
             key={opening.id}
+            ref={(node) => onOpeningReady?.(opening.id, node)}
             position={[centerX, centerY, centerZ]}
+            rotation={[0, visualRotationY, 0]}
             onClick={(event) => {
               event.stopPropagation();
               handleStructureSelect("opening", opening.id);
@@ -318,7 +261,6 @@ export function RoomWalls({ room }: RoomWallsProps) {
           >
             <OpeningVisual
               opening={opening}
-              horizontal={horizontal}
               selected={selected}
             />
           </group>

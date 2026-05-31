@@ -11,6 +11,8 @@ export type Locale = "en" | "tr";
 export type StatusKey =
   | "roomLoaded"
   | "roomUpdated"
+  | "roomSaved"
+  | "roomRandomized"
   | "objectAdded"
   | "objectSelected"
   | "selectionCleared"
@@ -25,9 +27,13 @@ export type StatusKey =
   | "objectRotated"
   | "objectLocked"
   | "objectUnlocked"
+  | "openingUpdated"
+  | "wallUpdated"
+  | "wallSplit"
   | "undoApplied"
   | "redoApplied"
-  | "sceneReset";
+  | "sceneReset"
+  | "sceneResetSaved";
 
 export interface EditorStatus {
   key: StatusKey;
@@ -72,10 +78,16 @@ export type MessageKey =
   | "validate"
   | "shortcuts"
   | "roomSettings"
+  | "customShape"
   | "wallDetails"
   | "wallLength"
   | "wallStart"
   | "wallEnd"
+  | "wallStartX"
+  | "wallStartZ"
+  | "wallEndX"
+  | "wallEndZ"
+  | "splitWall"
   | "linkedSetting"
   | "openingDetails"
   | "sceneMetrics"
@@ -115,6 +127,15 @@ export type MessageKey =
   | "recommended"
   | "saveRoom"
   | "randomizeRoom"
+  | "resetDefault"
+  | "resetSaved"
+  | "resetSceneOptions"
+  | "savedLayout"
+  | "noSavedLayout"
+  | "captureScreenshot"
+  | "hidePanels"
+  | "showPanels"
+  | "panels"
   | "deleteObject"
   | "copyAction"
   | "pasteAction"
@@ -152,6 +173,7 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     rectangle: "Rectangle",
     square: "Square",
     lShape: "L-Shape",
+    customShape: "Custom",
     cutoutWidth: "L Cut Width",
     cutoutDepth: "L Cut Depth",
     inspectorPanel: "Inspector Panel",
@@ -165,6 +187,11 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     wallLength: "Wall Length",
     wallStart: "Wall Start",
     wallEnd: "Wall End",
+    wallStartX: "Start X",
+    wallStartZ: "Start Z",
+    wallEndX: "End X",
+    wallEndZ: "End Z",
+    splitWall: "Split Wall",
     linkedSetting: "Linked Setting",
     openingDetails: "Opening Details",
     sceneMetrics: "Scene Metrics",
@@ -206,6 +233,15 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     recommended: "Recommended",
     saveRoom: "Save Room",
     randomizeRoom: "Randomize",
+    resetDefault: "Default Layout",
+    resetSaved: "Saved Layout",
+    resetSceneOptions: "Reset Options",
+    savedLayout: "Saved layout",
+    noSavedLayout: "No saved layout yet",
+    captureScreenshot: "Capture Screenshot",
+    hidePanels: "Hide Panels",
+    showPanels: "Show Panels",
+    panels: "Panels",
     deleteObject: "Delete",
     copyAction: "Copy",
     pasteAction: "Paste",
@@ -242,6 +278,7 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     rectangle: "Dikd\u00f6rtgen",
     square: "Kare",
     lShape: "L Tipi",
+    customShape: "\u00d6zel",
     cutoutWidth: "L Kesit En",
     cutoutDepth: "L Kesit Boy",
     inspectorPanel: "\u0130nceleme Paneli",
@@ -255,6 +292,11 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     wallLength: "Duvar Uzunlu\u011fu",
     wallStart: "Duvar Ba\u015flang\u0131c\u0131",
     wallEnd: "Duvar Biti\u015fi",
+    wallStartX: "Ba\u015flang\u0131\u00e7 X",
+    wallStartZ: "Ba\u015flang\u0131\u00e7 Z",
+    wallEndX: "Biti\u015f X",
+    wallEndZ: "Biti\u015f Z",
+    splitWall: "Duvar\u0131 B\u00f6l",
     linkedSetting: "Ba\u011fl\u0131 Ayar",
     openingDetails: "A\u00e7\u0131kl\u0131k Detaylar\u0131",
     sceneMetrics: "Sahne \u00d6l\u00e7\u00fcleri",
@@ -296,6 +338,15 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     recommended: "\u00d6nerilenler",
     saveRoom: "Oday\u0131 Kaydet",
     randomizeRoom: "Rastgele Diz",
+    resetDefault: "Varsay\u0131lan D\u00fczen",
+    resetSaved: "Kay\u0131tl\u0131 D\u00fczen",
+    resetSceneOptions: "S\u0131f\u0131rlama Se\u00e7enekleri",
+    savedLayout: "Kay\u0131tl\u0131 d\u00fczen",
+    noSavedLayout: "Hen\u00fcz kay\u0131tl\u0131 d\u00fczen yok",
+    captureScreenshot: "Ekran G\u00f6r\u00fcnt\u00fcs\u00fc Al",
+    hidePanels: "Panelleri Gizle",
+    showPanels: "Panelleri G\u00f6ster",
+    panels: "Paneller",
     deleteObject: "Sil",
     copyAction: "Kopyala",
     pasteAction: "Yap\u0131\u015ft\u0131r",
@@ -366,6 +417,15 @@ const labelTranslations: Record<string, Record<Locale, string>> = {
   "object.ladderStair": { en: "Ladder Stair", tr: "Dikey Merdiven" },
   "object.piano": { en: "Piano", tr: "Piyano" },
   "object.floorMirror": { en: "Floor Mirror", tr: "Ayakl\u0131 Ayna" },
+  "object.radiatorPanel": { en: "Radiator Panel", tr: "Kalorifer Paneli" },
+  "object.slidingWindow": { en: "Sliding Window", tr: "S\u00fcrg\u00fcl\u00fc Pencere" },
+  "object.slidingDoor": { en: "Sliding Door", tr: "S\u00fcrg\u00fcl\u00fc Kap\u0131" },
+  "object.ceilingLight": { en: "Ceiling Light", tr: "Tavan Lambas\u0131" },
+  "object.wallSconce": { en: "Wall Sconce", tr: "Duvar Apli\u011fi" },
+  "object.shoeRack": { en: "Shoe Rack", tr: "Ayakkab\u0131l\u0131k" },
+  "object.coatStand": { en: "Coat Stand", tr: "Ask\u0131l\u0131k" },
+  "object.roomDivider": { en: "Room Divider", tr: "Paravan" },
+  "object.modularCabinet": { en: "Modular Cabinet", tr: "Mod\u00fcler Dolap" },
   "object.doorPanel": { en: "Door Panel", tr: "Kap\u0131 Paneli" },
 };
 
@@ -434,6 +494,12 @@ export const formatEditorStatus = (
       return locale === "en"
         ? "Room measurements updated"
         : "Oda \u00f6l\u00e7\u00fcleri g\u00fcncellendi";
+    case "roomSaved":
+      return locale === "en" ? "Room layout saved" : "Oda d\u00fczeni kaydedildi";
+    case "roomRandomized":
+      return locale === "en"
+        ? "Room randomized without moving fixed items"
+        : "Sabit \u00f6\u011feler korunarak oda rastgele dizildi";
     case "objectAdded":
       return objectLabel
         ? locale === "en"
@@ -510,6 +576,12 @@ export const formatEditorStatus = (
         : locale === "en"
           ? "Object unlocked"
           : "\u00d6\u011fe kilidi a\u00e7\u0131ld\u0131";
+    case "openingUpdated":
+      return locale === "en" ? "Opening updated" : "A\u00e7\u0131kl\u0131k g\u00fcncellendi";
+    case "wallUpdated":
+      return locale === "en" ? "Wall updated" : "Duvar g\u00fcncellendi";
+    case "wallSplit":
+      return locale === "en" ? "Wall split with a new pivot" : "Duvara yeni pivot eklendi";
     case "undoApplied":
       return locale === "en" ? "Undo applied" : "Geri al uyguland\u0131";
     case "redoApplied":
@@ -518,6 +590,10 @@ export const formatEditorStatus = (
       return locale === "en"
         ? "Scene reset to default layout"
         : "Sahne varsay\u0131lan d\u00fczene s\u0131f\u0131rland\u0131";
+    case "sceneResetSaved":
+      return locale === "en"
+        ? "Scene restored from saved layout"
+        : "Sahne kay\u0131tl\u0131 d\u00fczenden geri y\u00fcklendi";
     default:
       return "";
   }

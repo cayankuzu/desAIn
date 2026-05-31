@@ -19,16 +19,25 @@ export function RoomScene() {
   const cameraMode = useRoomStore((state) => state.cameraMode);
   const transformMode = useRoomStore((state) => state.transformMode);
   const beginTransform = useRoomStore((state) => state.beginTransform);
+  const beginStructureTransform = useRoomStore((state) => state.beginStructureTransform);
   const endTransform = useRoomStore((state) => state.endTransform);
   const updateObjectTransform = useRoomStore((state) => state.updateObjectTransform);
+  const updateOpeningTransform = useRoomStore((state) => state.updateOpeningTransform);
   const setSelectedObjectId = useRoomStore((state) => state.setSelectedObjectId);
+  const selectedStructure = useUIStore((state) => state.selectedStructure);
   const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
   const [isTransforming, setIsTransforming] = useState(false);
   const [objectMap, setObjectMap] = useState<Record<string, Group | null>>({});
+  const [openingMap, setOpeningMap] = useState<Record<string, Group | null>>({});
 
   const selectedObject =
     roomData.objects.find((object) => object.id === selectedObjectId) ?? null;
   const selectedSceneObject = selectedObjectId ? objectMap[selectedObjectId] ?? null : null;
+  const selectedOpening =
+    selectedStructure?.type === "opening"
+      ? roomData.room.openings.find((opening) => opening.id === selectedStructure.id) ?? null
+      : null;
+  const selectedSceneOpening = selectedOpening ? openingMap[selectedOpening.id] ?? null : null;
 
   const canTransform = Boolean(
     selectedObject &&
@@ -36,6 +45,9 @@ export function RoomScene() {
       selectedObject.movable &&
       !selectedObject.locked &&
       transformMode !== "select",
+  );
+  const canTransformOpening = Boolean(
+    selectedOpening && selectedSceneOpening && transformMode !== "select",
   );
 
   const roomOffset = useMemo(
@@ -49,6 +61,16 @@ export function RoomScene() {
         : {
             ...current,
             [objectId]: node,
+          },
+    );
+  }, []);
+  const handleOpeningReady = useCallback((openingId: string, node: Group | null) => {
+    setOpeningMap((current) =>
+      current[openingId] === node
+        ? current
+        : {
+            ...current,
+            [openingId]: node,
           },
     );
   }, []);
@@ -84,9 +106,24 @@ export function RoomScene() {
     });
   };
 
+  const syncSelectedOpeningFromScene = () => {
+    if (!selectedOpening || !selectedSceneOpening) {
+      return;
+    }
+
+    updateOpeningTransform(selectedOpening.id, {
+      position: {
+        x: selectedSceneOpening.position.x,
+        z: selectedSceneOpening.position.z,
+      },
+      rotationY: selectedSceneOpening.rotation.y,
+    });
+  };
+
   return (
     <Canvas
       shadows="percentage"
+      gl={{ preserveDrawingBuffer: true }}
       camera={{ position: [6.4, 5.8, 6.4], fov: 40 }}
       onPointerMissed={() => {
         setSelectedStructure(null);
@@ -125,10 +162,28 @@ export function RoomScene() {
         }}
         onObjectChange={syncSelectedFromScene}
       />
+      <ObjectControls
+        object={selectedSceneOpening}
+        enabled={canTransformOpening}
+        mode={transformMode === "rotate" ? "rotate" : "translate"}
+        onBegin={() => {
+          if (!selectedOpening) {
+            return;
+          }
+
+          setIsTransforming(true);
+          beginStructureTransform(selectedOpening.id);
+        }}
+        onEnd={() => {
+          setIsTransforming(false);
+          endTransform();
+        }}
+        onObjectChange={syncSelectedOpeningFromScene}
+      />
 
       <group position={roomOffset}>
         <RoomFloor room={roomData.room} />
-        <RoomWalls room={roomData.room} />
+        <RoomWalls room={roomData.room} onOpeningReady={handleOpeningReady} />
         {roomData.objects.map((object) => (
           <RoomObject
             key={object.id}

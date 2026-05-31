@@ -229,7 +229,6 @@ export function Sidebar() {
 function RoomSettingsEditor({ locale }: { locale: Locale }) {
   const roomData = useRoomStore((state) => state.roomData);
   const updateRoomProperties = useRoomStore((state) => state.updateRoomProperties);
-  const updateOpening = useRoomStore((state) => state.updateOpening);
   const selectedStructure = useUIStore((state) => state.selectedStructure);
   const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
   const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
@@ -270,6 +269,7 @@ function RoomSettingsEditor({ locale }: { locale: Locale }) {
             <option value="rectangle">{t(locale, "rectangle")}</option>
             <option value="square">{t(locale, "square")}</option>
             <option value="l_shape">{t(locale, "lShape")}</option>
+            <option value="custom">{t(locale, "customShape")}</option>
           </select>
         </label>
         <div className="rounded-xl border border-white/10 bg-white/5 p-3">
@@ -395,27 +395,6 @@ function RoomSettingsEditor({ locale }: { locale: Locale }) {
           );
         })}
       </div>
-
-      <div className="mt-5 space-y-3">
-        {roomData.room.openings.map((opening) => (
-          <OpeningEditor
-            key={opening.id}
-            locale={locale}
-            opening={opening}
-            wallIds={roomData.room.walls.map((wall) => wall.id)}
-            selected={
-              selectedStructure?.type === "opening" &&
-              selectedStructure.id === opening.id
-            }
-            onSelect={() => {
-              setSelectedObjectId(null);
-              setSelectedStructure({ type: "opening", id: opening.id });
-              setActiveSidebarTab("details");
-            }}
-            onChange={(payload) => updateOpening(opening.id, payload)}
-          />
-        ))}
-      </div>
     </section>
   );
 }
@@ -433,7 +412,7 @@ function OpeningEditor({
   wallIds: string[];
   selected: boolean;
   onSelect?: () => void;
-  onChange: (payload: Partial<Pick<Opening, "wallId" | "position" | "width">>) => void;
+  onChange: (payload: Partial<Pick<Opening, "wallId" | "position" | "width" | "rotation">>) => void;
 }) {
   return (
     <div
@@ -447,7 +426,7 @@ function OpeningEditor({
       <div className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
         {formatOpeningLabel(locale, opening)}
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <label className="space-y-1">
           <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
             {t(locale, "wall")}
@@ -486,6 +465,18 @@ function OpeningEditor({
             min="0.3"
             value={opening.width}
             onChange={(event) => onChange({ width: event.currentTarget.valueAsNumber })}
+            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+            {t(locale, "rotation")}
+          </span>
+          <input
+            type="number"
+            step="15"
+            value={opening.rotation ?? 0}
+            onChange={(event) => onChange({ rotation: event.currentTarget.valueAsNumber })}
             className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
           />
         </label>
@@ -528,10 +519,12 @@ function SelectedWallEditor({
 }) {
   const roomData = useRoomStore((state) => state.roomData);
   const updateRoomProperties = useRoomStore((state) => state.updateRoomProperties);
+  const updateWallSegment = useRoomStore((state) => state.updateWallSegment);
+  const splitWall = useRoomStore((state) => state.splitWall);
   const wall = roomData.room.walls.find((entry) => entry.id === wallId) ?? null;
   const controlSpec = wall ? getWallControlSpec(roomData.room, wallId) : null;
 
-  if (!wall || !controlSpec) {
+  if (!wall) {
     return (
       <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm leading-6 text-slate-400">
         {t(locale, "selectObjectHint")}
@@ -558,27 +551,29 @@ function SelectedWallEditor({
             label={t(locale, "wallEnd")}
             value={`${wall.to[0].toFixed(2)}m, ${wall.to[1].toFixed(2)}m`}
           />
-          <label className="space-y-1">
-            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
-              {t(locale, "wallLength")}
-            </span>
-            <input
-              type="number"
-              min="0.8"
-              step="0.1"
-              value={Number(controlSpec.wallLength.toFixed(2))}
-              onChange={(event) => {
-                const value = event.currentTarget.valueAsNumber;
+          {controlSpec ? (
+            <label className="space-y-1">
+              <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                {t(locale, "wallLength")}
+              </span>
+              <input
+                type="number"
+                min="0.8"
+                step="0.1"
+                value={Number(controlSpec.wallLength.toFixed(2))}
+                onChange={(event) => {
+                  const value = event.currentTarget.valueAsNumber;
 
-                if (Number.isNaN(value)) {
-                  return;
-                }
+                  if (Number.isNaN(value)) {
+                    return;
+                  }
 
-                updateRoomProperties(controlSpec.updatePayload(value));
-              }}
-              className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
-            />
-          </label>
+                  updateRoomProperties(controlSpec.updatePayload(value));
+                }}
+                className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+              />
+            </label>
+          ) : null}
           <label className="space-y-1">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
               {t(locale, "height")}
@@ -602,11 +597,77 @@ function SelectedWallEditor({
           </label>
         </div>
 
-        <div className="mt-4 rounded-xl border border-white/10 bg-[#111924] px-3 py-3 text-xs uppercase tracking-[0.18em] text-slate-400">
-          {`${t(locale, "linkedSetting")}: ${t(locale, controlSpec.linkedLabelKey)}`}
-        </div>
+        {roomData.room.shape === "custom" ? (
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <WallPointInput
+              label={t(locale, "wallStartX")}
+              value={wall.from[0]}
+              onChange={(value) => updateWallSegment(wall.id, { from: [value, wall.from[1]] })}
+            />
+            <WallPointInput
+              label={t(locale, "wallStartZ")}
+              value={wall.from[1]}
+              onChange={(value) => updateWallSegment(wall.id, { from: [wall.from[0], value] })}
+            />
+            <WallPointInput
+              label={t(locale, "wallEndX")}
+              value={wall.to[0]}
+              onChange={(value) => updateWallSegment(wall.id, { to: [value, wall.to[1]] })}
+            />
+            <WallPointInput
+              label={t(locale, "wallEndZ")}
+              value={wall.to[1]}
+              onChange={(value) => updateWallSegment(wall.id, { to: [wall.to[0], value] })}
+            />
+          </div>
+        ) : null}
+
+        {controlSpec ? (
+          <div className="mt-4 rounded-xl border border-white/10 bg-[#111924] px-3 py-3 text-xs uppercase tracking-[0.18em] text-slate-400">
+            {`${t(locale, "linkedSetting")}: ${t(locale, controlSpec.linkedLabelKey)}`}
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={() => splitWall(wall.id)}
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#24405a] bg-[#102234] px-3 py-2.5 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white"
+        >
+          <BoxSelect className="h-4 w-4" />
+          {t(locale, "splitWall")}
+        </button>
       </div>
     </div>
+  );
+}
+
+function WallPointInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="space-y-1">
+      <span className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</span>
+      <input
+        type="number"
+        min="0"
+        step="0.1"
+        value={value}
+        onChange={(event) => {
+          const nextValue = event.currentTarget.valueAsNumber;
+
+          if (!Number.isNaN(nextValue)) {
+            onChange(nextValue);
+          }
+        }}
+        className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+      />
+    </label>
   );
 }
 

@@ -58,6 +58,46 @@ export const resizeRoomDefinition = (
   let nextDepth = payload.depth ?? room.depth;
   const nextHeight = payload.height ?? room.height;
 
+  if (nextShape === "custom") {
+    const widthScale = payload.width !== undefined ? payload.width / room.width : 1;
+    const depthScale = payload.depth !== undefined ? payload.depth / room.depth : 1;
+    const scaledWalls = room.walls.map((wall) => ({
+      ...wall,
+      from: [
+        Number((wall.from[0] * widthScale).toFixed(2)),
+        Number((wall.from[1] * depthScale).toFixed(2)),
+      ] as [number, number],
+      to: [
+        Number((wall.to[0] * widthScale).toFixed(2)),
+        Number((wall.to[1] * depthScale).toFixed(2)),
+      ] as [number, number],
+    }));
+    const width = clampRoomWidth(
+      Math.max(...scaledWalls.flatMap((wall) => [wall.from[0], wall.to[0]]), nextWidth),
+    );
+    const depth = clampRoomDepth(
+      Math.max(...scaledWalls.flatMap((wall) => [wall.from[1], wall.to[1]]), nextDepth),
+    );
+    const nextRoom: RoomDefinition = {
+      ...room,
+      shape: "custom",
+      width,
+      depth,
+      height: clampRoomHeight(nextHeight),
+      cutoutWidth: 0,
+      cutoutDepth: 0,
+      walls: scaledWalls,
+      openings: [],
+    };
+
+    return {
+      ...nextRoom,
+      openings: room.openings.map((opening) =>
+        normalizeOpeningForRoom(nextRoom, opening),
+      ),
+    };
+  }
+
   if (nextShape === "square") {
     if (payload.width !== undefined) {
       nextDepth = payload.width;

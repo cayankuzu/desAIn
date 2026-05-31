@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRoomStore } from "@/store/roomStore";
+import { useUIStore } from "@/store/uiStore";
 
 const isTypingTarget = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) {
@@ -90,6 +91,7 @@ export function EditorHotkeys() {
       if (key === "escape") {
         event.preventDefault();
         store.setSelectedObjectId(null);
+        useUIStore.getState().setSelectedStructure(null);
       }
     };
 
