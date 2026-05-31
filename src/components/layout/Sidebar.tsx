@@ -119,8 +119,8 @@ const inventoryCategoryLabels = new Map(
   inventoryCategories.map((category) => [category.id, category.label]),
 );
 
-const compactActionButtonBase =
-  "inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-[11px] font-semibold uppercase tracking-[0.11em] transition";
+const iconActionButtonBase =
+  "inline-flex h-7 w-7 items-center justify-center rounded-md border transition";
 const neutralActionButtonClass =
   "border-white/10 bg-[#111924] text-slate-200 hover:border-[#32516c] hover:text-white";
 const lockedActionButtonClass =
@@ -817,13 +817,13 @@ function SelectedOpeningEditor({
             {openingLocked ? t(locale, "locked") : t(locale, "editable")}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           <button
             type="button"
             title={openingLockLabel}
             aria-label={openingLockLabel}
             onClick={() => toggleOpeningLock(opening.id)}
-            className={`${compactActionButtonBase} ${
+            className={`${iconActionButtonBase} ${
               openingLocked ? lockedActionButtonClass : neutralActionButtonClass
             }`}
           >
@@ -832,7 +832,7 @@ function SelectedOpeningEditor({
             ) : (
               <Lock className="h-3.5 w-3.5" />
             )}
-            {openingLockLabel}
+            <span className="sr-only">{openingLockLabel}</span>
           </button>
           <button
             type="button"
@@ -842,10 +842,10 @@ function SelectedOpeningEditor({
               deleteOpening(opening.id);
               setSelectedStructure(null);
             }}
-            className={`${compactActionButtonBase} ${dangerActionButtonClass}`}
+            className={`${iconActionButtonBase} ${dangerActionButtonClass}`}
           >
             <Trash2 className="h-3.5 w-3.5" />
-            {t(locale, "deleteObject")}
+            <span className="sr-only">{t(locale, "deleteObject")}</span>
           </button>
         </div>
       </div>
@@ -910,7 +910,7 @@ function SelectedWallEditor({
             title={wallLockLabel}
             aria-label={wallLockLabel}
             onClick={() => toggleWallLock(wall.id)}
-            className={`${compactActionButtonBase} ${
+            className={`${iconActionButtonBase} ${
               wallLocked ? lockedActionButtonClass : primaryActionButtonClass
             }`}
           >
@@ -919,7 +919,7 @@ function SelectedWallEditor({
             ) : (
               <Lock className="h-3.5 w-3.5" />
             )}
-            {wallLockLabel}
+            <span className="sr-only">{wallLockLabel}</span>
           </button>
         </div>
 
@@ -1283,13 +1283,13 @@ function SelectedObjectEditor({
               </span>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <button
               type="button"
               title={objectLockLabel}
               aria-label={objectLockLabel}
               onClick={() => toggleObjectLock(object.id)}
-              className={`${compactActionButtonBase} ${
+              className={`${iconActionButtonBase} ${
                 object.locked ? lockedActionButtonClass : neutralActionButtonClass
               }`}
             >
@@ -1298,17 +1298,17 @@ function SelectedObjectEditor({
               ) : (
                 <Lock className="h-3.5 w-3.5" />
               )}
-              {objectLockLabel}
+              <span className="sr-only">{objectLockLabel}</span>
             </button>
             <button
               type="button"
               title={t(locale, "deleteObject")}
               aria-label={t(locale, "deleteObject")}
               onClick={() => deleteObject(object.id)}
-              className={`${compactActionButtonBase} ${dangerActionButtonClass}`}
+              className={`${iconActionButtonBase} ${dangerActionButtonClass}`}
             >
               <Trash2 className="h-3.5 w-3.5" />
-              {t(locale, "deleteObject")}
+              <span className="sr-only">{t(locale, "deleteObject")}</span>
             </button>
           </div>
         </div>
