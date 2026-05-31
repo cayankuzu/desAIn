@@ -116,3 +116,11 @@ textarea {
 .scroll-area::-webkit-scrollbar-track {
   background: transparent;
 }
+
+.toolbar-scroll {
+  scrollbar-width: none;
+}
+
+.toolbar-scroll::-webkit-scrollbar {
+  display: none;
+}

@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "desAIn",
-  description: "desAIn editor",
+  description: "Professional 3D room planning and smart layout editor.",
 };
 
 export default function RootLayout({

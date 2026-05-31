@@ -181,7 +181,7 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
   en: {
     appTitle: "desAIn | 3D Room Editor",
     appDescription:
-      "desAIn MVP: a low-poly room editor with live measurements, draggable inventory, and bilingual UI.",
+      "A polished 3D room editor with live measurements, draggable inventory, smart layout options, and bilingual UI.",
     editorTitle: "desAIn Editor",
     language: "Language",
     english: "EN",
@@ -236,7 +236,7 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     sceneMetrics: "Scene Metrics",
     objectDetails: "Object Details",
     selectObjectHint:
-      "Select an object in the viewport or outliner to edit size, position, rotation, and color.",
+      "Select an object in the scene or item list to edit size, position, rotation, and color.",
     worldOutliner: "Scene Items",
     locked: "Locked",
     open: "Free",
@@ -267,15 +267,15 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     otherObject: "another object",
     genericObject: "Object",
     searchInventory: "Search inventory",
-    inventoryHint: "Drag any item into the viewport to create it instantly.",
-    dropToViewport: "Drop into the viewport to add this object",
+    inventoryHint: "Drag any item into the scene to create it instantly.",
+    dropToViewport: "Drop into the scene to add this object",
     selectedLabel: "Selected",
     selectedItems: "Selected items",
     group: "Group",
     groups: "Groups",
     ungroup: "Ungroup",
     groupSelection: "Group",
-    randomizeSelection: "Arrange Selection",
+    randomizeSelection: "Generate Selection Layout",
     lockSelection: "Lock Selection",
     unlockSelection: "Unlock Selection",
     deleteSelection: "Delete Selection",
@@ -286,8 +286,8 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     groupHint: "Create a reusable group from the current multi-selection.",
     recommended: "Recommended",
     saveRoom: "Save Room",
-    randomizeRoom: "Randomize",
-    randomLayouts: "Random Layouts",
+    randomizeRoom: "Generate Layouts",
+    randomLayouts: "Layout Options",
     randomLayoutsHint: "Choose a generated option for this room. Locked and fixed items stay where they are.",
     activeLayout: "Active",
     closePanel: "Close",
@@ -312,7 +312,7 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
   tr: {
     appTitle: "desAIn | 3D Oda Edit\u00f6r\u00fc",
     appDescription:
-      "desAIn MVP: canl\u0131 \u00f6l\u00e7\u00fcler, s\u00fcr\u00fcklenebilir envanter ve iki dilli aray\u00fcze sahip low-poly oda edit\u00f6r\u00fc.",
+      "Canl\u0131 \u00f6l\u00e7\u00fcler, s\u00fcr\u00fcklenebilir envanter, ak\u0131ll\u0131 d\u00fczen se\u00e7enekleri ve iki dilli aray\u00fcz sunan 3D oda edit\u00f6r\u00fc.",
     editorTitle: "desAIn Edit\u00f6r",
     language: "Dil",
     english: "EN",
@@ -367,7 +367,7 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     sceneMetrics: "Sahne \u00d6l\u00e7\u00fcleri",
     objectDetails: "\u00d6\u011fe Detaylar\u0131",
     selectObjectHint:
-      "Boyut, konum, d\u00f6n\u00fc\u015f ve rengi d\u00fczenlemek i\u00e7in viewport'tan veya outliner'dan bir \u00f6\u011fe se\u00e7.",
+      "Boyut, konum, d\u00f6n\u00fc\u015f ve rengi d\u00fczenlemek i\u00e7in sahneden veya \u00f6\u011fe listesinden bir \u00f6\u011fe se\u00e7.",
     worldOutliner: "Sahne \u00d6\u011feleri",
     locked: "Kilitli",
     open: "Serbest",
@@ -398,15 +398,15 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     otherObject: "ba\u015fka bir \u00f6\u011fe",
     genericObject: "\u00d6\u011fe",
     searchInventory: "Envanterde ara",
-    inventoryHint: "Herhangi bir \u00f6\u011feyi viewport'a s\u00fcr\u00fckleyip an\u0131nda ekleyebilirsin.",
-    dropToViewport: "Eklemek i\u00e7in viewport'a b\u0131rak",
+    inventoryHint: "Herhangi bir \u00f6\u011feyi sahneye s\u00fcr\u00fckleyip an\u0131nda ekleyebilirsin.",
+    dropToViewport: "Eklemek i\u00e7in sahneye b\u0131rak",
     selectedLabel: "Se\u00e7ili",
     selectedItems: "Se\u00e7ili \u00f6\u011feler",
     group: "Grup",
     groups: "Gruplar",
     ungroup: "Grubu \u00c7\u00f6z",
     groupSelection: "Grupla",
-    randomizeSelection: "Se\u00e7imi Diz",
+    randomizeSelection: "Se\u00e7imi D\u00fczenle",
     lockSelection: "Se\u00e7imi Kilitle",
     unlockSelection: "Kilidi A\u00e7",
     deleteSelection: "Se\u00e7imi Sil",
@@ -417,8 +417,8 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     groupHint: "Mevcut \u00e7oklu se\u00e7imden tekrar se\u00e7ilebilir bir grup olu\u015fturur.",
     recommended: "\u00d6nerilenler",
     saveRoom: "Oday\u0131 Kaydet",
-    randomizeRoom: "Rastgele Diz",
-    randomLayouts: "Rastgele D\u00fczenler",
+    randomizeRoom: "D\u00fczenleri Olu\u015ftur",
+    randomLayouts: "D\u00fczen Se\u00e7enekleri",
     randomLayoutsHint: "Bu oda i\u00e7in olu\u015fturulan d\u00fczeni se\u00e7. Kilitli ve sabit \u00f6\u011feler yerinde kal\u0131r.",
     activeLayout: "Aktif",
     closePanel: "Kapat",
@@ -665,11 +665,9 @@ export const formatEditorStatus = (
     case "selectionCleared":
       return locale === "en" ? "Selection cleared" : "Se\u00e7im temizlendi";
     case "cameraOrbit":
-      return locale === "en"
-        ? "Perspective viewport enabled"
-        : "Perspektif g\u00f6r\u00fcn\u00fcm etkin";
+      return locale === "en" ? "Perspective view enabled" : "Perspektif g\u00f6r\u00fcn\u00fcm etkin";
     case "cameraTop":
-      return locale === "en" ? "Top viewport enabled" : "\u00dcst g\u00f6r\u00fcn\u00fcm etkin";
+      return locale === "en" ? "Top view enabled" : "\u00dcst g\u00f6r\u00fcn\u00fcm etkin";
     case "modeSelect":
       return locale === "en" ? "Selection mode" : "Se\u00e7im modu";
     case "modeTranslate":

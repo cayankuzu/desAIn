@@ -247,24 +247,26 @@ export function AppShell() {
   return (
     <main className="h-dvh overflow-hidden px-3 py-3 md:px-4 md:py-4">
       <EditorHotkeys />
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1820px] flex-col gap-4">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1820px] flex-col gap-3 md:gap-4">
         {panelsHidden ? (
           <div className="fixed right-4 top-4 z-50 flex items-center gap-2">
             <button
               type="button"
               onClick={captureScreenshot}
               title={t(locale, "captureScreenshot")}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-[#0d141d]/92 text-slate-200 shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-[#4ea8ff] hover:text-white"
+              aria-label={t(locale, "captureScreenshot")}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-[#0d141d]/92 text-slate-200 shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-[#4ea8ff] hover:text-white"
             >
-              <Camera className="h-5 w-5" />
+              <Camera className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={togglePanels}
               title={t(locale, "showPanels")}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-[#0d141d]/92 text-slate-200 shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-[#4ea8ff] hover:text-white"
+              aria-label={t(locale, "showPanels")}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-[#0d141d]/92 text-slate-200 shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-[#4ea8ff] hover:text-white"
             >
-              <Eye className="h-5 w-5" />
+              <Eye className="h-4 w-4" />
             </button>
           </div>
         ) : (
@@ -277,7 +279,9 @@ export function AppShell() {
 
         <section
           className={`grid min-h-0 flex-1 gap-4 ${
-            panelsHidden ? "grid-cols-1" : "xl:grid-cols-[minmax(0,1fr)_560px]"
+            panelsHidden
+              ? "grid-cols-1"
+              : "grid-rows-[minmax(320px,44vh)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_560px] xl:grid-rows-none"
           }`}
         >
           <div
@@ -349,7 +353,7 @@ export function AppShell() {
             <div className="viewport-grid absolute inset-0 opacity-55" />
             {multiSelectMenu && selectedObjectIds.length > 1 ? (
               <div
-                className="fixed z-50 w-56 rounded-2xl border border-white/10 bg-[#0d141d]/96 p-2 text-sm text-slate-200 shadow-[0_20px_50px_rgba(0,0,0,0.42)] backdrop-blur"
+                className="fixed z-50 w-56 rounded-xl border border-white/10 bg-[#0d141d]/96 p-2 text-xs font-semibold text-slate-200 shadow-[0_20px_50px_rgba(0,0,0,0.42)] backdrop-blur"
                 style={{
                   left: Math.min(multiSelectMenu.x, window.innerWidth - 260),
                   top: Math.min(multiSelectMenu.y, window.innerHeight - 260),
@@ -366,9 +370,9 @@ export function AppShell() {
                       setMultiSelectMenu(null);
                       setActiveSidebarTab("outliner");
                     }}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-white/8 hover:text-white"
+                    className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left transition hover:bg-white/8 hover:text-white"
                   >
-                    <Boxes className="h-4 w-4 text-[#8cb9ff]" />
+                    <Boxes className="h-3.5 w-3.5 text-[#8cb9ff]" />
                     {t(locale, "groupSelection")}
                   </button>
                 ) : null}
@@ -378,9 +382,9 @@ export function AppShell() {
                     randomizeSelectedObjects();
                     setMultiSelectMenu(null);
                   }}
-                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-white/8 hover:text-white"
+                  className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left transition hover:bg-white/8 hover:text-white"
                 >
-                  <Shuffle className="h-4 w-4 text-[#8cb9ff]" />
+                  <Shuffle className="h-3.5 w-3.5 text-[#8cb9ff]" />
                   {t(locale, "randomizeSelection")}
                 </button>
                 <button
@@ -389,9 +393,9 @@ export function AppShell() {
                     toggleSelectedObjectsLock();
                     setMultiSelectMenu(null);
                   }}
-                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-white/8 hover:text-white"
+                  className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left transition hover:bg-white/8 hover:text-white"
                 >
-                  <Lock className="h-4 w-4 text-[#8cb9ff]" />
+                  <Lock className="h-3.5 w-3.5 text-[#8cb9ff]" />
                   {t(locale, "lockSelection")}
                 </button>
                 {shouldShowUngroup ? (
@@ -401,9 +405,9 @@ export function AppShell() {
                       ungroupSelectedObjects();
                       setMultiSelectMenu(null);
                     }}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-white/8 hover:text-white"
+                    className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left transition hover:bg-white/8 hover:text-white"
                   >
-                    <Ungroup className="h-4 w-4 text-[#8cb9ff]" />
+                    <Ungroup className="h-3.5 w-3.5 text-[#8cb9ff]" />
                     {t(locale, "ungroup")}
                   </button>
                 ) : null}
@@ -413,9 +417,9 @@ export function AppShell() {
                     deleteSelectedObjects();
                     setMultiSelectMenu(null);
                   }}
-                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[#ff9b9b] transition hover:bg-[#2a1313] hover:text-white"
+                  className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[#ff9b9b] transition hover:bg-[#2a1313] hover:text-white"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3.5 w-3.5" />
                   {t(locale, "deleteSelection")}
                 </button>
               </div>
@@ -430,7 +434,7 @@ export function AppShell() {
         </section>
       </div>
       {toast ? (
-        <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-2xl border border-[#24405a] bg-[#102234]/95 px-4 py-3 text-sm font-medium text-[#dbeafe] shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur">
+        <div className="fixed bottom-4 left-4 right-4 z-50 rounded-xl border border-[#24405a] bg-[#102234]/95 px-3 py-2 text-sm font-semibold text-[#dbeafe] shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur sm:left-auto sm:max-w-sm">
           {toast.message}
         </div>
       ) : null}

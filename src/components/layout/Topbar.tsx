@@ -22,7 +22,11 @@ import { useRoomStore } from "@/store/roomStore";
 import { useUIStore } from "@/store/uiStore";
 
 const modeButtonBase =
-  "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition";
+  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition";
+const neutralButtonClass =
+  "border-white/10 bg-[#0d141d] text-slate-300 hover:border-[#32516c] hover:text-white";
+const iconButtonClass =
+  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#0d141d] text-slate-300 transition hover:border-[#32516c] hover:text-white";
 
 interface TopbarProps {
   panelsHidden: boolean;
@@ -57,13 +61,13 @@ export function Topbar({
   });
 
   return (
-    <header className="editor-panel relative z-50 overflow-visible px-4 py-3">
-      <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-[#0d141d] p-1">
-            <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+    <header className="editor-panel relative z-50 overflow-visible px-3 py-2.5">
+      <div className="flex flex-col gap-2 2xl:flex-row 2xl:items-center 2xl:justify-between">
+        <div className="toolbar-scroll -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1">
+          <div className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-[#0d141d] p-0.5">
+            <div className="hidden px-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 sm:block">
               <span className="inline-flex items-center gap-1.5">
-                <Languages className="h-3.5 w-3.5" />
+                <Languages className="h-3 w-3" />
                 {t(locale, "language")}
               </span>
             </div>
@@ -71,7 +75,7 @@ export function Topbar({
               type="button"
               onClick={() => setLocale("tr")}
               aria-pressed={locale === "tr"}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+              className={`h-7 rounded-md px-2.5 text-xs font-semibold transition ${
                 locale === "tr"
                   ? "bg-[#102234] text-white"
                   : "text-slate-300 hover:text-white"
@@ -83,7 +87,7 @@ export function Topbar({
               type="button"
               onClick={() => setLocale("en")}
               aria-pressed={locale === "en"}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+              className={`h-7 rounded-md px-2.5 text-xs font-semibold transition ${
                 locale === "en"
                   ? "bg-[#102234] text-white"
                   : "text-slate-300 hover:text-white"
@@ -100,10 +104,10 @@ export function Topbar({
             className={`${modeButtonBase} ${
               transformMode === "select"
                 ? "border-[#ff8c42] bg-[#2a1910] text-[#ffb16a]"
-                : "border-white/10 bg-[#0d141d] text-slate-300 hover:border-[#32516c] hover:text-white"
+                : neutralButtonClass
             }`}
           >
-            <BoxSelect className="h-4 w-4" />
+            <BoxSelect className="h-3.5 w-3.5" />
             Q {t(locale, "selectMode")}
           </button>
           <button
@@ -113,10 +117,10 @@ export function Topbar({
             className={`${modeButtonBase} ${
               transformMode === "translate"
                 ? "border-[#ff8c42] bg-[#2a1910] text-[#ffb16a]"
-                : "border-white/10 bg-[#0d141d] text-slate-300 hover:border-[#32516c] hover:text-white"
+                : neutralButtonClass
             }`}
           >
-            <Move3d className="h-4 w-4" />
+            <Move3d className="h-3.5 w-3.5" />
             W {t(locale, "moveMode")}
           </button>
           <button
@@ -126,58 +130,58 @@ export function Topbar({
             className={`${modeButtonBase} ${
               transformMode === "rotate"
                 ? "border-[#ff8c42] bg-[#2a1910] text-[#ffb16a]"
-                : "border-white/10 bg-[#0d141d] text-slate-300 hover:border-[#32516c] hover:text-white"
+                : neutralButtonClass
             }`}
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="h-3.5 w-3.5" />
             E {t(locale, "rotateMode")}
           </button>
 
           <button
             type="button"
             onClick={() => setActiveSidebarTab("validation")}
-            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition ${
+            className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition ${
               validationWarnings.length
                 ? "border-[#6d4a29] bg-[#25180f] text-[#f5c28b] hover:border-[#ffb16a]"
                 : "border-[#24405a] bg-[#111924] text-[#8cb9ff] hover:border-[#4ea8ff] hover:text-white"
             }`}
           >
-            <AlertTriangle className="h-4 w-4" />
+            <AlertTriangle className="h-3.5 w-3.5" />
             {validationWarnings.length
               ? `${validationWarnings.length} ${t(locale, "validationWarnings")}`
               : t(locale, "sceneValidated")}
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="toolbar-scroll -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1">
           <button
             type="button"
             onClick={undo}
             disabled={historyPastLength === 0}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-[#32516c] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+            className={`${modeButtonBase} ${neutralButtonClass} disabled:cursor-not-allowed disabled:opacity-45`}
           >
-            <Undo2 className="h-4 w-4" />
+            <Undo2 className="h-3.5 w-3.5" />
             {t(locale, "undo")}
           </button>
           <button
             type="button"
             onClick={redo}
             disabled={historyFutureLength === 0}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-[#32516c] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+            className={`${modeButtonBase} ${neutralButtonClass} disabled:cursor-not-allowed disabled:opacity-45`}
           >
-            <RotateCw className="h-4 w-4" />
+            <RotateCw className="h-3.5 w-3.5" />
             {t(locale, "redo")}
           </button>
           <button
             type="button"
             onClick={() => setResetMenuOpen((current) => !current)}
-            className="inline-flex items-center gap-2 rounded-xl border border-[#4f2b16] bg-[#2b170d] px-3 py-2 text-sm font-medium text-[#ffb16a] transition hover:border-[#ff8c42] hover:text-white"
+            className={`${modeButtonBase} border-[#4f2b16] bg-[#2b170d] text-[#ffb16a] hover:border-[#ff8c42] hover:text-white`}
           >
-            <RotateCcw className="h-4 w-4" />
+            <RotateCcw className="h-3.5 w-3.5" />
             {t(locale, "resetScene")}
           </button>
           {resetMenuOpen ? (
-            <div className="absolute right-4 top-[calc(100%+0.5rem)] z-[90] w-64 rounded-2xl border border-white/10 bg-[#0d141d] p-3 text-sm shadow-[0_18px_45px_rgba(0,0,0,0.42)]">
+            <div className="absolute right-3 top-[calc(100%+0.5rem)] z-[90] w-64 rounded-xl border border-white/10 bg-[#0d141d] p-2 text-sm shadow-[0_18px_45px_rgba(0,0,0,0.42)]">
               <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
                 {t(locale, "resetSceneOptions")}
               </div>
@@ -187,7 +191,7 @@ export function Topbar({
                   resetRoom("default");
                   setResetMenuOpen(false);
                 }}
-                className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-left text-slate-200 transition hover:border-[#32516c] hover:text-white"
+                className="flex h-8 w-full items-center justify-between rounded-lg border border-white/10 bg-[#111924] px-2.5 text-left text-xs font-semibold text-slate-200 transition hover:border-[#32516c] hover:text-white"
               >
                 {t(locale, "resetDefault")}
               </button>
@@ -198,7 +202,7 @@ export function Topbar({
                   setResetMenuOpen(false);
                 }}
                 disabled={!hasSavedLayout}
-                className="mt-2 flex w-full items-center justify-between rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-left text-slate-200 transition hover:border-[#32516c] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+                className="mt-2 flex h-8 w-full items-center justify-between rounded-lg border border-white/10 bg-[#111924] px-2.5 text-left text-xs font-semibold text-slate-200 transition hover:border-[#32516c] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <span>{t(locale, "resetSaved")}</span>
                 <span className="text-[11px] text-slate-500">
@@ -213,27 +217,29 @@ export function Topbar({
               saveRoomSnapshot();
               setHasSavedLayout(true);
             }}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-[#32516c] hover:text-white"
+            className={`${modeButtonBase} ${neutralButtonClass}`}
           >
-            <Save className="h-4 w-4" />
+            <Save className="h-3.5 w-3.5" />
             {t(locale, "saveRoom")}
           </button>
           <button
             type="button"
             onClick={onCaptureScreenshot}
             title={t(locale, "captureScreenshot")}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-[#0d141d] text-slate-300 transition hover:border-[#32516c] hover:text-white"
+            aria-label={t(locale, "captureScreenshot")}
+            className={iconButtonClass}
           >
-            <Camera className="h-4 w-4" />
+            <Camera className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
             onClick={onTogglePanels}
             title={panelsHidden ? t(locale, "showPanels") : t(locale, "hidePanels")}
+            aria-label={panelsHidden ? t(locale, "showPanels") : t(locale, "hidePanels")}
             aria-pressed={panelsHidden}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-[#0d141d] text-slate-300 transition hover:border-[#32516c] hover:text-white"
+            className={iconButtonClass}
           >
-            {panelsHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            {panelsHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
           </button>
         </div>
       </div>
