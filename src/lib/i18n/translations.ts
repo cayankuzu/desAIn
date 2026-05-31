@@ -783,6 +783,10 @@ export const formatWarning = (
       return locale === "en"
         ? `${objectLabel} intersects a wall.`
         : `${objectLabel}, bir duvarla \u00e7ak\u0131\u015f\u0131yor.`;
+    case "room_open_outline":
+      return locale === "en"
+        ? "Room outer boundary is open. Close the wall loop before generating layouts."
+        : "Odan\u0131n d\u0131\u015f s\u0131n\u0131r\u0131 a\u00e7\u0131k. D\u00fczen olu\u015fturmadan \u00f6nce duvar halkas\u0131n\u0131 kapat.";
     default:
       return warning.message;
   }

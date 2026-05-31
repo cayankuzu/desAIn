@@ -44,6 +44,7 @@ export interface WallSegment {
   id: string;
   from: [number, number];
   to: [number, number];
+  locked?: boolean;
 }
 
 export interface Opening {
@@ -56,6 +57,7 @@ export interface Opening {
   sillHeight?: number;
   rotation?: number;
   clearDepth?: number;
+  locked?: boolean;
 }
 
 export interface RoomDefinition {

@@ -223,6 +223,7 @@ const createRoomOpenings = (room: RoomDefinition, purpose: RoomPurpose): Opening
       position: Math.max(1.05, doorWallLength - 1.08),
       width: purpose === "entry" ? 1.05 : 0.9,
       clearDepth: purpose === "entry" ? 1.05 : 0.9,
+      locked: true,
     },
   ];
 
@@ -234,6 +235,7 @@ const createRoomOpenings = (room: RoomDefinition, purpose: RoomPurpose): Opening
       position: mainWindowPosition,
       width: purpose === "balcony" ? 1.45 : purpose === "bathroom" ? 0.9 : 1.3,
       clearDepth: purpose === "balcony" ? 0.9 : 0.6,
+      locked: true,
     });
   }
 

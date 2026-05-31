@@ -18,6 +18,7 @@ import {
   findWallByRotation,
   getWallMetrics,
   getWallSegment,
+  isOpeningLocked,
   isWallLocked,
   normalizeOpeningForRoom,
   projectPointToWall,
@@ -78,7 +79,10 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
       transformMode !== "select",
   );
   const canTransformOpening = Boolean(
-    selectedOpening && selectedSceneOpening && transformMode !== "select",
+    selectedOpening &&
+      selectedSceneOpening &&
+      !isOpeningLocked(selectedOpening) &&
+      transformMode !== "select",
   );
   const canTransformWall = Boolean(
     selectedWall &&

@@ -1,13 +1,19 @@
 import {
   boundsIntersect,
   getObjectBounds,
+  getObjectFootprint,
+  getPolygonIntersectionPush,
   getRotatedHalfExtents,
+  getWallFootprint,
+  polygonsIntersect,
 } from "@/lib/room/collision";
 import type { Bounds2D } from "@/lib/room/collision";
 import { getRoomCutoutZone, getWallSegment } from "@/lib/room/roomGeometry";
 import type { Opening, RoomData, RoomObject, WallSegment } from "@/types/room";
 
 const EDGE_PADDING = 0.06;
+const WALL_COLLISION_THICKNESS = 0.1;
+const WALL_COLLISION_PADDING = 0.018;
 
 export interface ClearanceZone extends Bounds2D {
   id: string;
@@ -84,6 +90,12 @@ export const normalizeRotation = (rotation: number) => {
   return wrapped < 0 ? wrapped + 360 : wrapped;
 };
 
+const isCeilingObject = (object: Pick<RoomObject, "params">) =>
+  String(object.params.baseShape ?? "") === "ceiling_light";
+
+export const isWallCollisionRelevantObject = (object: RoomObject) =>
+  !isWallAttachedObject(object) && !isCeilingObject(object);
+
 const getWallMetrics = (wall: WallSegment) => {
   const dx = wall.to[0] - wall.from[0];
   const dz = wall.to[1] - wall.from[1];
@@ -96,6 +108,141 @@ const getWallMetrics = (wall: WallSegment) => {
     inwardNormalX: -dz / length,
     inwardNormalZ: dx / length,
   };
+};
+
+const clampObjectPositionToRoomShell = (
+  roomData: RoomData,
+  object: RoomObject,
+  desiredPosition: RoomObject["position"],
+  rotation = object.rotation,
+) => {
+  const { halfWidth, halfDepth } = getRotatedHalfExtents(
+    object.dimensions.width,
+    object.dimensions.depth,
+    rotation,
+  );
+
+  const clamped = {
+    x: Math.min(
+      roomData.room.width - halfWidth - EDGE_PADDING,
+      Math.max(halfWidth + EDGE_PADDING, desiredPosition.x),
+    ),
+    z: Math.min(
+      roomData.room.depth - halfDepth - EDGE_PADDING,
+      Math.max(halfDepth + EDGE_PADDING, desiredPosition.z),
+    ),
+  };
+
+  const cutout = getRoomCutoutZone(roomData.room);
+
+  if (!cutout) {
+    return clamped;
+  }
+
+  const intersectsCutout =
+    clamped.x + halfWidth > cutout.minX &&
+    clamped.x - halfWidth < cutout.maxX &&
+    clamped.z + halfDepth > cutout.minZ &&
+    clamped.z - halfDepth < cutout.maxZ;
+
+  if (!intersectsCutout) {
+    return clamped;
+  }
+
+  const moveLeftX = Math.max(
+    halfWidth + EDGE_PADDING,
+    cutout.minX - halfWidth - EDGE_PADDING,
+  );
+  const moveDownZ = Math.max(
+    halfDepth + EDGE_PADDING,
+    cutout.minZ - halfDepth - EDGE_PADDING,
+  );
+  const leftDelta = Math.abs(desiredPosition.x - moveLeftX);
+  const downDelta = Math.abs(desiredPosition.z - moveDownZ);
+
+  if (leftDelta <= downDelta) {
+    return {
+      x: Math.min(clamped.x, moveLeftX),
+      z: clamped.z,
+    };
+  }
+
+  return {
+    x: clamped.x,
+    z: Math.min(clamped.z, moveDownZ),
+  };
+};
+
+export const objectIntersectsWall = (
+  object: RoomObject,
+  wall: WallSegment,
+  padding = 0,
+) =>
+  isWallCollisionRelevantObject(object) &&
+  polygonsIntersect(
+    getObjectFootprint(object),
+    getWallFootprint(wall, WALL_COLLISION_THICKNESS),
+    padding,
+  );
+
+export const objectIntersectsAnyWall = (
+  roomData: RoomData,
+  object: RoomObject,
+  padding = 0,
+) =>
+  isWallCollisionRelevantObject(object) &&
+  roomData.room.walls.some((wall) => objectIntersectsWall(object, wall, padding));
+
+const repelObjectFromWalls = (
+  roomData: RoomData,
+  object: RoomObject,
+  position: RoomObject["position"],
+  rotation: number,
+) => {
+  if (!isWallCollisionRelevantObject(object)) {
+    return position;
+  }
+
+  let nextPosition = position;
+
+  for (let iteration = 0; iteration < 4; iteration += 1) {
+    let moved = false;
+    const candidateObject = {
+      ...object,
+      position: nextPosition,
+      rotation,
+    };
+
+    for (const wall of roomData.room.walls) {
+      const push = getPolygonIntersectionPush(
+        getObjectFootprint(candidateObject),
+        getWallFootprint(wall, WALL_COLLISION_THICKNESS),
+        WALL_COLLISION_PADDING,
+      );
+
+      if (!push) {
+        continue;
+      }
+
+      nextPosition = clampObjectPositionToRoomShell(
+        roomData,
+        object,
+        {
+          x: nextPosition.x + push.x,
+          z: nextPosition.z + push.z,
+        },
+        rotation,
+      );
+      candidateObject.position = nextPosition;
+      moved = true;
+    }
+
+    if (!moved) {
+      break;
+    }
+  }
+
+  return nextPosition;
 };
 
 export const getWallAttachedObjectTransform = (
@@ -162,61 +309,12 @@ export const clampObjectPositionToRoom = (
     return getWallAttachedObjectTransform(roomData, object, desiredPosition).position;
   }
 
-  const { halfWidth, halfDepth } = getRotatedHalfExtents(
-    object.dimensions.width,
-    object.dimensions.depth,
+  return repelObjectFromWalls(
+    roomData,
+    object,
+    clampObjectPositionToRoomShell(roomData, object, desiredPosition, rotation),
     rotation,
   );
-
-  const clamped = {
-    x: Math.min(
-      roomData.room.width - halfWidth - EDGE_PADDING,
-      Math.max(halfWidth + EDGE_PADDING, desiredPosition.x),
-    ),
-    z: Math.min(
-      roomData.room.depth - halfDepth - EDGE_PADDING,
-      Math.max(halfDepth + EDGE_PADDING, desiredPosition.z),
-    ),
-  };
-
-  const cutout = getRoomCutoutZone(roomData.room);
-
-  if (!cutout) {
-    return clamped;
-  }
-
-  const intersectsCutout =
-    clamped.x + halfWidth > cutout.minX &&
-    clamped.x - halfWidth < cutout.maxX &&
-    clamped.z + halfDepth > cutout.minZ &&
-    clamped.z - halfDepth < cutout.maxZ;
-
-  if (!intersectsCutout) {
-    return clamped;
-  }
-
-  const moveLeftX = Math.max(
-    halfWidth + EDGE_PADDING,
-    cutout.minX - halfWidth - EDGE_PADDING,
-  );
-  const moveDownZ = Math.max(
-    halfDepth + EDGE_PADDING,
-    cutout.minZ - halfDepth - EDGE_PADDING,
-  );
-  const leftDelta = Math.abs(desiredPosition.x - moveLeftX);
-  const downDelta = Math.abs(desiredPosition.z - moveDownZ);
-
-  if (leftDelta <= downDelta) {
-    return {
-      x: Math.min(clamped.x, moveLeftX),
-      z: clamped.z,
-    };
-  }
-
-  return {
-    x: clamped.x,
-    z: Math.min(clamped.z, moveDownZ),
-  };
 };
 
 const buildZoneFromOpening = (
@@ -239,44 +337,47 @@ const buildZoneFromOpening = (
     };
   }
 
-  const fromX = wall.from[0];
-  const fromZ = wall.from[1];
-  const toX = wall.to[0];
-  const toZ = wall.to[1];
-  const horizontal = Math.abs(toX - fromX) >= Math.abs(toZ - fromZ);
-
-  if (horizontal) {
-    const directionX = Math.sign(toX - fromX);
-    const centerX = fromX + directionX * opening.position;
-    const wallZ = fromZ;
-    const inwardPositiveZ = wallZ <= 0.001;
-    const zoneMinZ = inwardPositiveZ ? wallZ : wallZ - depth;
-    const zoneMaxZ = inwardPositiveZ ? wallZ + depth : wallZ;
-
-    return {
-      id: opening.id,
-      type: opening.type,
-      minX: centerX - halfOpening,
-      maxX: centerX + halfOpening,
-      minZ: zoneMinZ,
-      maxZ: zoneMaxZ,
-    };
-  }
-
-  const directionZ = Math.sign(toZ - fromZ);
-  const centerZ = fromZ + directionZ * opening.position;
-  const wallX = fromX;
-  const inwardPositiveX = wallX <= 0.001;
-  const zoneMinX = inwardPositiveX ? wallX : wallX - depth;
-  const zoneMaxX = inwardPositiveX ? wallX + depth : wallX;
+  const metrics = getWallMetrics(wall);
+  const startAlong = Math.max(0, opening.position - halfOpening);
+  const endAlong = Math.min(metrics.length, opening.position + halfOpening);
+  const points = [
+    {
+      x: wall.from[0] + metrics.directionX * startAlong,
+      z: wall.from[1] + metrics.directionZ * startAlong,
+    },
+    {
+      x: wall.from[0] + metrics.directionX * endAlong,
+      z: wall.from[1] + metrics.directionZ * endAlong,
+    },
+    {
+      x:
+        wall.from[0] +
+        metrics.directionX * endAlong +
+        metrics.inwardNormalX * depth,
+      z:
+        wall.from[1] +
+        metrics.directionZ * endAlong +
+        metrics.inwardNormalZ * depth,
+    },
+    {
+      x:
+        wall.from[0] +
+        metrics.directionX * startAlong +
+        metrics.inwardNormalX * depth,
+      z:
+        wall.from[1] +
+        metrics.directionZ * startAlong +
+        metrics.inwardNormalZ * depth,
+    },
+  ];
 
   return {
     id: opening.id,
     type: opening.type,
-    minX: zoneMinX,
-    maxX: zoneMaxX,
-    minZ: centerZ - halfOpening,
-    maxZ: centerZ + halfOpening,
+    minX: Math.min(...points.map((point) => point.x)),
+    maxX: Math.max(...points.map((point) => point.x)),
+    minZ: Math.min(...points.map((point) => point.z)),
+    maxZ: Math.max(...points.map((point) => point.z)),
   };
 };
 

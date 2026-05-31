@@ -29,7 +29,7 @@ import {
   INVENTORY_DRAG_MIME,
   type InventoryTemplate,
 } from "@/lib/room/inventoryCatalog";
-import { isWallLocked } from "@/lib/room/roomGeometry";
+import { isOpeningLocked, isWallLocked } from "@/lib/room/roomGeometry";
 import { roomPurposeOptions } from "@/lib/room/roomPresets";
 import {
   formatWarning,
@@ -647,6 +647,7 @@ function OpeningEditor({
   opening,
   wallIds,
   selected,
+  disabled = false,
   onSelect,
   onChange,
 }: {
@@ -654,6 +655,7 @@ function OpeningEditor({
   opening: Opening;
   wallIds: string[];
   selected: boolean;
+  disabled?: boolean;
   onSelect?: () => void;
   onChange: (
     payload: Partial<
@@ -680,8 +682,9 @@ function OpeningEditor({
           </span>
           <select
             value={opening.wallId}
+            disabled={disabled}
             onChange={(event) => onChange({ wallId: event.target.value })}
-            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
           >
             {wallIds.map((wallId) => (
               <option key={wallId} value={wallId}>
@@ -698,8 +701,9 @@ function OpeningEditor({
             type="number"
             step="0.05"
             value={opening.position}
+            disabled={disabled}
             onChange={(event) => onChange({ position: event.currentTarget.valueAsNumber })}
-            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
           />
         </label>
         <label className="space-y-1">
@@ -711,6 +715,7 @@ function OpeningEditor({
             step="0.05"
             min="0"
             value={opening.sillHeight ?? 0}
+            disabled={disabled}
             onChange={(event) => {
               const value = event.currentTarget.valueAsNumber;
 
@@ -718,7 +723,7 @@ function OpeningEditor({
                 onChange({ sillHeight: value });
               }
             }}
-            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
           />
         </label>
         <label className="space-y-1">
@@ -730,8 +735,9 @@ function OpeningEditor({
             step="0.05"
             min="0.3"
             value={opening.width}
+            disabled={disabled}
             onChange={(event) => onChange({ width: event.currentTarget.valueAsNumber })}
-            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
           />
         </label>
         <label className="space-y-1">
@@ -743,6 +749,7 @@ function OpeningEditor({
             step="0.05"
             min="0.2"
             value={opening.height ?? ""}
+            disabled={disabled}
             onChange={(event) => {
               const value = event.currentTarget.valueAsNumber;
 
@@ -750,7 +757,7 @@ function OpeningEditor({
                 onChange({ height: value });
               }
             }}
-            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
           />
         </label>
         <label className="space-y-1">
@@ -761,8 +768,9 @@ function OpeningEditor({
             type="number"
             step="15"
             value={opening.rotation ?? 0}
+            disabled={disabled}
             onChange={(event) => onChange({ rotation: event.currentTarget.valueAsNumber })}
-            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+            className="w-full rounded-lg border border-white/10 bg-[#111924] px-2 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
           />
         </label>
       </div>
@@ -780,17 +788,62 @@ function SelectedOpeningEditor({
   wallIds: string[];
 }) {
   const updateOpening = useRoomStore((state) => state.updateOpening);
+  const toggleOpeningLock = useRoomStore((state) => state.toggleOpeningLock);
+  const deleteOpening = useRoomStore((state) => state.deleteOpening);
+  const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
+  const openingLocked = isOpeningLocked(opening);
 
   return (
-    <div className="mt-4">
+    <div className="mt-4 space-y-3">
+      <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 p-3">
+        <div>
+          <div className="text-sm font-semibold text-white">
+            {formatOpeningLabel(locale, opening)}
+          </div>
+          <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-slate-500">
+            {openingLocked ? t(locale, "locked") : t(locale, "editable")}
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => toggleOpeningLock(opening.id)}
+            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${
+              openingLocked
+                ? "border-[#6d4a29] bg-[#25180f] text-[#f5c28b] hover:border-[#ffb16a] hover:text-white"
+                : "border-white/10 bg-[#111924] text-slate-200 hover:border-[#32516c] hover:text-white"
+            }`}
+          >
+            <Lock className="h-3.5 w-3.5" />
+            {openingLocked ? t(locale, "unlock") : t(locale, "lock")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              deleteOpening(opening.id);
+              setSelectedStructure(null);
+            }}
+            className="inline-flex items-center gap-2 rounded-xl border border-[#6e2a2a] bg-[#2a1313] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#ff8e8e] transition hover:border-[#ff5a5a] hover:text-white"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {t(locale, "deleteObject")}
+          </button>
+        </div>
+      </div>
       <OpeningEditor
         locale={locale}
         opening={opening}
         wallIds={wallIds}
         selected
+        disabled={openingLocked}
         onSelect={undefined}
         onChange={(payload) => updateOpening(opening.id, payload)}
       />
+      {openingLocked ? (
+        <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-3 text-xs leading-5 text-amber-100">
+          {t(locale, "lockedEditHint")}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1728,8 +1781,11 @@ function RandomLayoutsPanel({ locale }: { locale: Locale }) {
   const randomizeLayout = useRoomStore((state) => state.randomizeLayout);
   const clearRandomLayoutOptions = useRoomStore((state) => state.clearRandomLayoutOptions);
   const roomData = useRoomStore((state) => state.roomData);
+  const validationWarnings = useRoomStore((state) => state.validationWarnings);
   const visibleOptions = optionsVisible ? options : [];
   const cleanCount = visibleOptions.filter((option) => option.warnings.length === 0).length;
+  const openBoundaryWarning =
+    validationWarnings.find((warning) => warning.code === "room_open_outline") ?? null;
   const helperText =
     locale === "en"
       ? "Randomize uses a fast wall/floor sweep now: it caches the stable result, keeps meaningful differences, and skips tiny shifted copies."
@@ -1749,8 +1805,9 @@ function RandomLayoutsPanel({ locale }: { locale: Locale }) {
         </div>
         <button
           type="button"
+          disabled={Boolean(openBoundaryWarning)}
           onClick={randomizeLayout}
-          className="inline-flex items-center gap-2 rounded-xl border border-[#1f4b65] bg-[#102234] px-3 py-2 text-sm font-medium text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white"
+          className="inline-flex items-center gap-2 rounded-xl border border-[#1f4b65] bg-[#102234] px-3 py-2 text-sm font-medium text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
         >
           <RefreshCw className="h-4 w-4" />
           {t(locale, "randomizeRoom")}
@@ -1760,6 +1817,12 @@ function RandomLayoutsPanel({ locale }: { locale: Locale }) {
       <div className="mt-4 rounded-xl border border-white/10 bg-[#111924] px-3 py-3 text-xs leading-5 text-slate-400">
         {helperText}
       </div>
+
+      {openBoundaryWarning ? (
+        <div className="mt-4 rounded-xl border border-[#6e2424] bg-[#2a1313] px-3 py-3 text-sm leading-6 text-[#ff9b9b]">
+          {formatWarning(locale, openBoundaryWarning, roomData)}
+        </div>
+      ) : null}
 
       {visibleOptions.length ? (
         <div className="mt-4 space-y-3">

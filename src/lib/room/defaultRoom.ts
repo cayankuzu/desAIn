@@ -24,6 +24,7 @@ const defaultOpenings: Opening[] = [
     position: 1.2,
     width: 0.9,
     clearDepth: 0.9,
+    locked: true,
   },
   {
     id: "window_1",
@@ -32,6 +33,7 @@ const defaultOpenings: Opening[] = [
     position: 3,
     width: 1.3,
     clearDepth: 0.6,
+    locked: true,
   },
 ];
 

@@ -9,11 +9,12 @@ import {
   getOpeningHeight,
   getOpeningSceneTransform,
 } from "@/lib/room/openingPlacement";
-import { getWallMetrics, getWallSegment } from "@/lib/room/roomGeometry";
+import { getWallMetrics, getWallSegment, isWallLocked } from "@/lib/room/roomGeometry";
 import type { Opening, RoomDefinition } from "@/types/room";
 
 interface RoomWallsProps {
   room: RoomDefinition;
+  onWallReady?: (wallId: string, node: Group | null) => void;
   onOpeningReady?: (openingId: string, node: Group | null) => void;
 }
 
@@ -114,7 +115,7 @@ function OpeningVisual({
   );
 }
 
-export function RoomWalls({ room, onOpeningReady }: RoomWallsProps) {
+export function RoomWalls({ room, onWallReady, onOpeningReady }: RoomWallsProps) {
   const selectedStructure = useUIStore((state) => state.selectedStructure);
   const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
   const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
@@ -134,7 +135,16 @@ export function RoomWalls({ room, onOpeningReady }: RoomWallsProps) {
         const { length, directionX, directionZ, rotationY } = getWallMetrics(wall);
         const selected =
           selectedStructure?.type === "wall" && selectedStructure.id === wall.id;
-        const wallColor = selected ? "#8cb9ff" : index % 2 === 0 ? "#717a85" : "#646d78";
+        const locked = isWallLocked(wall);
+        const wallColor = selected
+          ? "#8cb9ff"
+          : locked
+            ? index % 2 === 0
+              ? "#626c78"
+              : "#596370"
+            : "#7289a8";
+        const centerX = (wall.from[0] + wall.to[0]) / 2;
+        const centerZ = (wall.from[1] + wall.to[1]) / 2;
         const wallOpenings = room.openings
           .filter((opening) => opening.wallId === wall.id)
           .map((opening) => ({
@@ -216,7 +226,16 @@ export function RoomWalls({ room, onOpeningReady }: RoomWallsProps) {
 
         wallPieces.push(renderWallPiece(cursor, length, 0, wallHeight, `${wall.id}-after`));
 
-        return <group key={wall.id}>{wallPieces}</group>;
+        return (
+          <group key={wall.id}>
+            {wallPieces}
+            <group
+              ref={(node) => onWallReady?.(wall.id, node)}
+              position={[centerX, wallHeight / 2, centerZ]}
+              rotation={[0, rotationY, 0]}
+            />
+          </group>
+        );
       })}
 
       {room.openings.map((opening) => {

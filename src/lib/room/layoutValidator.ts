@@ -3,10 +3,11 @@ import {
   getMountHeight,
   getActiveClearanceZones,
   isWallAttachedObject,
+  objectIntersectsAnyWall,
   objectsHavePlacementCollision,
   objectIntersectsZone,
 } from "@/lib/room/constraints";
-import { getRoomCutoutZone } from "@/lib/room/roomGeometry";
+import { getRoomCutoutZone, isRoomOutlineClosed } from "@/lib/room/roomGeometry";
 import type { LayoutWarning, RoomData } from "@/types/room";
 
 const isOverheadObject = (roomObject: RoomData["objects"][number]) =>
@@ -17,6 +18,14 @@ export const validateRoomLayout = (roomData: RoomData): LayoutWarning[] => {
   const warnings: LayoutWarning[] = [];
   const zones = getActiveClearanceZones(roomData);
   const cutout = getRoomCutoutZone(roomData.room);
+
+  if (!isRoomOutlineClosed(roomData.room)) {
+    warnings.push({
+      code: "room_open_outline",
+      level: "error",
+      message: "Room outer boundary must be closed.",
+    });
+  }
 
   roomData.objects.forEach((object) => {
     const bounds = getObjectBounds(object);
@@ -41,6 +50,19 @@ export const validateRoomLayout = (roomData: RoomData): LayoutWarning[] => {
         level: "error",
         objectId: object.id,
         message: `${object.label} exceeds the room bounds.`,
+      });
+    }
+
+    if (
+      !isWallAttachedObject(object) &&
+      !isOverheadObject(object) &&
+      objectIntersectsAnyWall(roomData, object)
+    ) {
+      warnings.push({
+        code: "wall_collision",
+        level: "error",
+        objectId: object.id,
+        message: `${object.label} intersects a wall.`,
       });
     }
 

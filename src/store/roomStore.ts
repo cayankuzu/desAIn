@@ -25,6 +25,7 @@ import {
   getWallMetrics,
   getWallLength,
   getWallSegment,
+  isOpeningLocked,
   isWallLocked,
   projectPointToWall,
   normalizeOpeningForRoom,
@@ -565,6 +566,9 @@ const hasBlockingWarnings = (roomData: RoomData, objects: RoomObject[]) =>
     ...roomData,
     objects,
   }).some((warning) => warning.level === "error" || warning.code === "collision");
+
+const hasOpenRoomBoundary = (warnings: LayoutWarning[]) =>
+  warnings.some((warning) => warning.code === "room_open_outline");
 
 const normalizeRoomObjects = (roomData: RoomData, objects: RoomObject[]) =>
   objects.map((object) => {
@@ -2197,6 +2201,8 @@ interface RoomStore {
       sillHeight?: number;
     },
   ) => void;
+  toggleOpeningLock: (openingId: string, locked?: boolean) => void;
+  deleteOpening: (openingId: string) => void;
   updateWallSegment: (
     wallId: string,
     payload: Partial<{
@@ -2423,6 +2429,12 @@ export const useRoomStore = create<RoomStore>((set) => ({
   updateOpening: (openingId, payload) =>
     set((state) => {
       const roomData = cloneRoomData(state.roomData);
+      const targetOpening = roomData.room.openings.find((opening) => opening.id === openingId);
+
+      if (!targetOpening || isOpeningLocked(targetOpening)) {
+        return state;
+      }
+
       roomData.room.openings = roomData.room.openings.map((opening) => {
         if (opening.id !== openingId) {
           return opening;
@@ -2461,7 +2473,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       const roomData = cloneRoomData(state.roomData);
       const opening = roomData.room.openings.find((entry) => entry.id === openingId);
 
-      if (!opening) {
+      if (!opening || isOpeningLocked(opening)) {
         return state;
       }
 
@@ -2501,6 +2513,58 @@ export const useRoomStore = create<RoomStore>((set) => ({
         roomData,
         validationWarnings: validateRoomLayout(roomData),
         ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
+      };
+    }),
+  toggleOpeningLock: (openingId, locked) =>
+    set((state) => {
+      const roomData = cloneRoomData(state.roomData);
+      const openingIndex = roomData.room.openings.findIndex(
+        (opening) => opening.id === openingId,
+      );
+
+      if (openingIndex < 0) {
+        return state;
+      }
+
+      const currentLocked = isOpeningLocked(roomData.room.openings[openingIndex]);
+      roomData.room.openings[openingIndex] = {
+        ...roomData.room.openings[openingIndex],
+        locked: locked ?? !currentLocked,
+      };
+
+      return {
+        roomData,
+        validationWarnings: validateRoomLayout(roomData),
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastEditorStatus: { key: "openingUpdated" },
+      };
+    }),
+  deleteOpening: (openingId) =>
+    set((state) => {
+      if (!state.roomData.room.openings.some((opening) => opening.id === openingId)) {
+        return state;
+      }
+
+      const roomData = cloneRoomData(state.roomData);
+      roomData.room.openings = roomData.room.openings.filter(
+        (opening) => opening.id !== openingId,
+      );
+
+      return {
+        roomData,
+        validationWarnings: validateRoomLayout(roomData),
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastEditorStatus: { key: "openingUpdated" },
       };
     }),
   addDividerWall: () => {
@@ -3144,6 +3208,20 @@ export const useRoomStore = create<RoomStore>((set) => ({
   randomizeLayout: () =>
     set((state) => {
       const roomData = cloneRoomData(state.roomData);
+      const validationWarnings = validateRoomLayout(roomData);
+
+      if (hasOpenRoomBoundary(validationWarnings)) {
+        return {
+          validationWarnings,
+          randomLayoutOptions: [],
+          activeRandomLayoutOptionId: null,
+          randomLayoutSourceSignature: null,
+          randomLayoutOptionSignatures: [],
+          randomLayoutOptionsVisible: true,
+          lastEditorStatus: { key: "randomLayoutOptionsReady" },
+        };
+      }
+
       const currentSourceSignature = getRandomLayoutInputSignature(roomData);
       const currentLayoutSignature = getRoomDataSignature(roomData);
       const activeOptionBySignature = state.randomLayoutOptions.find(
@@ -3225,6 +3303,20 @@ export const useRoomStore = create<RoomStore>((set) => ({
 
       const scopeIds = new Set(state.selectedObjectIds);
       const roomData = cloneRoomData(state.roomData);
+      const validationWarnings = validateRoomLayout(roomData);
+
+      if (hasOpenRoomBoundary(validationWarnings)) {
+        return {
+          validationWarnings,
+          randomLayoutOptions: [],
+          activeRandomLayoutOptionId: null,
+          randomLayoutSourceSignature: null,
+          randomLayoutOptionSignatures: [],
+          randomLayoutOptionsVisible: true,
+          lastEditorStatus: { key: "randomLayoutOptionsReady" },
+        };
+      }
+
       const originalObjectsById = new Map(
         roomData.objects.map((object) => [object.id, cloneRoomObject(object)]),
       );
