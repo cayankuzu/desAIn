@@ -111,6 +111,7 @@ export type MessageKey =
   | "open"
   | "editable"
   | "positionX"
+  | "positionY"
   | "positionZ"
   | "rotation"
   | "color"
@@ -241,6 +242,7 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     open: "Free",
     editable: "Editable",
     positionX: "Position X",
+    positionY: "Position Y",
     positionZ: "Position Z",
     rotation: "Rotation",
     color: "Color",
@@ -371,6 +373,7 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     open: "Serbest",
     editable: "D\u00fczenlenebilir",
     positionX: "Konum X",
+    positionY: "Konum Y",
     positionZ: "Konum Z",
     rotation: "D\u00f6n\u00fc\u015f",
     color: "Renk",

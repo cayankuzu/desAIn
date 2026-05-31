@@ -21,6 +21,7 @@ import {
   Shuffle,
   Trash2,
   Undo2,
+  Unlock,
   RotateCw,
 } from "lucide-react";
 import {
@@ -117,6 +118,17 @@ const inventoryCategories: Array<{
 const inventoryCategoryLabels = new Map(
   inventoryCategories.map((category) => [category.id, category.label]),
 );
+
+const compactActionButtonBase =
+  "inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-[11px] font-semibold uppercase tracking-[0.11em] transition";
+const neutralActionButtonClass =
+  "border-white/10 bg-[#111924] text-slate-200 hover:border-[#32516c] hover:text-white";
+const lockedActionButtonClass =
+  "border-[#6d4a29] bg-[#25180f] text-[#f5c28b] hover:border-[#ffb16a] hover:text-white";
+const primaryActionButtonClass =
+  "border-[#24405a] bg-[#102234] text-[#8cb9ff] hover:border-[#4ea8ff] hover:text-white";
+const dangerActionButtonClass =
+  "border-[#6e2a2a] bg-[#2a1313] text-[#ff8e8e] hover:border-[#ff5a5a] hover:text-white";
 
 const hasInventoryTag = (item: InventoryTemplate, tags: string[]) =>
   tags.some((tag) =>
@@ -318,13 +330,13 @@ export function Sidebar() {
                 type="button"
                 onClick={() => setActiveSidebarTab(tab.id)}
                 aria-pressed={active}
-                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition ${
                   active
                     ? "border-[#4ea8ff] bg-[#102234] text-white"
                     : "border-white/10 bg-[#0d141d] text-slate-300 hover:border-[#32516c] hover:text-white"
                 }`}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-3.5 w-3.5" />
                 {t(locale, tab.labelKey)}
               </button>
             );
@@ -708,7 +720,7 @@ function OpeningEditor({
         </label>
         <label className="space-y-1">
           <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-            Konum Y
+            {t(locale, "positionY")}
           </span>
           <input
             type="number"
@@ -792,11 +804,12 @@ function SelectedOpeningEditor({
   const deleteOpening = useRoomStore((state) => state.deleteOpening);
   const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
   const openingLocked = isOpeningLocked(opening);
+  const openingLockLabel = openingLocked ? t(locale, "unlock") : t(locale, "lock");
 
   return (
     <div className="mt-4 space-y-3">
-      <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 p-3">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+        <div className="min-w-0">
           <div className="text-sm font-semibold text-white">
             {formatOpeningLabel(locale, opening)}
           </div>
@@ -807,23 +820,29 @@ function SelectedOpeningEditor({
         <div className="flex gap-2">
           <button
             type="button"
+            title={openingLockLabel}
+            aria-label={openingLockLabel}
             onClick={() => toggleOpeningLock(opening.id)}
-            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${
-              openingLocked
-                ? "border-[#6d4a29] bg-[#25180f] text-[#f5c28b] hover:border-[#ffb16a] hover:text-white"
-                : "border-white/10 bg-[#111924] text-slate-200 hover:border-[#32516c] hover:text-white"
+            className={`${compactActionButtonBase} ${
+              openingLocked ? lockedActionButtonClass : neutralActionButtonClass
             }`}
           >
-            <Lock className="h-3.5 w-3.5" />
-            {openingLocked ? t(locale, "unlock") : t(locale, "lock")}
+            {openingLocked ? (
+              <Unlock className="h-3.5 w-3.5" />
+            ) : (
+              <Lock className="h-3.5 w-3.5" />
+            )}
+            {openingLockLabel}
           </button>
           <button
             type="button"
+            title={t(locale, "deleteObject")}
+            aria-label={t(locale, "deleteObject")}
             onClick={() => {
               deleteOpening(opening.id);
               setSelectedStructure(null);
             }}
-            className="inline-flex items-center gap-2 rounded-xl border border-[#6e2a2a] bg-[#2a1313] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#ff8e8e] transition hover:border-[#ff5a5a] hover:text-white"
+            className={`${compactActionButtonBase} ${dangerActionButtonClass}`}
           >
             <Trash2 className="h-3.5 w-3.5" />
             {t(locale, "deleteObject")}
@@ -872,30 +891,35 @@ function SelectedWallEditor({
   }
 
   const wallLocked = isWallLocked(wall);
+  const wallLockLabel = wallLocked ? t(locale, "unlock") : t(locale, "lock");
 
   return (
     <div className="mt-4 space-y-4 text-sm text-slate-300">
-      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-lg font-semibold text-white">
+          <div className="min-w-0">
+            <div className="text-base font-semibold text-white">
               {formatWallLabel(locale, wall.id)}
             </div>
-            <div className="mt-1 text-xs uppercase tracking-[0.22em] text-slate-500">
-              {t(locale, "wall")}
+            <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-slate-500">
+              {`${t(locale, "wall")} / ${wallLocked ? t(locale, "locked") : t(locale, "editable")}`}
             </div>
           </div>
           <button
             type="button"
+            title={wallLockLabel}
+            aria-label={wallLockLabel}
             onClick={() => toggleWallLock(wall.id)}
-            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] transition ${
-              wallLocked
-                ? "border-amber-400/35 bg-amber-400/10 text-amber-200 hover:border-amber-300 hover:text-white"
-                : "border-[#24405a] bg-[#102234] text-[#8cb9ff] hover:border-[#4ea8ff] hover:text-white"
+            className={`${compactActionButtonBase} ${
+              wallLocked ? lockedActionButtonClass : primaryActionButtonClass
             }`}
           >
-            <Lock className="h-3.5 w-3.5" />
-            {wallLocked ? t(locale, "unlock") : t(locale, "lock")}
+            {wallLocked ? (
+              <Unlock className="h-3.5 w-3.5" />
+            ) : (
+              <Lock className="h-3.5 w-3.5" />
+            )}
+            {wallLockLabel}
           </button>
         </div>
 
@@ -1005,7 +1029,7 @@ function SelectedWallEditor({
           type="button"
           disabled={wallLocked}
           onClick={() => splitWall(wall.id)}
-          className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#24405a] bg-[#102234] px-3 py-2.5 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white ${
+          className={`mt-4 inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-[#24405a] bg-[#102234] px-3 text-xs font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white ${
             wallLocked ? "cursor-not-allowed opacity-50" : ""
           }`}
         >
@@ -1223,6 +1247,7 @@ function SelectedObjectEditor({
   const mountHeight =
     typeof object.params.mountHeight === "number" ? object.params.mountHeight : 0;
   const maxObjectHeight = Math.max(0.05, Number((roomHeight - mountHeight).toFixed(2)));
+  const objectLockLabel = object.locked ? t(locale, "unlock") : t(locale, "lock");
 
   const updateNumericProperty = (
     value: number,
@@ -1237,10 +1262,10 @@ function SelectedObjectEditor({
 
   return (
     <div className="mt-4 space-y-4 text-sm text-slate-300">
-      <div className="rounded-xl border border-white/10 bg-[#101822] p-4">
+      <div className="rounded-xl border border-white/10 bg-[#101822] p-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="text-lg font-semibold text-white">
+          <div className="min-w-0">
+            <div className="text-base font-semibold text-white">
               {getLocalizedObjectLabel(locale, object)}
             </div>
             <div className="mt-1 flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.14em]">
@@ -1261,22 +1286,28 @@ function SelectedObjectEditor({
           <div className="flex gap-2">
             <button
               type="button"
+              title={objectLockLabel}
+              aria-label={objectLockLabel}
               onClick={() => toggleObjectLock(object.id)}
-              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 font-medium transition ${
-                object.locked
-                  ? "border-[#6d4a29] bg-[#25180f] text-[#f5c28b] hover:border-[#ffb16a]"
-                  : "border-white/10 bg-[#111924] text-slate-200 hover:border-[#32516c] hover:text-white"
+              className={`${compactActionButtonBase} ${
+                object.locked ? lockedActionButtonClass : neutralActionButtonClass
               }`}
             >
-              <Lock className="h-4 w-4" />
-              {object.locked ? t(locale, "unlock") : t(locale, "lock")}
+              {object.locked ? (
+                <Unlock className="h-3.5 w-3.5" />
+              ) : (
+                <Lock className="h-3.5 w-3.5" />
+              )}
+              {objectLockLabel}
             </button>
             <button
               type="button"
+              title={t(locale, "deleteObject")}
+              aria-label={t(locale, "deleteObject")}
               onClick={() => deleteObject(object.id)}
-              className="inline-flex items-center gap-2 rounded-xl border border-[#6e2a2a] bg-[#2a1313] px-3 py-2 font-medium text-[#ff8e8e] transition hover:border-[#ff5a5a] hover:text-white"
+              className={`${compactActionButtonBase} ${dangerActionButtonClass}`}
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="h-3.5 w-3.5" />
               {t(locale, "deleteObject")}
             </button>
           </div>
@@ -1788,8 +1819,8 @@ function RandomLayoutsPanel({ locale }: { locale: Locale }) {
     validationWarnings.find((warning) => warning.code === "room_open_outline") ?? null;
   const helperText =
     locale === "en"
-      ? "Randomize uses a fast wall/floor sweep now: it caches the stable result, keeps meaningful differences, and skips tiny shifted copies."
-      : "Rastgele Diz artik hizli duvar/zemin taramasi kullanir: stabil sonucu kaydeder, anlamli farklari tutar ve minik kaydirilmis kopyalari atlar.";
+      ? "Randomize runs a fast wall/floor sweep, keeps the same cached list while the room stays unchanged, and skips tiny shifted copies."
+      : "Rastgele dizim hızlı duvar/zemin taraması yapar; oda değişmediğinde aynı listeyi korur ve küçük kaydırılmış kopyaları atlar.";
 
   return (
     <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
@@ -1807,7 +1838,7 @@ function RandomLayoutsPanel({ locale }: { locale: Locale }) {
           type="button"
           disabled={Boolean(openBoundaryWarning)}
           onClick={randomizeLayout}
-          className="inline-flex items-center gap-2 rounded-xl border border-[#1f4b65] bg-[#102234] px-3 py-2 text-sm font-medium text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+          className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#1f4b65] bg-[#102234] px-3 text-xs font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
         >
           <RefreshCw className="h-4 w-4" />
           {t(locale, "randomizeRoom")}
