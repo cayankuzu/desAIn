@@ -1682,8 +1682,8 @@ function RandomLayoutsPanel({ locale }: { locale: Locale }) {
   const cleanCount = visibleOptions.filter((option) => option.warnings.length === 0).length;
   const helperText =
     locale === "en"
-      ? "Randomize now systematically sweeps wall anchors and floor zones, keeps the cached result stable, and filters slightly shifted copies."
-      : "Rastgele Diz artik duvar dayanaklarini ve zemin bolgelerini sistematik tarar, kayitli sonucu stabil tutar ve hafif kaydirilmis kopyalari eler.";
+      ? "Randomize uses a fast wall/floor sweep now: it caches the stable result, keeps meaningful differences, and skips tiny shifted copies."
+      : "Rastgele Diz artik hizli duvar/zemin taramasi kullanir: stabil sonucu kaydeder, anlamli farklari tutar ve minik kaydirilmis kopyalari atlar.";
 
   return (
     <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">

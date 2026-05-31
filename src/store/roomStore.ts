@@ -892,7 +892,7 @@ const getRoomDataSignature = (
 
 const getRandomLayoutInputSignature = (roomData: RoomData) =>
   JSON.stringify({
-    algorithm: "systematic-layout-v3",
+    algorithm: "systematic-layout-v4-fast",
     room: {
       shape: roomData.room.shape,
       purpose: roomData.room.purpose,
@@ -1478,7 +1478,9 @@ type PlacementPool = {
   candidates: PlacementCandidate[];
 };
 
-const LAYOUT_SEARCH_SAFETY_LIMIT = 3600;
+const FLOOR_CANDIDATE_LIMIT = 84;
+const PLACEMENT_CANDIDATE_SCAN_LIMIT = 18;
+const LAYOUT_SEARCH_PASS_LIMIT = 260;
 
 const getLayoutObjectPriority = (object: RoomObject) => {
   const wallPriority =
@@ -1523,6 +1525,42 @@ const dedupePlacementCandidates = (candidates: PlacementCandidate[]) => {
     seen.add(signature);
     return true;
   });
+};
+
+const spreadPlacementCandidates = (
+  candidates: PlacementCandidate[],
+  limit: number,
+) => {
+  if (candidates.length <= limit) {
+    return candidates;
+  }
+
+  const selected: PlacementCandidate[] = [];
+  const selectedIndexes = new Set<number>();
+  const lastIndex = candidates.length - 1;
+
+  for (let index = 0; index < limit; index += 1) {
+    const candidateIndex =
+      limit === 1 ? 0 : Math.round((index / (limit - 1)) * lastIndex);
+
+    if (!selectedIndexes.has(candidateIndex)) {
+      selectedIndexes.add(candidateIndex);
+      selected.push(candidates[candidateIndex]);
+    }
+  }
+
+  for (
+    let candidateIndex = 0;
+    selected.length < limit && candidateIndex < candidates.length;
+    candidateIndex += 1
+  ) {
+    if (!selectedIndexes.has(candidateIndex)) {
+      selectedIndexes.add(candidateIndex);
+      selected.push(candidates[candidateIndex]);
+    }
+  }
+
+  return selected;
 };
 
 const getWallAlongStops = (wallLength: number, object: RoomObject) => {
@@ -1640,7 +1678,10 @@ const getFloorPlacementCandidates = (
     });
   });
 
-  return dedupePlacementCandidates(candidates);
+  return spreadPlacementCandidates(
+    dedupePlacementCandidates(candidates),
+    FLOOR_CANDIDATE_LIMIT,
+  );
 };
 
 const getPlacementCandidates = (
@@ -1727,45 +1768,82 @@ const getCandidateMovement = (sourceObject: RoomObject, candidate: RoomObject) =
     candidate.position.z - sourceObject.position.z,
   ) + getShortestRotationDelta(candidate.rotation, sourceObject.rotation) / 90;
 
-const getCandidatePlacementScore = (
+const getFastCandidatePlacementScore = (
   roomData: RoomData,
   draftObjects: RoomObject[],
   candidate: RoomObject,
   sourceObject: RoomObject,
+  zones: ReturnType<typeof getActiveClearanceZones>,
 ) => {
-  const orientedDraft = orientSocialObjects(roomData, [
-    ...draftObjects,
-    candidate,
-  ]);
-  const warnings = validateRoomLayout({
-    ...roomData,
-    objects: orientedDraft,
-  });
-  const candidateWarnings = warnings.filter(
-    (warning) =>
-      warning.objectId === candidate.id || warning.relatedObjectId === candidate.id,
+  const roomCenter = {
+    x: roomData.room.width / 2,
+    z: roomData.room.depth / 2,
+  };
+  const relationalObjects = getRelationalObjects(
+    roomData,
+    candidate.id,
+    draftObjects,
   );
+  const nearestTv = getNearestObject(
+    candidate,
+    relationalObjects.filter((object) => object.category === "tv_unit"),
+  );
+  const nearestSeat = getNearestObject(
+    candidate,
+    relationalObjects.filter(
+      (object) => object.category === "sofa" || object.category === "chair",
+    ),
+  );
+  const nearestTable = getNearestObject(
+    candidate,
+    relationalObjects.filter((object) => object.category === "table"),
+  );
+  const clearancePenalty =
+    !isWallAttachedObject(candidate) && candidate.dimensions.height > 0.06
+      ? zones.reduce(
+          (total, zone) =>
+            total + (objectIntersectsZone(candidate, zone) ? 120 : 0),
+          0,
+        )
+      : 0;
+  const movement = getCandidateMovement(sourceObject, candidate);
+  const centerDistance =
+    Math.hypot(candidate.position.x - roomCenter.x, candidate.position.z - roomCenter.z) /
+    Math.max(roomData.room.width, roomData.room.depth, 0.01);
+  let relationPenalty = 0;
 
-  if (
-    candidateWarnings.some(
-      (warning) => warning.level === "error" || warning.code === "collision",
-    )
-  ) {
-    return null;
+  if (candidate.category === "sofa" || candidate.category === "chair") {
+    const target = nearestTv?.position ?? nearestTable?.position ?? roomCenter;
+    const targetDistance = Math.hypot(
+      candidate.position.x - target.x,
+      candidate.position.z - target.z,
+    );
+
+    relationPenalty += (1 - getFacingQuality(candidate, target)) * 12;
+    relationPenalty +=
+      nearestTv && (targetDistance < 1.15 || targetDistance > 5)
+        ? Math.min(Math.abs(targetDistance - 2.6), 3) * 3
+        : 0;
   }
 
-  const warningPenalty = candidateWarnings.reduce(
-    (total, warning) => total + (warning.level === "error" ? 1000 : 120),
-    0,
-  );
-  const movement = getCandidateMovement(sourceObject, candidate);
+  if (candidate.category === "tv_unit" && nearestSeat) {
+    relationPenalty += (1 - getFacingQuality(candidate, nearestSeat.position)) * 14;
+  }
+
+  if (candidate.category === "table" && nearestSeat) {
+    const seatDistance = Math.hypot(
+      candidate.position.x - nearestSeat.position.x,
+      candidate.position.z - nearestSeat.position.z,
+    );
+
+    relationPenalty += seatDistance < 0.6 ? (0.6 - seatDistance) * 12 : 0;
+  }
 
   return (
-    getDesignPenalty(roomData, orientedDraft) +
-    getLayoutBalancePenalty(roomData, orientedDraft) * 0.45 +
-    getAwkwardGapPenalty(orientedDraft) +
-    warningPenalty -
-    Math.min(movement, 4) * 0.55
+    clearancePenalty +
+    relationPenalty +
+    centerDistance * (isWallAttachedObject(candidate) ? 2 : 6) -
+    Math.min(movement, 4) * 0.35
   );
 };
 
@@ -1775,6 +1853,7 @@ const pickPlacementCandidate = (
   pool: PlacementPool,
   passIndex: number,
   seedSignature: string,
+  zones: ReturnType<typeof getActiveClearanceZones>,
   forcedIndex?: number,
 ) => {
   let bestObject: RoomObject | null = null;
@@ -1787,8 +1866,15 @@ const pickPlacementCandidate = (
     seedSignature,
     forcedIndex,
   );
+  const scanIndexes =
+    forcedIndex === undefined
+      ? indexes.slice(0, PLACEMENT_CANDIDATE_SCAN_LIMIT)
+      : [
+          forcedIndex,
+          ...indexes.filter((candidateIndex) => candidateIndex !== forcedIndex),
+        ].slice(0, PLACEMENT_CANDIDATE_SCAN_LIMIT);
 
-  indexes.forEach((candidateIndex, orderIndex) => {
+  scanIndexes.forEach((candidateIndex, orderIndex) => {
     const candidate = cloneRoomObject(pool.candidates[candidateIndex].object);
     const intersects = draftObjects.some((existing) =>
       objectsHavePlacementCollision(existing, candidate, 0.06),
@@ -1798,17 +1884,13 @@ const pickPlacementCandidate = (
       return;
     }
 
-    const score = getCandidatePlacementScore(
+    const score = getFastCandidatePlacementScore(
       roomData,
       draftObjects,
       candidate,
       pool.sourceObject,
+      zones,
     );
-
-    if (score === null) {
-      return;
-    }
-
     const movement = getCandidateMovement(pool.sourceObject, candidate);
     const stableScore = score + orderIndex * 0.0001;
 
@@ -1834,26 +1916,30 @@ const getSystematicLayoutSearchPassCount = (pools: PlacementPool[]) => {
     return 1;
   }
 
-  let exactProduct = 1;
-  let canExhaustProduct = true;
-
-  for (const count of candidateCounts) {
-    if (exactProduct > LAYOUT_SEARCH_SAFETY_LIMIT / count) {
-      canExhaustProduct = false;
-      break;
-    }
-
-    exactProduct *= count;
-  }
-
   const anchorSweeps = candidateCounts.reduce((total, count) => total + count, 0);
-  const pairSweeps = Math.max(...candidateCounts) * Math.max(1, pools.length * 2);
-  const desiredPasses = canExhaustProduct
-    ? exactProduct
-    : Math.max(anchorSweeps, pairSweeps, LAYOUT_SEARCH_SAFETY_LIMIT);
+  const desiredPasses = Math.max(anchorSweeps, Math.max(...candidateCounts));
 
-  return Math.max(1, Math.min(LAYOUT_SEARCH_SAFETY_LIMIT, desiredPasses));
+  return Math.max(1, Math.min(LAYOUT_SEARCH_PASS_LIMIT, desiredPasses));
 };
+
+const finishSystematicLayout = (roomData: RoomData, objects: RoomObject[]) =>
+  orientSocialObjects(
+    roomData,
+    objects.map((object) => cloneRoomObject(object)),
+  ).map((object) => {
+    const normalized = isFixedDuringRandomize(object)
+      ? object
+      : normalizeRoomObjects(roomData, [object])[0];
+
+    return {
+      ...normalized,
+      position: {
+        x: Number(normalized.position.x.toFixed(3)),
+        z: Number(normalized.position.z.toFixed(3)),
+      },
+      rotation: Math.round(normalizeRotation(normalized.rotation)),
+    };
+  });
 
 const buildSystematicLayout = (
   roomData: RoomData,
@@ -1875,9 +1961,10 @@ const buildSystematicLayout = (
   const sourceMap = new Map(
     sourceLayoutObjects.map((object) => [object.id, cloneRoomObject(object)]),
   );
+  const zones = getActiveClearanceZones(roomData);
 
   if (!movableObjects.length) {
-    return stabilizeRandomLayout(roomData, fixedObjects);
+    return finishSystematicLayout(roomData, fixedObjects);
   }
 
   const anchorObject = movableObjects[passIndex % movableObjects.length];
@@ -1906,12 +1993,13 @@ const buildSystematicLayout = (
         pool,
         passIndex,
         seedSignature,
+        zones,
         object.id === anchorObject.id ? anchorCandidateIndex : undefined,
       ),
     );
   });
 
-  return stabilizeRandomLayout(roomData, draftObjects).map((object) => {
+  return finishSystematicLayout(roomData, draftObjects).map((object) => {
     const sourceObject = sourceMap.get(object.id);
 
     return sourceObject
