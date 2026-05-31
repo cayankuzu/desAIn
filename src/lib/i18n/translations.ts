@@ -482,6 +482,7 @@ const labelTranslations: Record<string, Record<Locale, string>> = {
   "object.cube": { en: "Cube", tr: "K\u00fcp" },
   "object.roundColumn": { en: "Round Column", tr: "Yuvarlak Kolon" },
   "object.squareColumn": { en: "Square Column", tr: "Kare Kolon" },
+  "object.dividerWall": { en: "Wall", tr: "Duvar" },
   "object.counter": { en: "Counter", tr: "Tezgah" },
   "object.kitchenIsland": { en: "Kitchen Island", tr: "Mutfak Adas\u0131" },
   "object.consoleTable": { en: "Console Table", tr: "Dresuar" },

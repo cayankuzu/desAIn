@@ -19,6 +19,7 @@ export type InventoryPreviewType =
   | "decor"
   | "door"
   | "window"
+  | "wall"
   | "kitchen"
   | "bath"
   | "plant"
@@ -81,6 +82,24 @@ export const inventoryCatalog: InventoryTemplate[] = [
     previewType: "column",
     featured: true,
     tags: ["column", "pillar", "square", "support", "kolon"],
+  }),
+  makeTemplate({
+    id: "template_divider_wall",
+    label: "Wall",
+    labelKey: "object.dividerWall",
+    category: "generic_box",
+    generator: "GenericObjectGenerator",
+    color: "#7f8790",
+    dimensions: { width: 2.4, depth: 0.12, height: 2.6 },
+    params: {
+      baseShape: "divider_wall_tool",
+      createsWall: true,
+      fixedDuringRandomize: true,
+      structural: true,
+    },
+    previewType: "wall",
+    featured: true,
+    tags: ["wall", "divider", "partition", "structure", "duvar", "bolme"],
   }),
   makeTemplate({
     id: "template_sofa_straight",
@@ -1038,6 +1057,7 @@ export const inventoryCatalog: InventoryTemplate[] = [
 const curatedInventoryIds = new Set([
   "template_round_column",
   "template_square_column",
+  "template_divider_wall",
   "template_sofa_straight",
   "template_l_sofa",
   "template_armchair",

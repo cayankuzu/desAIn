@@ -335,8 +335,14 @@ export function AppShell() {
               activeInventoryDragTemplateIdRef.current = null;
               setDragPreview(emptyDragPreview);
 
-              addObjectFromTemplate(templateId, position);
-              setSelectedStructure(null);
+              const added = addObjectFromTemplate(templateId, position);
+
+              if (added?.type === "wall") {
+                setSelectedStructure({ type: "wall", id: added.id });
+              } else {
+                setSelectedStructure(null);
+              }
+
               setActiveSidebarTab("details");
             }}
           >

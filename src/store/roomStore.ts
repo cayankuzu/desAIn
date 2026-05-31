@@ -499,6 +499,7 @@ const normalizeCustomRoom = (room: RoomDefinition, walls: WallSegment[]) => {
 const createDividerWallSegment = (
   room: RoomDefinition,
   walls: WallSegment[],
+  center?: RoomObject["position"],
 ): WallSegment => {
   const ratios = [0.5, 0.35, 0.65, 0.25, 0.75];
   let outlineWallCount = 0;
@@ -522,7 +523,12 @@ const createDividerWallSegment = (
   const margin = 0.45;
 
   if (room.width >= room.depth) {
-    const x = Number((room.width * ratio).toFixed(2));
+    const x = Number(
+      Math.min(
+        room.width - margin,
+        Math.max(margin, center?.x ?? room.width * ratio),
+      ).toFixed(2),
+    );
 
     return {
       id: createWallId(walls),
@@ -531,7 +537,12 @@ const createDividerWallSegment = (
     };
   }
 
-  const z = Number((room.depth * ratio).toFixed(2));
+  const z = Number(
+    Math.min(
+      room.depth - margin,
+      Math.max(margin, center?.z ?? room.depth * ratio),
+    ).toFixed(2),
+  );
 
   return {
     id: createWallId(walls),
@@ -827,6 +838,15 @@ type RandomLayoutOption = {
   objects: RoomObject[];
   warnings: LayoutWarning[];
 };
+
+type AddTemplateResult =
+  | { type: "object"; id: string }
+  | { type: "wall"; id: string }
+  | null;
+
+const isDividerWallTemplate = (template: InventoryTemplate) =>
+  template.params.createsWall === true ||
+  String(template.params.baseShape ?? "") === "divider_wall_tool";
 
 const clearRandomLayoutCache = () => ({
   randomLayoutOptions: [] as RandomLayoutOption[],
@@ -2195,7 +2215,7 @@ interface RoomStore {
   addObjectFromTemplate: (
     templateId: string,
     position?: RoomObject["position"],
-  ) => void;
+  ) => AddTemplateResult;
   deleteObject: (objectId?: string) => void;
   deleteSelectedObjects: () => void;
   groupSelectedObjects: () => void;
@@ -2735,7 +2755,9 @@ export const useRoomStore = create<RoomStore>((set) => ({
         lastEditorStatus: { key: "objectPropertiesUpdated", objectId },
       };
     }),
-  addObjectFromTemplate: (templateId, position) =>
+  addObjectFromTemplate: (templateId, position) => {
+    let result: AddTemplateResult = null;
+
     set((state) => {
       const template = getInventoryTemplateById(templateId);
 
@@ -2744,7 +2766,34 @@ export const useRoomStore = create<RoomStore>((set) => ({
       }
 
       const roomData = cloneRoomData(state.roomData);
+
+      if (isDividerWallTemplate(template)) {
+        const walls = roomData.room.walls.map((wall) => ({ ...wall }));
+        const dividerWall = createDividerWallSegment(roomData.room, walls, position);
+
+        result = { type: "wall", id: dividerWall.id };
+        walls.push(dividerWall);
+        roomData.room = normalizeCustomRoom(roomData.room, walls);
+        roomData.objects = normalizeRoomObjects(roomData, roomData.objects);
+
+        return {
+          roomData,
+          selectedObjectId: null,
+          selectedObjectIds: [],
+          selectedGroupId: null,
+          validationWarnings: validateRoomLayout(roomData),
+          ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
+          historyPast: limitHistory([
+            ...state.historyPast,
+            cloneRoomData(state.roomData),
+          ]),
+          historyFuture: [],
+          lastEditorStatus: { key: "wallUpdated" },
+        };
+      }
+
       const newObject = createObjectFromTemplate(template, roomData, position);
+      result = { type: "object", id: newObject.id };
       roomData.objects.push(newObject);
 
       return {
@@ -2761,7 +2810,10 @@ export const useRoomStore = create<RoomStore>((set) => ({
         historyFuture: [],
         lastEditorStatus: { key: "objectAdded", objectId: newObject.id },
       };
-    }),
+    });
+
+    return result;
+  },
   deleteObject: (objectId) =>
     set((state) => {
       const targetId = objectId ?? state.selectedObjectId;

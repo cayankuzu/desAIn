@@ -217,7 +217,8 @@ const getInventoryCategoryIds = (item: InventoryTemplate): InventoryCategoryId[]
   if (
     item.previewType === "cube" ||
     item.previewType === "column" ||
-    hasInventoryTag(item, ["column", "support", "primitive", "partition"])
+    item.previewType === "wall" ||
+    hasInventoryTag(item, ["column", "support", "primitive", "partition", "wall", "divider", "structure"])
   ) {
     categories.add("structure");
   }
@@ -1632,6 +1633,11 @@ function InventoryCard({
   item: InventoryTemplate;
   locale: Locale;
 }) {
+  const categoryLabel =
+    item.previewType === "wall"
+      ? inventoryCategoryLabels.get("structure")?.[locale] ?? getLocalizedCategoryLabel(locale, item.category)
+      : getLocalizedCategoryLabel(locale, item.category);
+
   return (
     <button
       type="button"
@@ -1658,7 +1664,7 @@ function InventoryCard({
         <div>
           <div className="font-medium text-white">{getLocalizedObjectLabel(locale, item)}</div>
           <div className="mt-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">
-            {getLocalizedCategoryLabel(locale, item.category)}
+            {categoryLabel}
           </div>
         </div>
         <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">

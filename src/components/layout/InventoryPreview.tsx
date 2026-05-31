@@ -45,6 +45,20 @@ export function InventoryPreview({ item }: { item: InventoryTemplate }) {
   const baseShape = getBaseShape(item);
   const accentStyle = colorStyle(item.color);
 
+  if (baseShape === "divider_wall_tool" || item.previewType === "wall") {
+    return (
+      <PreviewShell>
+        <div
+          className="absolute bottom-5 left-1/2 h-14 w-24 -translate-x-1/2 rounded-md border border-white/15 shadow-[0_16px_28px_rgba(0,0,0,0.34)]"
+          style={accentStyle}
+        />
+        <div className="absolute bottom-[4.25rem] left-1/2 h-1.5 w-24 -translate-x-1/2 rounded-full bg-white/18" />
+        <div className="absolute bottom-5 left-[calc(50%-1.45rem)] h-14 w-px bg-white/18" />
+        <div className="absolute bottom-5 left-[calc(50%+1.45rem)] h-14 w-px bg-white/18" />
+      </PreviewShell>
+    );
+  }
+
   if (baseShape === "door_panel") {
     return (
       <PreviewShell>
