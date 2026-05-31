@@ -29,6 +29,7 @@ import {
   INVENTORY_DRAG_MIME,
   type InventoryTemplate,
 } from "@/lib/room/inventoryCatalog";
+import { isWallLocked } from "@/lib/room/roomGeometry";
 import { roomPurposeOptions } from "@/lib/room/roomPresets";
 import {
   formatWarning,
@@ -804,6 +805,7 @@ function SelectedWallEditor({
   const roomData = useRoomStore((state) => state.roomData);
   const updateRoomProperties = useRoomStore((state) => state.updateRoomProperties);
   const updateWallSegment = useRoomStore((state) => state.updateWallSegment);
+  const toggleWallLock = useRoomStore((state) => state.toggleWallLock);
   const splitWall = useRoomStore((state) => state.splitWall);
   const wall = roomData.room.walls.find((entry) => entry.id === wallId) ?? null;
   const controlSpec = wall ? getWallControlSpec(roomData.room, wallId) : null;
@@ -816,14 +818,32 @@ function SelectedWallEditor({
     );
   }
 
+  const wallLocked = isWallLocked(wall);
+
   return (
     <div className="mt-4 space-y-4 text-sm text-slate-300">
       <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-        <div className="text-lg font-semibold text-white">
-          {formatWallLabel(locale, wall.id)}
-        </div>
-        <div className="mt-1 text-xs uppercase tracking-[0.22em] text-slate-500">
-          {t(locale, "wall")}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-lg font-semibold text-white">
+              {formatWallLabel(locale, wall.id)}
+            </div>
+            <div className="mt-1 text-xs uppercase tracking-[0.22em] text-slate-500">
+              {t(locale, "wall")}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => toggleWallLock(wall.id)}
+            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] transition ${
+              wallLocked
+                ? "border-amber-400/35 bg-amber-400/10 text-amber-200 hover:border-amber-300 hover:text-white"
+                : "border-[#24405a] bg-[#102234] text-[#8cb9ff] hover:border-[#4ea8ff] hover:text-white"
+            }`}
+          >
+            <Lock className="h-3.5 w-3.5" />
+            {wallLocked ? t(locale, "unlock") : t(locale, "lock")}
+          </button>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3">
@@ -845,6 +865,7 @@ function SelectedWallEditor({
                 min="0.8"
                 step="0.1"
                 value={Number(controlSpec.wallLength.toFixed(2))}
+                disabled={wallLocked}
                 onChange={(event) => {
                   const value = event.currentTarget.valueAsNumber;
 
@@ -854,7 +875,9 @@ function SelectedWallEditor({
 
                   updateRoomProperties(controlSpec.updatePayload(value));
                 }}
-                className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+                className={`w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff] ${
+                  wallLocked ? "cursor-not-allowed opacity-60" : ""
+                }`}
               />
             </label>
           ) : null}
@@ -867,6 +890,7 @@ function SelectedWallEditor({
               min="2.2"
               step="0.1"
               value={roomData.room.height}
+              disabled={wallLocked}
               onChange={(event) => {
                 const value = event.currentTarget.valueAsNumber;
 
@@ -876,7 +900,9 @@ function SelectedWallEditor({
 
                 updateRoomProperties({ height: value });
               }}
-              className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+              className={`w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff] ${
+                wallLocked ? "cursor-not-allowed opacity-60" : ""
+              }`}
             />
           </label>
         </div>
@@ -886,23 +912,33 @@ function SelectedWallEditor({
             <WallPointInput
               label={t(locale, "wallStartX")}
               value={wall.from[0]}
+              disabled={wallLocked}
               onChange={(value) => updateWallSegment(wall.id, { from: [value, wall.from[1]] })}
             />
             <WallPointInput
               label={t(locale, "wallStartZ")}
               value={wall.from[1]}
+              disabled={wallLocked}
               onChange={(value) => updateWallSegment(wall.id, { from: [wall.from[0], value] })}
             />
             <WallPointInput
               label={t(locale, "wallEndX")}
               value={wall.to[0]}
+              disabled={wallLocked}
               onChange={(value) => updateWallSegment(wall.id, { to: [value, wall.to[1]] })}
             />
             <WallPointInput
               label={t(locale, "wallEndZ")}
               value={wall.to[1]}
+              disabled={wallLocked}
               onChange={(value) => updateWallSegment(wall.id, { to: [wall.to[0], value] })}
             />
+          </div>
+        ) : null}
+
+        {wallLocked ? (
+          <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-3 text-xs leading-5 text-amber-100">
+            {t(locale, "lockedEditHint")}
           </div>
         ) : null}
 
@@ -914,8 +950,11 @@ function SelectedWallEditor({
 
         <button
           type="button"
+          disabled={wallLocked}
           onClick={() => splitWall(wall.id)}
-          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#24405a] bg-[#102234] px-3 py-2.5 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white"
+          className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#24405a] bg-[#102234] px-3 py-2.5 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white ${
+            wallLocked ? "cursor-not-allowed opacity-50" : ""
+          }`}
         >
           <BoxSelect className="h-4 w-4" />
           {t(locale, "splitWall")}
@@ -928,10 +967,12 @@ function SelectedWallEditor({
 function WallPointInput({
   label,
   value,
+  disabled = false,
   onChange,
 }: {
   label: string;
   value: number;
+  disabled?: boolean;
   onChange: (value: number) => void;
 }) {
   return (
@@ -942,6 +983,7 @@ function WallPointInput({
         min="0"
         step="0.1"
         value={value}
+        disabled={disabled}
         onChange={(event) => {
           const nextValue = event.currentTarget.valueAsNumber;
 
@@ -949,7 +991,9 @@ function WallPointInput({
             onChange(nextValue);
           }
         }}
-        className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+        className={`w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff] ${
+          disabled ? "cursor-not-allowed opacity-60" : ""
+        }`}
       />
     </label>
   );

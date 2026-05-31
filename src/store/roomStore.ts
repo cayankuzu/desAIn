@@ -25,6 +25,7 @@ import {
   getWallMetrics,
   getWallLength,
   getWallSegment,
+  isWallLocked,
   projectPointToWall,
   normalizeOpeningForRoom,
 } from "@/lib/room/roomGeometry";
@@ -188,6 +189,27 @@ const positionsEqual = (
 
 const wallPointsEqual = (left: [number, number], right: [number, number]) =>
   Math.abs(left[0] - right[0]) < 0.001 && Math.abs(left[1] - right[1]) < 0.001;
+
+const getOutlineWallCount = (walls: WallSegment[]) => {
+  const start = walls[0]?.from;
+  let outlineWallCount = 0;
+
+  for (const wall of walls) {
+    const previousWall = walls[outlineWallCount - 1];
+
+    if (previousWall && !wallPointsEqual(previousWall.to, wall.from)) {
+      break;
+    }
+
+    outlineWallCount += 1;
+
+    if (start && outlineWallCount > 1 && wallPointsEqual(wall.to, start)) {
+      break;
+    }
+  }
+
+  return outlineWallCount;
+};
 
 const moveRandomObjectBy = (
   roomData: RoomData,
@@ -502,22 +524,7 @@ const createDividerWallSegment = (
   center?: RoomObject["position"],
 ): WallSegment => {
   const ratios = [0.5, 0.35, 0.65, 0.25, 0.75];
-  let outlineWallCount = 0;
-
-  for (const wall of walls) {
-    const previousWall = walls[outlineWallCount - 1];
-
-    if (previousWall && !wallPointsEqual(previousWall.to, wall.from)) {
-      break;
-    }
-
-    outlineWallCount += 1;
-
-    if (outlineWallCount > 1 && wallPointsEqual(wall.to, walls[0].from)) {
-      break;
-    }
-  }
-
+  const outlineWallCount = getOutlineWallCount(walls);
   const dividerIndex = Math.max(0, walls.length - outlineWallCount);
   const ratio = ratios[dividerIndex % ratios.length];
   const margin = 0.45;
@@ -534,6 +541,7 @@ const createDividerWallSegment = (
       id: createWallId(walls),
       from: [x, Number(Math.min(room.depth / 2, margin).toFixed(2))],
       to: [x, Number(Math.max(room.depth - margin, room.depth / 2).toFixed(2))],
+      locked: true,
     };
   }
 
@@ -548,6 +556,7 @@ const createDividerWallSegment = (
     id: createWallId(walls),
     from: [Number(Math.min(room.width / 2, margin).toFixed(2)), z],
     to: [Number(Math.max(room.width - margin, room.width / 2).toFixed(2)), z],
+    locked: true,
   };
 };
 
@@ -2195,6 +2204,7 @@ interface RoomStore {
       to: [number, number];
     }>,
   ) => void;
+  toggleWallLock: (wallId: string, locked?: boolean) => void;
   addDividerWall: () => string | null;
   splitWall: (wallId: string) => void;
   updateObjectTransform: (
@@ -2348,15 +2358,18 @@ export const useRoomStore = create<RoomStore>((set) => ({
           cloneRoomData(state.roomData),
         ]),
         historyFuture: [],
-        lastEditorStatus: { key: "openingUpdated" },
+        lastEditorStatus: {
+          key: structureId.startsWith("wall_") ? "wallUpdated" : "openingUpdated",
+        },
       };
     }),
   endTransform: () =>
     set((state) => ({
       activeTransformObjectId: null,
       lastEditorStatus: state.activeTransformObjectId
-        ? state.activeTransformObjectId.startsWith("wall_") ||
-          state.activeTransformObjectId.startsWith("door_") ||
+        ? state.activeTransformObjectId.startsWith("wall_")
+          ? { key: "wallUpdated" }
+          : state.activeTransformObjectId.startsWith("door_") ||
           state.activeTransformObjectId.startsWith("window_") ||
           state.activeTransformObjectId.startsWith("radiator_")
           ? { key: "openingUpdated" }
@@ -2528,10 +2541,30 @@ export const useRoomStore = create<RoomStore>((set) => ({
       }
 
       const walls = roomData.room.walls.map((wall) => ({ ...wall }));
-      const previousIndex = wallIndex === 0 ? walls.length - 1 : wallIndex - 1;
-      const nextIndex = wallIndex === walls.length - 1 ? 0 : wallIndex + 1;
-      const connectsPrevious = wallPointsEqual(walls[previousIndex].to, walls[wallIndex].from);
-      const connectsNext = wallPointsEqual(walls[nextIndex].from, walls[wallIndex].to);
+
+      if (isWallLocked(walls[wallIndex])) {
+        return state;
+      }
+
+      const outlineWallCount = getOutlineWallCount(walls);
+      const isOutlineWall = wallIndex < outlineWallCount;
+      const previousIndex = isOutlineWall
+        ? wallIndex === 0
+          ? outlineWallCount - 1
+          : wallIndex - 1
+        : wallIndex - 1;
+      const nextIndex = isOutlineWall
+        ? wallIndex === outlineWallCount - 1
+          ? 0
+          : wallIndex + 1
+        : wallIndex + 1;
+      const previousWall = walls[previousIndex] ?? null;
+      const nextWall = walls[nextIndex] ?? null;
+      const connectsPrevious =
+        previousWall !== null && wallPointsEqual(previousWall.to, walls[wallIndex].from);
+      const connectsNext =
+        nextWall !== null && wallPointsEqual(nextWall.from, walls[wallIndex].to);
+      const isActiveTransform = state.activeTransformObjectId === wallId;
       const sanitizePoint = ([x, z]: [number, number]) =>
         [
           Number(Math.max(0, Number.isFinite(x) ? x : 0).toFixed(2)),
@@ -2563,6 +2596,36 @@ export const useRoomStore = create<RoomStore>((set) => ({
         roomData,
         validationWarnings: validateRoomLayout(roomData),
         ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
+        historyPast: isActiveTransform
+          ? state.historyPast
+          : limitHistory([
+              ...state.historyPast,
+              cloneRoomData(state.roomData),
+            ]),
+        historyFuture: isActiveTransform ? state.historyFuture : [],
+        lastEditorStatus: { key: "wallUpdated" },
+      };
+    }),
+  toggleWallLock: (wallId, locked) =>
+    set((state) => {
+      const roomData = cloneRoomData(state.roomData);
+      const wallIndex = roomData.room.walls.findIndex((wall) => wall.id === wallId);
+
+      if (wallIndex < 0) {
+        return state;
+      }
+
+      const currentLocked = isWallLocked(roomData.room.walls[wallIndex]);
+      const nextLocked = locked ?? !currentLocked;
+
+      roomData.room.walls[wallIndex] = {
+        ...roomData.room.walls[wallIndex],
+        locked: nextLocked,
+      };
+
+      return {
+        roomData,
+        validationWarnings: validateRoomLayout(roomData),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -2584,7 +2647,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       const wall = walls[wallIndex];
       const length = getWallLength(roomData.room, wall.id);
 
-      if (length < 1.2) {
+      if (isWallLocked(wall) || length < 1.2) {
         return state;
       }
 
@@ -2597,6 +2660,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
         id: createWallId(walls),
         from: midpoint,
         to: originalTo,
+        locked: wall.locked ?? true,
       };
 
       walls[wallIndex] = {

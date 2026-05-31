@@ -18,6 +18,7 @@ import {
   findWallByRotation,
   getWallMetrics,
   getWallSegment,
+  isWallLocked,
   normalizeOpeningForRoom,
   projectPointToWall,
 } from "@/lib/room/roomGeometry";
@@ -45,12 +46,14 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
   const endTransform = useRoomStore((state) => state.endTransform);
   const updateObjectTransform = useRoomStore((state) => state.updateObjectTransform);
   const updateOpeningTransform = useRoomStore((state) => state.updateOpeningTransform);
+  const updateWallSegment = useRoomStore((state) => state.updateWallSegment);
   const setSelectedObjectId = useRoomStore((state) => state.setSelectedObjectId);
   const selectedStructure = useUIStore((state) => state.selectedStructure);
   const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
   const setMultiSelectMenu = useUIStore((state) => state.setMultiSelectMenu);
   const [isTransforming, setIsTransforming] = useState(false);
   const [objectMap, setObjectMap] = useState<Record<string, Group | null>>({});
+  const [wallMap, setWallMap] = useState<Record<string, Group | null>>({});
   const [openingMap, setOpeningMap] = useState<Record<string, Group | null>>({});
 
   const selectedObject =
@@ -60,7 +63,12 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
     selectedStructure?.type === "opening"
       ? roomData.room.openings.find((opening) => opening.id === selectedStructure.id) ?? null
       : null;
+  const selectedWall =
+    selectedStructure?.type === "wall"
+      ? roomData.room.walls.find((wall) => wall.id === selectedStructure.id) ?? null
+      : null;
   const selectedSceneOpening = selectedOpening ? openingMap[selectedOpening.id] ?? null : null;
+  const selectedSceneWall = selectedWall ? wallMap[selectedWall.id] ?? null : null;
 
   const canTransform = Boolean(
     selectedObject &&
@@ -71,6 +79,12 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
   );
   const canTransformOpening = Boolean(
     selectedOpening && selectedSceneOpening && transformMode !== "select",
+  );
+  const canTransformWall = Boolean(
+    selectedWall &&
+      selectedSceneWall &&
+      !isWallLocked(selectedWall) &&
+      transformMode !== "select",
   );
 
   const roomOffset = useMemo(
@@ -84,6 +98,16 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
         : {
             ...current,
             [objectId]: node,
+          },
+    );
+  }, []);
+  const handleWallReady = useCallback((wallId: string, node: Group | null) => {
+    setWallMap((current) =>
+      current[wallId] === node
+        ? current
+        : {
+            ...current,
+            [wallId]: node,
           },
     );
   }, []);
@@ -216,6 +240,33 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
     });
   };
 
+  const syncSelectedWallFromScene = () => {
+    if (!selectedWall || !selectedSceneWall || isWallLocked(selectedWall)) {
+      return;
+    }
+
+    const wallLength = Math.max(0.8, getWallMetrics(selectedWall).length);
+    const halfLength = wallLength / 2;
+    const rotationY = selectedSceneWall.rotation.y;
+    const directionX = Math.cos(rotationY);
+    const directionZ = -Math.sin(rotationY);
+    const centerX = selectedSceneWall.position.x;
+    const centerZ = selectedSceneWall.position.z;
+    const nextFrom = [
+      Number((centerX - directionX * halfLength).toFixed(2)),
+      Number((centerZ - directionZ * halfLength).toFixed(2)),
+    ] as [number, number];
+    const nextTo = [
+      Number((centerX + directionX * halfLength).toFixed(2)),
+      Number((centerZ + directionZ * halfLength).toFixed(2)),
+    ] as [number, number];
+
+    updateWallSegment(selectedWall.id, {
+      from: nextFrom,
+      to: nextTo,
+    });
+  };
+
   return (
     <Canvas
       shadows="percentage"
@@ -279,10 +330,32 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
         onObjectChange={syncSelectedOpeningFromScene}
         showTranslateY
       />
+      <ObjectControls
+        object={selectedSceneWall}
+        enabled={canTransformWall}
+        mode={transformMode === "rotate" ? "rotate" : "translate"}
+        onBegin={() => {
+          if (!selectedWall) {
+            return;
+          }
+
+          setIsTransforming(true);
+          beginStructureTransform(selectedWall.id);
+        }}
+        onEnd={() => {
+          setIsTransforming(false);
+          endTransform();
+        }}
+        onObjectChange={syncSelectedWallFromScene}
+      />
 
       <group position={roomOffset}>
         <RoomFloor room={roomData.room} />
-        <RoomWalls room={roomData.room} onOpeningReady={handleOpeningReady} />
+        <RoomWalls
+          room={roomData.room}
+          onWallReady={handleWallReady}
+          onOpeningReady={handleOpeningReady}
+        />
         {roomData.objects.map((object) => (
           <RoomObject
             key={object.id}

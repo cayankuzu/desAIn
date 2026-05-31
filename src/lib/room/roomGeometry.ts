@@ -62,22 +62,28 @@ export const buildRoomWalls = (
     const innerZ = safe.depth - safe.cutoutDepth;
 
     return [
-      { id: "wall_1", from: [0, 0], to: [safe.width, 0] },
-      { id: "wall_2", from: [safe.width, 0], to: [safe.width, innerZ] },
-      { id: "wall_3", from: [safe.width, innerZ], to: [innerX, innerZ] },
-      { id: "wall_4", from: [innerX, innerZ], to: [innerX, safe.depth] },
-      { id: "wall_5", from: [innerX, safe.depth], to: [0, safe.depth] },
-      { id: "wall_6", from: [0, safe.depth], to: [0, 0] },
+      { id: "wall_1", from: [0, 0], to: [safe.width, 0], locked: true },
+      { id: "wall_2", from: [safe.width, 0], to: [safe.width, innerZ], locked: true },
+      { id: "wall_3", from: [safe.width, innerZ], to: [innerX, innerZ], locked: true },
+      { id: "wall_4", from: [innerX, innerZ], to: [innerX, safe.depth], locked: true },
+      { id: "wall_5", from: [innerX, safe.depth], to: [0, safe.depth], locked: true },
+      { id: "wall_6", from: [0, safe.depth], to: [0, 0], locked: true },
     ];
   }
 
   return [
-    { id: "wall_1", from: [0, 0], to: [width, 0] },
-    { id: "wall_2", from: [width, 0], to: [width, depth] },
-    { id: "wall_3", from: [width, depth], to: [0, depth] },
-    { id: "wall_4", from: [0, depth], to: [0, 0] },
+    { id: "wall_1", from: [0, 0], to: [width, 0], locked: true },
+    { id: "wall_2", from: [width, 0], to: [width, depth], locked: true },
+    { id: "wall_3", from: [width, depth], to: [0, depth], locked: true },
+    { id: "wall_4", from: [0, depth], to: [0, 0], locked: true },
   ];
 };
+
+export const isWallLocked = (wall: Pick<WallSegment, "locked">) =>
+  wall.locked !== false;
+
+export const isOpeningLocked = (opening: Pick<Opening, "locked">) =>
+  opening.locked !== false;
 
 export const getWallMetrics = (wall: WallSegment) => {
   const dx = wall.to[0] - wall.from[0];
@@ -100,9 +106,10 @@ export const getWallMetrics = (wall: WallSegment) => {
 const pointsEqual = (left: [number, number], right: [number, number]) =>
   Math.abs(left[0] - right[0]) < 0.001 && Math.abs(left[1] - right[1]) < 0.001;
 
-export const getRoomOutlinePoints = (room: RoomDefinition): Array<[number, number]> => {
+const getRoomOutlineWalls = (room: RoomDefinition) => {
   const start = room.walls[0]?.from;
   const outlineWalls: WallSegment[] = [];
+  let closed = false;
 
   for (const wall of room.walls) {
     const previousWall = outlineWalls.at(-1);
@@ -114,13 +121,21 @@ export const getRoomOutlinePoints = (room: RoomDefinition): Array<[number, numbe
     outlineWalls.push(wall);
 
     if (start && outlineWalls.length > 1 && pointsEqual(wall.to, start)) {
+      closed = true;
       break;
     }
   }
 
-  const points = (outlineWalls.length ? outlineWalls : room.walls).map(
-    (wall) => wall.from,
-  );
+  return {
+    walls: outlineWalls.length ? outlineWalls : room.walls,
+    closed: closed && outlineWalls.length >= 3,
+  };
+};
+
+export const getRoomOutlinePoints = (room: RoomDefinition): Array<[number, number]> => {
+  const start = room.walls[0]?.from;
+  const { walls } = getRoomOutlineWalls(room);
+  const points = walls.map((wall) => wall.from);
 
   if (start) {
     points.push(start);
@@ -128,6 +143,9 @@ export const getRoomOutlinePoints = (room: RoomDefinition): Array<[number, numbe
 
   return points;
 };
+
+export const isRoomOutlineClosed = (room: RoomDefinition) =>
+  getRoomOutlineWalls(room).closed;
 
 export const getWallSegment = (room: RoomDefinition, wallId: string) =>
   room.walls.find((wall) => wall.id === wallId) ?? null;
@@ -252,6 +270,7 @@ export const normalizeOpeningForRoom = (
 
   return {
     ...opening,
+    locked: opening.locked ?? true,
     wallId,
     width,
     position: clampOpeningPosition(

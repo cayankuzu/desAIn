@@ -779,6 +779,10 @@ export const formatWarning = (
       return locale === "en"
         ? `${objectLabel} overlaps with ${relatedLabel}.`
         : `${objectLabel}, ${relatedLabel} ile \u00fcst \u00fcste geliyor.`;
+    case "wall_collision":
+      return locale === "en"
+        ? `${objectLabel} intersects a wall.`
+        : `${objectLabel}, bir duvarla \u00e7ak\u0131\u015f\u0131yor.`;
     default:
       return warning.message;
   }
