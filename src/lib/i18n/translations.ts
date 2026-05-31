@@ -72,6 +72,12 @@ export type MessageKey =
   | "validate"
   | "shortcuts"
   | "roomSettings"
+  | "wallDetails"
+  | "wallLength"
+  | "wallStart"
+  | "wallEnd"
+  | "linkedSetting"
+  | "openingDetails"
   | "sceneMetrics"
   | "objectDetails"
   | "selectObjectHint"
@@ -142,16 +148,22 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     cutoutDepth: "L Cut Depth",
     inspectorPanel: "Inspector Panel",
     details: "Details",
-    outliner: "Outliner",
+    outliner: "Scene Items",
     inventory: "Inventory",
     validate: "Validation",
     shortcuts: "Shortcuts",
     roomSettings: "Room Settings",
+    wallDetails: "Wall Details",
+    wallLength: "Wall Length",
+    wallStart: "Wall Start",
+    wallEnd: "Wall End",
+    linkedSetting: "Linked Setting",
+    openingDetails: "Opening Details",
     sceneMetrics: "Scene Metrics",
     objectDetails: "Object Details",
     selectObjectHint:
       "Select an object in the viewport or outliner to edit size, position, rotation, and color.",
-    worldOutliner: "World Outliner",
+    worldOutliner: "Scene Items",
     locked: "Locked",
     open: "Open",
     editable: "Editable",
@@ -218,16 +230,22 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     cutoutDepth: "L Kesit Boy",
     inspectorPanel: "\u0130nceleme Paneli",
     details: "Detaylar",
-    outliner: "Outliner",
+    outliner: "\u00d6\u011fe Listesi",
     inventory: "Envanter",
     validate: "Do\u011frulama",
     shortcuts: "K\u0131sayollar",
     roomSettings: "Oda Ayarlar\u0131",
+    wallDetails: "Duvar Detaylar\u0131",
+    wallLength: "Duvar Uzunlu\u011fu",
+    wallStart: "Duvar Ba\u015flang\u0131c\u0131",
+    wallEnd: "Duvar Biti\u015fi",
+    linkedSetting: "Ba\u011fl\u0131 Ayar",
+    openingDetails: "A\u00e7\u0131kl\u0131k Detaylar\u0131",
     sceneMetrics: "Sahne \u00d6l\u00e7\u00fcleri",
     objectDetails: "\u00d6\u011fe Detaylar\u0131",
     selectObjectHint:
       "Boyut, konum, d\u00f6n\u00fc\u015f ve rengi d\u00fczenlemek i\u00e7in viewport'tan veya outliner'dan bir \u00f6\u011fe se\u00e7.",
-    worldOutliner: "D\u00fcnya Outliner",
+    worldOutliner: "Sahne \u00d6\u011feleri",
     locked: "Kilitli",
     open: "A\u00e7\u0131k",
     editable: "D\u00fczenlenebilir",
@@ -263,10 +281,10 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
 };
 
 const labelTranslations: Record<string, Record<Locale, string>> = {
-  "room.studioLoft": { en: "Studio Loft", tr: "St\u00fcdyo Loft" },
+  "room.studioLoft": { en: "Studio Loft", tr: "St\u00fcdyo Oda" },
   "object.tvUnit": { en: "TV Unit", tr: "TV \u00dcnitesi" },
   "object.sofa": { en: "Sofa", tr: "Koltuk" },
-  "object.loungeSofa": { en: "Lounge Sofa", tr: "Lounge Koltuk" },
+  "object.loungeSofa": { en: "Lounge Sofa", tr: "Geni\u015f Koltuk" },
   "object.carpet": { en: "Carpet", tr: "Hal\u0131" },
   "object.largeRug": { en: "Large Rug", tr: "B\u00fcy\u00fck Hal\u0131" },
   "object.runnerRug": { en: "Runner Rug", tr: "Yolluk" },
@@ -278,11 +296,12 @@ const labelTranslations: Record<string, Record<Locale, string>> = {
   "object.bookshelf": { en: "Bookshelf", tr: "Kitapl\u0131k" },
   "object.desk": { en: "Desk", tr: "\u00c7al\u0131\u015fma Masas\u0131" },
   "object.diningTable": { en: "Dining Table", tr: "Yemek Masas\u0131" },
+  "object.coffeeTable": { en: "Coffee Table", tr: "Orta Sehpa" },
   "object.sideTable": { en: "Side Table", tr: "Yan Sehpa" },
   "object.chair": { en: "Chair", tr: "Sandalye" },
   "object.officeChair": { en: "Office Chair", tr: "Ofis Sandalyesi" },
   "object.diningChair": { en: "Dining Chair", tr: "Yemek Sandalyesi" },
-  "object.mediaConsole": { en: "Media Console", tr: "Medya Konsolu" },
+  "object.mediaConsole": { en: "Media Console", tr: "Medya \u00dcnitesi" },
   "object.tvStand": { en: "TV Stand", tr: "TV Sehpas\u0131" },
   "object.storageBox": { en: "Storage Box", tr: "Saklama Kutusu" },
   "object.storageBench": { en: "Storage Bench", tr: "Saklama Bank\u0131" },
@@ -334,9 +353,9 @@ export const getLocalizedOpeningType = (
   openingType: OpeningType,
 ) => {
   const translationsByType: Record<OpeningType, Record<Locale, string>> = {
-    door: { en: "Door", tr: "Kapı" },
+    door: { en: "Door", tr: "Kap\u0131" },
     window: { en: "Window", tr: "Pencere" },
-    balcony_door: { en: "Balcony Door", tr: "Balkon Kapısı" },
+    balcony_door: { en: "Balcony Door", tr: "Balkon Kap\u0131s\u0131" },
     radiator: { en: "Radiator", tr: "Kalorifer" },
   };
 

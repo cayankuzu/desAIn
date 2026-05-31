@@ -13,9 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "desAIn | Room Editor",
-  description:
-    "desAIn MVP: a low-poly room editor with editable dimensions, dual-language UI, and Unreal-inspired controls.",
+  title: "desAIn",
+  description: "desAIn editor",
 };
 
 export default function RootLayout({
@@ -25,7 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="tr"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

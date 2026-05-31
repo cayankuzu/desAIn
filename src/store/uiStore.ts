@@ -4,6 +4,7 @@ import { create } from "zustand";
 import type { Locale } from "@/lib/i18n/translations";
 
 export type SidebarTab =
+  | "room"
   | "details"
   | "outliner"
   | "validation"
@@ -40,7 +41,7 @@ const getInitialLocale = (): Locale => {
 };
 
 export const useUIStore = create<UIStore>((set) => ({
-  activeSidebarTab: "details",
+  activeSidebarTab: "room",
   setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
   selectedStructure: null,
   setSelectedStructure: (selectedStructure) => set({ selectedStructure }),

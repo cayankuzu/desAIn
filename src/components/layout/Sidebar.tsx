@@ -30,7 +30,7 @@ import {
 import { useRoomStore } from "@/store/roomStore";
 import { useUIStore } from "@/store/uiStore";
 import type { SidebarTab } from "@/store/uiStore";
-import type { Opening, RoomObject, RoomShape } from "@/types/room";
+import type { Opening, RoomDefinition, RoomObject, RoomShape } from "@/types/room";
 import { InventoryPreview } from "./InventoryPreview";
 
 const sidebarTabs: Array<{
@@ -38,18 +38,32 @@ const sidebarTabs: Array<{
   labelKey: MessageKey;
   icon: typeof Move3d;
 }> = [
+  { id: "room", labelKey: "roomSettings", icon: Ruler },
   { id: "details", labelKey: "details", icon: Move3d },
   { id: "outliner", labelKey: "outliner", icon: Boxes },
   { id: "inventory", labelKey: "inventory", icon: Package2 },
   { id: "validation", labelKey: "validate", icon: AlertTriangle },
 ];
 
+type WallControlSpec = {
+  linkedLabelKey: MessageKey;
+  wallLength: number;
+  updatePayload: (value: number) => {
+    width?: number;
+    depth?: number;
+    height?: number;
+    shape?: RoomShape;
+    cutoutWidth?: number;
+    cutoutDepth?: number;
+  };
+};
+
 export function Sidebar() {
   const locale = useUIStore((state) => state.locale);
   const activeSidebarTab = useUIStore((state) => state.activeSidebarTab);
   const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
-  const selectedStructure = useUIStore((state) => state.selectedStructure);
   const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
+  const selectedStructure = useUIStore((state) => state.selectedStructure);
   const roomData = useRoomStore((state) => state.roomData);
   const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
   const setSelectedObjectId = useRoomStore((state) => state.setSelectedObjectId);
@@ -61,6 +75,13 @@ export function Sidebar() {
     selectedStructure?.type === "opening"
       ? roomData.room.openings.find((opening) => opening.id === selectedStructure.id) ?? null
       : null;
+  const detailsLabel = selectedObject
+    ? t(locale, "objectDetails")
+    : selectedStructure?.type === "wall"
+      ? t(locale, "wallDetails")
+      : selectedOpening
+        ? t(locale, "openingDetails")
+        : t(locale, "details");
 
   return (
     <aside className="editor-panel flex h-full min-h-0 flex-col overflow-hidden">
@@ -95,29 +116,31 @@ export function Sidebar() {
       </div>
 
       <div className="scroll-area min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        {activeSidebarTab === "room" ? <RoomSettingsEditor locale={locale} /> : null}
+
         {activeSidebarTab === "details" ? (
-          <div className="space-y-4">
-            <RoomSettingsEditor locale={locale} />
-            <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#ffb16a]">
-                <Move3d className="h-3.5 w-3.5" />
-                {t(locale, "objectDetails")}
+          <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#ffb16a]">
+              <Move3d className="h-3.5 w-3.5" />
+              {detailsLabel}
+            </div>
+
+            {selectedObject ? (
+              <SelectedObjectEditor object={selectedObject} locale={locale} />
+            ) : selectedStructure?.type === "wall" ? (
+              <SelectedWallEditor locale={locale} wallId={selectedStructure.id} />
+            ) : selectedOpening ? (
+              <SelectedOpeningEditor
+                locale={locale}
+                opening={selectedOpening}
+                wallIds={roomData.room.walls.map((wall) => wall.id)}
+              />
+            ) : (
+              <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm leading-6 text-slate-400">
+                {t(locale, "selectObjectHint")}
               </div>
-              {selectedObject ? (
-                <SelectedObjectEditor object={selectedObject} locale={locale} />
-              ) : selectedStructure ? (
-                <SelectedStructureCard
-                  locale={locale}
-                  selectedStructure={selectedStructure}
-                  selectedOpening={selectedOpening}
-                />
-              ) : (
-                <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm leading-6 text-slate-400">
-                  {t(locale, "selectObjectHint")}
-                </div>
-              )}
-            </section>
-          </div>
+            )}
+          </section>
         ) : null}
 
         {activeSidebarTab === "outliner" ? (
@@ -137,48 +160,16 @@ export function Sidebar() {
           <ValidationPanel
             locale={locale}
             validationWarnings={validationWarnings}
-            setSelectedObjectId={setSelectedObjectId}
+            setSelectedObjectId={(objectId) => {
+              setSelectedStructure(null);
+              setSelectedObjectId(objectId);
+            }}
           />
         ) : null}
       </div>
 
       <ShortcutFooter locale={locale} />
     </aside>
-  );
-}
-
-function SelectedStructureCard({
-  locale,
-  selectedStructure,
-  selectedOpening,
-}: {
-  locale: Locale;
-  selectedStructure: NonNullable<ReturnType<typeof useUIStore.getState>["selectedStructure"]>;
-  selectedOpening: Opening | null;
-}) {
-  const title =
-    selectedStructure.type === "wall"
-      ? selectedStructure.id
-      : selectedOpening
-        ? `${getLocalizedOpeningType(locale, selectedOpening.type)} / ${selectedOpening.id}`
-        : selectedStructure.id;
-
-  return (
-    <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-      <div className="text-lg font-semibold text-white">{title}</div>
-      <div className="mt-1 text-xs uppercase tracking-[0.22em] text-slate-500">
-        {selectedStructure.type === "wall" ? t(locale, "wall") : t(locale, "details")}
-      </div>
-      <p className="mt-3 leading-6 text-slate-400">
-        {selectedStructure.type === "wall"
-          ? locale === "en"
-            ? "Adjust room shape and room measurements above to reshape this wall."
-            : "Bu duvarı yeniden biçimlendirmek için yukarıdaki oda tipi ve ölçü alanlarını kullan."
-          : locale === "en"
-            ? "Edit this opening from the room settings card above."
-            : "Bu açıklığı yukarıdaki oda ayarları kartından düzenleyebilirsin."}
-      </p>
-    </div>
   );
 }
 
@@ -384,7 +375,7 @@ function OpeningEditor({
       }`}
     >
       <div className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-        {`${opening.type} / ${opening.id}`}
+        {`${getLocalizedOpeningType(locale, opening.type)} / ${opening.id}`}
       </div>
       <div className="grid grid-cols-3 gap-2">
         <label className="space-y-1">
@@ -431,6 +422,193 @@ function OpeningEditor({
       </div>
     </div>
   );
+}
+
+function SelectedOpeningEditor({
+  locale,
+  opening,
+  wallIds,
+}: {
+  locale: Locale;
+  opening: Opening;
+  wallIds: string[];
+}) {
+  const updateOpening = useRoomStore((state) => state.updateOpening);
+
+  return (
+    <div className="mt-4">
+      <OpeningEditor
+        locale={locale}
+        opening={opening}
+        wallIds={wallIds}
+        selected
+        onChange={(payload) => updateOpening(opening.id, payload)}
+      />
+    </div>
+  );
+}
+
+function SelectedWallEditor({
+  locale,
+  wallId,
+}: {
+  locale: Locale;
+  wallId: string;
+}) {
+  const roomData = useRoomStore((state) => state.roomData);
+  const updateRoomProperties = useRoomStore((state) => state.updateRoomProperties);
+  const wall = roomData.room.walls.find((entry) => entry.id === wallId) ?? null;
+  const controlSpec = wall ? getWallControlSpec(roomData.room, wallId) : null;
+
+  if (!wall || !controlSpec) {
+    return (
+      <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm leading-6 text-slate-400">
+        {t(locale, "selectObjectHint")}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 space-y-4 text-sm text-slate-300">
+      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+        <div className="text-lg font-semibold text-white">{wall.id}</div>
+        <div className="mt-1 text-xs uppercase tracking-[0.22em] text-slate-500">
+          {t(locale, "wall")}
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <ReadonlyField
+            label={t(locale, "wallStart")}
+            value={`${wall.from[0].toFixed(2)}m, ${wall.from[1].toFixed(2)}m`}
+          />
+          <ReadonlyField
+            label={t(locale, "wallEnd")}
+            value={`${wall.to[0].toFixed(2)}m, ${wall.to[1].toFixed(2)}m`}
+          />
+          <label className="space-y-1">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              {t(locale, "wallLength")}
+            </span>
+            <input
+              type="number"
+              min="0.8"
+              step="0.1"
+              value={Number(controlSpec.wallLength.toFixed(2))}
+              onChange={(event) => {
+                const value = event.currentTarget.valueAsNumber;
+
+                if (Number.isNaN(value)) {
+                  return;
+                }
+
+                updateRoomProperties(controlSpec.updatePayload(value));
+              }}
+              className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              {t(locale, "height")}
+            </span>
+            <input
+              type="number"
+              min="2.2"
+              step="0.1"
+              value={roomData.room.height}
+              onChange={(event) => {
+                const value = event.currentTarget.valueAsNumber;
+
+                if (Number.isNaN(value)) {
+                  return;
+                }
+
+                updateRoomProperties({ height: value });
+              }}
+              className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff]"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-white/10 bg-[#111924] px-3 py-3 text-xs uppercase tracking-[0.18em] text-slate-400">
+          {`${t(locale, "linkedSetting")}: ${t(locale, controlSpec.linkedLabelKey)}`}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReadonlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">
+      <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</div>
+      <div className="mt-1 font-medium text-white">{value}</div>
+    </div>
+  );
+}
+
+function getWallControlSpec(room: RoomDefinition, wallId: string): WallControlSpec | null {
+  if (room.shape === "rectangle" || room.shape === "square") {
+    if (wallId === "wall_1" || wallId === "wall_3") {
+      return {
+        linkedLabelKey: "width",
+        wallLength: room.width,
+        updatePayload: (value) => ({ width: value }),
+      };
+    }
+
+    if (wallId === "wall_2" || wallId === "wall_4") {
+      return {
+        linkedLabelKey: "depth",
+        wallLength: room.depth,
+        updatePayload: (value) => ({ depth: value }),
+      };
+    }
+  }
+
+  if (room.shape === "l_shape") {
+    switch (wallId) {
+      case "wall_1":
+        return {
+          linkedLabelKey: "width",
+          wallLength: room.width,
+          updatePayload: (value) => ({ width: value }),
+        };
+      case "wall_2":
+        return {
+          linkedLabelKey: "cutoutDepth",
+          wallLength: room.depth - room.cutoutDepth,
+          updatePayload: (value) => ({ cutoutDepth: room.depth - value }),
+        };
+      case "wall_3":
+        return {
+          linkedLabelKey: "cutoutWidth",
+          wallLength: room.cutoutWidth,
+          updatePayload: (value) => ({ cutoutWidth: value }),
+        };
+      case "wall_4":
+        return {
+          linkedLabelKey: "cutoutDepth",
+          wallLength: room.cutoutDepth,
+          updatePayload: (value) => ({ cutoutDepth: value }),
+        };
+      case "wall_5":
+        return {
+          linkedLabelKey: "cutoutWidth",
+          wallLength: room.width - room.cutoutWidth,
+          updatePayload: (value) => ({ cutoutWidth: room.width - value }),
+        };
+      case "wall_6":
+        return {
+          linkedLabelKey: "depth",
+          wallLength: room.depth,
+          updatePayload: (value) => ({ depth: value }),
+        };
+      default:
+        return null;
+    }
+  }
+
+  return null;
 }
 
 function SelectedObjectEditor({
@@ -704,6 +882,10 @@ function InventoryPanel({ locale }: { locale: Locale }) {
       );
     });
   }, [locale, query]);
+  const visibleInventory = useMemo(
+    () => (query ? filteredInventory : filteredInventory.filter((item) => !item.featured)),
+    [filteredInventory, query],
+  );
 
   return (
     <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
@@ -742,7 +924,7 @@ function InventoryPanel({ locale }: { locale: Locale }) {
           {t(locale, "inventory")}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          {filteredInventory.map((item) => (
+          {visibleInventory.map((item) => (
             <InventoryCard key={item.id} item={item} locale={locale} />
           ))}
         </div>
@@ -830,15 +1012,15 @@ function ValidationPanel({
 
 function ShortcutFooter({ locale }: { locale: Locale }) {
   const shortcuts = [
-    `Q ${t(locale, "selectMode")}`,
-    `W ${t(locale, "moveMode")}`,
-    `E ${t(locale, "rotateMode")}`,
-    `Ctrl/Cmd+Z ${t(locale, "undo")}`,
-    `Ctrl/Cmd+Y ${t(locale, "redo")}`,
-    `Ctrl/Cmd+C ${t(locale, "copyAction")}`,
-    `Ctrl/Cmd+V ${t(locale, "pasteAction")}`,
-    `Ctrl/Cmd+X ${t(locale, "cutAction")}`,
-    `Delete ${t(locale, "removeAction")}`,
+    { key: "Q", label: t(locale, "selectMode") },
+    { key: "W", label: t(locale, "moveMode") },
+    { key: "E", label: t(locale, "rotateMode") },
+    { key: "Ctrl/Cmd+Z", label: t(locale, "undo") },
+    { key: "Ctrl/Cmd+Y", label: t(locale, "redo") },
+    { key: "Ctrl/Cmd+C", label: t(locale, "copyAction") },
+    { key: "Ctrl/Cmd+V", label: t(locale, "pasteAction") },
+    { key: "Ctrl/Cmd+X", label: t(locale, "cutAction") },
+    { key: "Delete", label: t(locale, "removeAction") },
   ];
 
   return (
@@ -847,14 +1029,18 @@ function ShortcutFooter({ locale }: { locale: Locale }) {
         <Scissors className="h-3.5 w-3.5" />
         {t(locale, "shortcuts")}
       </div>
-      <div className="grid grid-cols-2 gap-2 text-xs text-slate-300">
+      <div className="grid grid-cols-2 gap-2">
         {shortcuts.map((shortcut) => (
-          <div
-            key={shortcut}
-            className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2"
+          <button
+            key={`${shortcut.key}-${shortcut.label}`}
+            type="button"
+            className="flex items-center justify-between rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-left text-xs text-slate-200 transition hover:border-[#32516c] hover:text-white"
           >
-            {shortcut}
-          </div>
+            <span className="rounded-md border border-white/10 bg-[#0b1016] px-2 py-1 font-semibold text-[#8cb9ff]">
+              {shortcut.key}
+            </span>
+            <span className="ml-3">{shortcut.label}</span>
+          </button>
         ))}
       </div>
     </div>

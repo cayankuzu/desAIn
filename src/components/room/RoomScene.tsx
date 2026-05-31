@@ -59,6 +59,10 @@ export function RoomScene() {
       return;
     }
 
+    const mountHeight =
+      typeof selectedObject.params.mountHeight === "number"
+        ? selectedObject.params.mountHeight
+        : 0;
     const nextRotation = normalizeRotation(
       (selectedSceneObject.rotation.y * 180) / Math.PI,
     );
@@ -73,7 +77,7 @@ export function RoomScene() {
       nextRotation,
     );
 
-    selectedSceneObject.position.set(clamped.x, 0, clamped.z);
+    selectedSceneObject.position.set(clamped.x, mountHeight, clamped.z);
     selectedSceneObject.rotation.set(0, (nextRotation * Math.PI) / 180, 0);
     updateObjectTransform(selectedObject.id, {
       position: clamped,

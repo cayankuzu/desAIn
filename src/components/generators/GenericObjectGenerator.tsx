@@ -88,6 +88,60 @@ export function GenericObjectGenerator({
     );
   }
 
+  if (baseShape === "wall_panel") {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height, Math.max(depth, 0.06)]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height / 2, Math.max(depth, 0.06) / 2 + 0.01]} castShadow>
+          <boxGeometry args={[width * 0.78, height * 0.68, 0.02]} />
+          <meshStandardMaterial color="#dfe6ef" />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "wall_box") {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height, Math.max(depth, 0.14)]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        {[-0.18, 0, 0.18].map((offset) => (
+          <mesh
+            key={offset}
+            position={[offset * width, height / 2, Math.max(depth, 0.14) / 2 + 0.01]}
+            castShadow
+          >
+            <boxGeometry args={[width * 0.18, height * 0.12, 0.02]} />
+            <meshStandardMaterial color="#9aa5b1" />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+
+  if (baseShape === "door_panel") {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height, Math.max(depth, 0.08)]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh
+          position={[width * 0.32, height * 0.52, Math.max(depth, 0.08) / 2 + 0.01]}
+          castShadow
+        >
+          <sphereGeometry args={[0.04, 12, 12]} />
+          <meshStandardMaterial color="#e7c17f" />
+        </mesh>
+      </group>
+    );
+  }
+
   return (
     <group>
       <mesh position={[0, height / 2, 0]} castShadow receiveShadow>

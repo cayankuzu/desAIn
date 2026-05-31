@@ -32,6 +32,9 @@ const cloneRoomData = (roomData: RoomData): RoomData =>
 const cloneRoomObject = (object: RoomObject): RoomObject =>
   JSON.parse(JSON.stringify(object)) as RoomObject;
 
+const getMountHeight = (object: Pick<RoomObject, "params">) =>
+  typeof object.params.mountHeight === "number" ? object.params.mountHeight : 0;
+
 const limitHistory = (history: RoomData[]) => history.slice(-50);
 
 const updateObjectInRoom = (
@@ -79,10 +82,11 @@ const clampOpening = (roomData: RoomData, opening: Opening): Opening => {
 
 const normalizeRoomObjects = (roomData: RoomData, objects: RoomObject[]) =>
   objects.map((object) => {
+    const maxHeight = Math.max(0.05, roomData.room.height - getMountHeight(object));
     const safeHeight = clampDimension(
       object.dimensions.height,
       object.dimensions.height,
-      roomData.room.height,
+      maxHeight,
     );
     const normalizedObject: RoomObject = {
       ...object,
@@ -110,7 +114,14 @@ const createObjectFromTemplate = (
   position?: RoomObject["position"],
 ): RoomObject => {
   const structural = Boolean(template.params.structural);
-  const height = Math.min(template.dimensions.height, roomData.room.height);
+  const height = Math.min(
+    template.dimensions.height,
+    Math.max(
+      0.05,
+      roomData.room.height -
+        (typeof template.params.mountHeight === "number" ? template.params.mountHeight : 0),
+    ),
+  );
   const baseObject: RoomObject = {
     id: createObjectId(template.category),
     label: template.label,
@@ -144,44 +155,88 @@ const createObjectFromTemplate = (
 };
 
 const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
-  const fixedObjects = objects.filter((object) => object.locked || !object.movable);
-  const movableObjects = objects.filter((object) => !object.locked && object.movable);
-  const nextObjects: RoomObject[] = fixedObjects.map((object) => cloneRoomObject(object));
+  const fixedObjects = objects
+    .filter(
+      (object) =>
+        object.locked || !object.movable || getMountHeight(object) > 0,
+    )
+    .map((object) => cloneRoomObject(object));
+  const movableObjects = objects
+    .filter(
+      (object) =>
+        !object.locked && object.movable && getMountHeight(object) === 0,
+    )
+    .map((object) => cloneRoomObject(object))
+    .sort(
+      (left, right) =>
+        right.dimensions.width * right.dimensions.depth -
+        left.dimensions.width * left.dimensions.depth,
+    );
 
-  movableObjects.forEach((object) => {
-    const draft = cloneRoomObject(object);
-    let placed = false;
+  const scoreLayout = (layoutObjects: RoomObject[]) =>
+    validateRoomLayout({
+      ...roomData,
+      objects: layoutObjects,
+    }).length;
 
-    for (let attempt = 0; attempt < 45; attempt += 1) {
-      const rotation = [0, 90, 180, 270][Math.floor(Math.random() * 4)];
-      const desiredPosition = {
-        x: 0.3 + Math.random() * Math.max(0.4, roomData.room.width - 0.6),
-        z: 0.3 + Math.random() * Math.max(0.4, roomData.room.depth - 0.6),
-      };
-      const clampedPosition = clampObjectPositionToRoom(
-        roomData,
-        draft,
-        desiredPosition,
-        rotation,
-      );
-      const candidate = {
-        ...draft,
-        rotation,
-        position: clampedPosition,
-      };
-      const intersects = nextObjects.some((existing) =>
-        boundsIntersect(getObjectBounds(existing), getObjectBounds(candidate), 0.06),
-      );
+  let bestObjects: RoomObject[] = [
+    ...fixedObjects,
+    ...movableObjects.map((object) => cloneRoomObject(object)),
+  ];
+  let bestScore = scoreLayout(bestObjects);
 
-      if (!intersects) {
-        nextObjects.push(candidate);
-        placed = true;
-        break;
+  for (let layoutAttempt = 0; layoutAttempt < 140; layoutAttempt += 1) {
+    const draftObjects = fixedObjects.map((object) => cloneRoomObject(object));
+
+    movableObjects.forEach((object) => {
+      const draft = cloneRoomObject(object);
+      let bestCandidate: RoomObject | null = null;
+      let bestCandidateScore = Number.POSITIVE_INFINITY;
+      const rotations = [0, 90, 180, 270];
+
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        const rotation = rotations[Math.floor(Math.random() * rotations.length)];
+        const desiredPosition = {
+          x: 0.3 + Math.random() * Math.max(0.4, roomData.room.width - 0.6),
+          z: 0.3 + Math.random() * Math.max(0.4, roomData.room.depth - 0.6),
+        };
+        const clampedPosition = clampObjectPositionToRoom(
+          roomData,
+          draft,
+          desiredPosition,
+          rotation,
+        );
+        const candidate = {
+          ...draft,
+          rotation,
+          position: clampedPosition,
+        };
+        const intersects = draftObjects.some((existing) =>
+          boundsIntersect(getObjectBounds(existing), getObjectBounds(candidate), 0.06),
+        );
+
+        if (intersects) {
+          continue;
+        }
+
+        const candidateScore = scoreLayout([...draftObjects, candidate]);
+
+        if (candidateScore < bestCandidateScore) {
+          bestCandidate = candidate;
+          bestCandidateScore = candidateScore;
+
+          if (candidateScore === 0) {
+            break;
+          }
+        }
       }
-    }
 
-    if (!placed) {
-      nextObjects.push({
+      if (bestCandidate) {
+        draftObjects.push(bestCandidate);
+        return;
+      }
+
+      draftObjects.push({
         ...draft,
         position: clampObjectPositionToRoom(
           roomData,
@@ -190,10 +245,21 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
           draft.rotation,
         ),
       });
-    }
-  });
+    });
 
-  return nextObjects;
+    const layoutScore = scoreLayout(draftObjects);
+
+    if (layoutScore < bestScore) {
+      bestObjects = draftObjects.map((object) => cloneRoomObject(object));
+      bestScore = layoutScore;
+    }
+
+    if (bestScore === 0) {
+      break;
+    }
+  }
+
+  return bestObjects;
 };
 
 interface RoomStore {
@@ -392,6 +458,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
           return;
         }
 
+        const maxHeight = Math.max(0.05, roomData.room.height - getMountHeight(object));
         const nextRotation = normalizeRotation(payload.rotation ?? object.rotation);
         const nextDimensions = {
           width: clampDimension(
@@ -405,7 +472,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
           height: clampDimension(
             payload.dimensions?.height ?? object.dimensions.height,
             object.dimensions.height,
-            roomData.room.height,
+            maxHeight,
           ),
         };
         const desiredPosition = {

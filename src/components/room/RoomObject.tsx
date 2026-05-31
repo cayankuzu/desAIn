@@ -27,11 +27,15 @@ export function RoomObject({
     },
     [object.id, onObjectReady],
   );
+  const mountHeight =
+    typeof object.params.mountHeight === "number"
+      ? object.params.mountHeight
+      : 0;
 
   return (
     <group
       ref={handleRef}
-      position={[object.position.x, 0, object.position.z]}
+      position={[object.position.x, mountHeight, object.position.z]}
       rotation={[0, (object.rotation * Math.PI) / 180, 0]}
       onClick={(event) => {
         event.stopPropagation();
