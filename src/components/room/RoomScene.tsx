@@ -86,7 +86,7 @@ export function RoomScene() {
 
   return (
     <Canvas
-      shadows
+      shadows="percentage"
       camera={{ position: [6.4, 5.8, 6.4], fov: 40 }}
       onPointerMissed={() => {
         setSelectedStructure(null);

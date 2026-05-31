@@ -1,7 +1,7 @@
 import { boundsIntersect, getObjectBounds } from "@/lib/room/collision";
 import {
   getActiveClearanceZones,
-  isWallMountedObject,
+  isWallAttachedObject,
   objectIntersectsZone,
 } from "@/lib/room/constraints";
 import { getRoomCutoutZone } from "@/lib/room/roomGeometry";
@@ -16,8 +16,8 @@ const shouldIgnoreCollision = (
 ) =>
   isFloorCovering(left) ||
   isFloorCovering(right) ||
-  isWallMountedObject(left) ||
-  isWallMountedObject(right);
+  isWallAttachedObject(left) ||
+  isWallAttachedObject(right);
 
 export const validateRoomLayout = (roomData: RoomData): LayoutWarning[] => {
   const warnings: LayoutWarning[] = [];
@@ -50,7 +50,7 @@ export const validateRoomLayout = (roomData: RoomData): LayoutWarning[] => {
       });
     }
 
-    if (!isWallMountedObject(object)) {
+    if (!isWallAttachedObject(object)) {
       zones.forEach((zone) => {
         if (objectIntersectsZone(object, zone)) {
           warnings.push({

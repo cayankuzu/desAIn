@@ -47,6 +47,156 @@ export function GenericObjectGenerator({
     );
   }
 
+  if (baseShape === "round_table") {
+    return (
+      <group>
+        <mesh position={[0, height - 0.05, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[width / 2, width / 2, 0.1, 32]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[width * 0.08, width * 0.08, height, 16]} />
+          <meshStandardMaterial color="#6f4f37" />
+        </mesh>
+        <mesh position={[0, 0.04, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[width * 0.24, width * 0.32, 0.08, 24]} />
+          <meshStandardMaterial color="#6f4f37" />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "plant") {
+    return (
+      <group>
+        <mesh position={[0, height * 0.16, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[width * 0.28, width * 0.36, height * 0.32, 18]} />
+          <meshStandardMaterial color="#8b6044" />
+        </mesh>
+        {[0, 1, 2].map((index) => (
+          <mesh
+            key={index}
+            position={[
+              (index - 1) * width * 0.12,
+              height * (0.48 + index * 0.12),
+              index % 2 === 0 ? -depth * 0.06 : depth * 0.08,
+            ]}
+            castShadow
+            receiveShadow
+          >
+            <sphereGeometry args={[width * (0.26 - index * 0.03), 16, 12]} />
+            <meshStandardMaterial color={index === 1 ? "#6f9a63" : primaryColor} />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+
+  if (baseShape === "kitchen_sink") {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height, depth]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height + 0.015, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.52, 0.03, depth * 0.48]} />
+          <meshStandardMaterial color="#cfd6dc" />
+        </mesh>
+        <mesh position={[width * 0.18, height + 0.14, -depth * 0.08]} castShadow>
+          <torusGeometry args={[0.08, 0.012, 8, 18, Math.PI]} />
+          <meshStandardMaterial color="#d8c59d" />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "cooktop") {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height, depth]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        {[
+          [-0.22, -0.16],
+          [0.22, -0.16],
+          [-0.22, 0.16],
+          [0.22, 0.16],
+        ].map(([x, z]) => (
+          <mesh key={`${x}-${z}`} position={[x * width, height + 0.01, z * depth]}>
+            <torusGeometry args={[Math.min(width, depth) * 0.1, 0.008, 8, 18]} />
+            <meshStandardMaterial color="#cfd6dc" />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+
+  if (baseShape === "appliance_box" || baseShape === "washer") {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height, depth]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height * 0.52, depth / 2 + 0.012]} castShadow>
+          {baseShape === "washer" ? (
+            <cylinderGeometry args={[width * 0.24, width * 0.24, 0.025, 28]} />
+          ) : (
+            <boxGeometry args={[width * 0.72, height * 0.62, 0.025]} />
+          )}
+          <meshStandardMaterial color={baseShape === "washer" ? "#9db1c0" : "#202830"} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "bathtub") {
+    return (
+      <group>
+        <mesh position={[0, height * 0.3, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height * 0.6, depth]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height * 0.64, 0]} castShadow>
+          <boxGeometry args={[width * 0.78, height * 0.12, depth * 0.62]} />
+          <meshStandardMaterial color="#f4f7f8" />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "toilet") {
+    return (
+      <group>
+        <mesh position={[0, height * 0.22, depth * 0.08]} castShadow receiveShadow>
+          <cylinderGeometry args={[width * 0.32, width * 0.25, height * 0.32, 24]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height * 0.55, -depth * 0.24]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.76, height * 0.42, depth * 0.18]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "wall_clock") {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[width / 2, width / 2, Math.max(depth, 0.04), 32]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height / 2, Math.max(depth, 0.04) / 2 + 0.01]} castShadow>
+          <boxGeometry args={[width * 0.04, height * 0.34, 0.012]} />
+          <meshStandardMaterial color="#25303b" />
+        </mesh>
+      </group>
+    );
+  }
+
   if (baseShape === "stairs" || baseShape === "spiral_stairs") {
     const stepCount = 6;
 
@@ -84,6 +234,36 @@ export function GenericObjectGenerator({
             </mesh>
           );
         })}
+      </group>
+    );
+  }
+
+  if (baseShape === "ladder_stairs") {
+    return (
+      <group>
+        {[-0.24, 0.24].map((offset) => (
+          <mesh
+            key={offset}
+            position={[offset * width, height / 2, 0]}
+            rotation={[0.28, 0, 0]}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry args={[width * 0.08, height, depth * 0.04]} />
+            <meshStandardMaterial color={primaryColor} />
+          </mesh>
+        ))}
+        {[0, 1, 2, 3, 4].map((step) => (
+          <mesh
+            key={step}
+            position={[0, height * (0.15 + step * 0.16), -depth * 0.32 + step * depth * 0.16]}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry args={[width * 0.68, height * 0.035, depth * 0.08]} />
+            <meshStandardMaterial color="#d2c0aa" />
+          </mesh>
+        ))}
       </group>
     );
   }
@@ -138,6 +318,50 @@ export function GenericObjectGenerator({
           <sphereGeometry args={[0.04, 12, 12]} />
           <meshStandardMaterial color="#e7c17f" />
         </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "guitar") {
+    return (
+      <group>
+        <mesh position={[0, height * 0.3, 0]} castShadow receiveShadow>
+          <sphereGeometry args={[width * 0.3, 18, 14]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height * 0.66, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.12, height * 0.58, depth * 0.12]} />
+          <meshStandardMaterial color="#6c4d36" />
+        </mesh>
+        <mesh position={[0, height * 0.08, depth * 0.1]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.65, height * 0.08, depth * 0.18]} />
+          <meshStandardMaterial color="#4f4037" />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "piano") {
+    return (
+      <group>
+        <mesh position={[0, height * 0.42, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height * 0.84, depth]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height * 0.5, depth / 2 + 0.014]} castShadow>
+          <boxGeometry args={[width * 0.72, height * 0.12, 0.025]} />
+          <meshStandardMaterial color="#f4f0e6" />
+        </mesh>
+        {[...Array(8)].map((_, index) => (
+          <mesh
+            key={index}
+            position={[-width * 0.3 + index * width * 0.085, height * 0.52, depth / 2 + 0.03]}
+            castShadow
+          >
+            <boxGeometry args={[width * 0.035, height * 0.1, 0.025]} />
+            <meshStandardMaterial color="#1f2429" />
+          </mesh>
+        ))}
       </group>
     );
   }

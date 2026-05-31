@@ -7,7 +7,12 @@ import {
   getInventoryTemplateById,
   type InventoryTemplate,
 } from "@/lib/room/inventoryCatalog";
-import { clampObjectPositionToRoom, normalizeRotation } from "@/lib/room/constraints";
+import {
+  clampObjectPositionToRoom,
+  getWallAttachedObjectTransform,
+  isWallAttachedObject,
+  normalizeRotation,
+} from "@/lib/room/constraints";
 import { defaultRoom, resizeRoomDefinition } from "@/lib/room/defaultRoom";
 import { validateRoomLayout } from "@/lib/room/layoutValidator";
 import {
@@ -38,7 +43,7 @@ const getMountHeight = (object: Pick<RoomObject, "params">) =>
 const isFixedDuringRandomize = (object: Pick<RoomObject, "locked" | "movable" | "params">) =>
   object.locked ||
   !object.movable ||
-  getMountHeight(object) > 0 ||
+  object.params.structural === true ||
   object.params.fixedDuringRandomize === true;
 
 const limitHistory = (history: RoomData[]) => history.slice(-50);
@@ -74,6 +79,168 @@ const clampDimension = (value: number, fallback: number, maximum?: number) => {
 const createObjectId = (category: RoomObject["category"]) =>
   `${category}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 
+const getObjectBaseShape = (object: Pick<RoomObject, "params">) =>
+  String(object.params.baseShape ?? "");
+
+const shouldPreferWallPlacement = (object: RoomObject) => {
+  const baseShape = getObjectBaseShape(object);
+
+  return (
+    object.category === "sofa" ||
+    object.category === "bed" ||
+    object.category === "wardrobe" ||
+    object.category === "tv_unit" ||
+    baseShape === "appliance_box" ||
+    baseShape === "washer" ||
+    baseShape === "kitchen_sink" ||
+    baseShape === "piano" ||
+    baseShape === "door_panel"
+  );
+};
+
+const isFloorCovering = (object: Pick<RoomObject, "category" | "dimensions">) =>
+  object.category === "carpet" || object.dimensions.height <= 0.06;
+
+const shouldIgnorePlacementCollision = (left: RoomObject, right: RoomObject) =>
+  isFloorCovering(left) ||
+  isFloorCovering(right) ||
+  isWallAttachedObject(left) ||
+  isWallAttachedObject(right);
+
+const getFacingRotation = (
+  from: RoomObject["position"],
+  to: RoomObject["position"],
+) => normalizeRotation((Math.atan2(to.x - from.x, to.z - from.z) * 180) / Math.PI);
+
+const getForwardVector = (rotation: number) => {
+  const radians = (normalizeRotation(rotation) * Math.PI) / 180;
+
+  return {
+    x: Math.sin(radians),
+    z: Math.cos(radians),
+  };
+};
+
+const getFacingQuality = (
+  object: RoomObject,
+  target: RoomObject["position"],
+) => {
+  const dx = target.x - object.position.x;
+  const dz = target.z - object.position.z;
+  const distance = Math.hypot(dx, dz);
+
+  if (distance < 0.001) {
+    return 1;
+  }
+
+  const forward = getForwardVector(object.rotation);
+  const dot = forward.x * (dx / distance) + forward.z * (dz / distance);
+
+  return Math.max(0, Math.min(1, (dot + 1) / 2));
+};
+
+const getDesignPenalty = (roomData: RoomData, objects: RoomObject[]) => {
+  const roomCenter = {
+    x: roomData.room.width / 2,
+    z: roomData.room.depth / 2,
+  };
+  const tvObjects = objects.filter((object) => object.category === "tv_unit");
+
+  return objects.reduce((total, object) => {
+    if (isFixedDuringRandomize(object) || isWallAttachedObject(object)) {
+      return total;
+    }
+
+    if (object.category === "sofa" || object.category === "chair") {
+      const nearestTv = [...tvObjects].sort(
+        (left, right) =>
+          Math.hypot(
+            object.position.x - left.position.x,
+            object.position.z - left.position.z,
+          ) -
+          Math.hypot(
+            object.position.x - right.position.x,
+            object.position.z - right.position.z,
+          ),
+      )[0];
+
+      if (nearestTv) {
+        const distanceToTv = Math.hypot(
+          object.position.x - nearestTv.position.x,
+          object.position.z - nearestTv.position.z,
+        );
+        const seatWeight = object.category === "sofa" ? 34 : 20;
+        const distancePenalty =
+          distanceToTv < 1.25
+            ? (1.25 - distanceToTv) * 18
+            : distanceToTv > 4.8
+              ? (distanceToTv - 4.8) * 5
+              : 0;
+
+        return (
+          total +
+          (1 - getFacingQuality(object, nearestTv.position)) * seatWeight +
+          (1 - getFacingQuality(nearestTv, object.position)) * 24 +
+          distancePenalty
+        );
+      }
+
+      return total + (1 - getFacingQuality(object, roomCenter)) * 8;
+    }
+
+    if (shouldPreferWallPlacement(object)) {
+      return total + (1 - getFacingQuality(object, roomCenter)) * 6;
+    }
+
+    return total;
+  }, 0);
+};
+
+const orientSocialObjects = (objects: RoomObject[]) => {
+  const tvObjects = objects.filter((object) => object.category === "tv_unit");
+
+  if (!tvObjects.length) {
+    return objects;
+  }
+
+  return objects.map((object) => {
+    if (isFixedDuringRandomize(object)) {
+      return object;
+    }
+
+    const shouldFaceTv =
+      !shouldPreferWallPlacement(object) &&
+      (object.category === "sofa" ||
+        object.category === "chair" ||
+        getObjectBaseShape(object) === "piano");
+
+    if (!shouldFaceTv) {
+      return object;
+    }
+
+    const nearestTv = [...tvObjects].sort(
+      (left, right) =>
+        Math.hypot(
+          object.position.x - left.position.x,
+          object.position.z - left.position.z,
+        ) -
+        Math.hypot(
+          object.position.x - right.position.x,
+          object.position.z - right.position.z,
+        ),
+    )[0];
+
+    if (!nearestTv) {
+      return object;
+    }
+
+    return {
+      ...object,
+      rotation: getFacingRotation(object.position, nearestTv.position),
+    };
+  });
+};
+
 const clampOpening = (roomData: RoomData, opening: Opening): Opening => {
   const wallLength = getWallLength(roomData.room, opening.wallId);
   const minPosition = opening.width / 2 + 0.2;
@@ -102,6 +269,20 @@ const normalizeRoomObjects = (roomData: RoomData, objects: RoomObject[]) =>
         height: safeHeight,
       },
     };
+
+    if (isWallAttachedObject(normalizedObject)) {
+      const placement = getWallAttachedObjectTransform(
+        roomData,
+        normalizedObject,
+        normalizedObject.position,
+      );
+
+      return {
+        ...normalizedObject,
+        position: placement.position,
+        rotation: placement.rotation,
+      };
+    }
 
     return {
       ...normalizedObject,
@@ -149,6 +330,20 @@ const createObjectFromTemplate = (
     params: { ...template.params },
   };
 
+  if (isWallAttachedObject(baseObject)) {
+    const placement = getWallAttachedObjectTransform(
+      roomData,
+      baseObject,
+      baseObject.position,
+    );
+
+    return {
+      ...baseObject,
+      position: placement.position,
+      rotation: placement.rotation,
+    };
+  }
+
   return {
     ...baseObject,
     position: clampObjectPositionToRoom(
@@ -175,11 +370,20 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
 
   const sourceMap = new Map(objects.map((object) => [object.id, object]));
 
-  const scoreLayout = (layoutObjects: RoomObject[]) =>
-    validateRoomLayout({
+  const scoreLayout = (layoutObjects: RoomObject[]) => {
+    const orientedObjects = orientSocialObjects(layoutObjects);
+    const warnings = validateRoomLayout({
       ...roomData,
-      objects: layoutObjects,
-    }).length;
+      objects: orientedObjects,
+    });
+
+    const validationPenalty = warnings.reduce(
+      (total, warning) => total + (warning.level === "error" ? 1000 : 120),
+      0,
+    );
+
+    return validationPenalty + getDesignPenalty(roomData, orientedObjects);
+  };
 
   const movementScore = (layoutObjects: RoomObject[]) =>
     layoutObjects.reduce((total, object) => {
@@ -223,26 +427,39 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
       let bestCandidateMovement = Number.NEGATIVE_INFINITY;
       const rotations = [0, 90, 180, 270];
 
-      for (let attempt = 0; attempt < 120; attempt += 1) {
+      for (let attempt = 0; attempt < 180; attempt += 1) {
         const rotation = rotations[Math.floor(Math.random() * rotations.length)];
         const desiredPosition = {
           x: 0.3 + Math.random() * Math.max(0.4, roomData.room.width - 0.6),
           z: 0.3 + Math.random() * Math.max(0.4, roomData.room.depth - 0.6),
         };
-        const clampedPosition = clampObjectPositionToRoom(
-          roomData,
-          draft,
-          desiredPosition,
-          rotation,
-        );
-        const candidate = {
-          ...draft,
-          rotation,
-          position: clampedPosition,
-        };
-        const intersects = draftObjects.some((existing) =>
-          boundsIntersect(getObjectBounds(existing), getObjectBounds(candidate), 0.06),
-        );
+        const candidate = { ...draft };
+
+        if (isWallAttachedObject(candidate) || shouldPreferWallPlacement(candidate)) {
+          const placement = getWallAttachedObjectTransform(
+            roomData,
+            candidate,
+            desiredPosition,
+          );
+
+          candidate.position = placement.position;
+          candidate.rotation = placement.rotation;
+        } else {
+          candidate.rotation = rotation;
+          candidate.position = clampObjectPositionToRoom(
+            roomData,
+            candidate,
+            desiredPosition,
+            rotation,
+          );
+        }
+        const intersects = draftObjects.some((existing) => {
+          if (shouldIgnorePlacementCollision(existing, candidate)) {
+            return false;
+          }
+
+          return boundsIntersect(getObjectBounds(existing), getObjectBounds(candidate), 0.06);
+        });
 
         if (intersects) {
           continue;
@@ -271,6 +488,21 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
         return;
       }
 
+      if (isWallAttachedObject(draft) || shouldPreferWallPlacement(draft)) {
+        const placement = getWallAttachedObjectTransform(
+          roomData,
+          draft,
+          draft.position,
+        );
+
+        draftObjects.push({
+          ...draft,
+          position: placement.position,
+          rotation: placement.rotation,
+        });
+        return;
+      }
+
       draftObjects.push({
         ...draft,
         position: clampObjectPositionToRoom(
@@ -289,13 +521,15 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
       layoutScore < bestScore ||
       (layoutScore === bestScore && layoutMovement > bestMovement)
     ) {
-      bestObjects = draftObjects.map((object) => cloneRoomObject(object));
+      bestObjects = orientSocialObjects(draftObjects).map((object) =>
+        cloneRoomObject(object),
+      );
       bestScore = layoutScore;
       bestMovement = layoutMovement;
     }
   }
 
-  return bestObjects;
+  return orientSocialObjects(bestObjects);
 };
 
 interface RoomStore {
@@ -471,6 +705,19 @@ export const useRoomStore = create<RoomStore>((set) => ({
 
         const nextRotation = normalizeRotation(payload.rotation ?? object.rotation);
         const desiredPosition = payload.position ?? object.position;
+
+        if (isWallAttachedObject(object)) {
+          const placement = getWallAttachedObjectTransform(
+            roomData,
+            object,
+            desiredPosition,
+          );
+
+          object.position = placement.position;
+          object.rotation = placement.rotation;
+          return;
+        }
+
         object.position = clampObjectPositionToRoom(
           roomData,
           object,
@@ -517,13 +764,25 @@ export const useRoomStore = create<RoomStore>((set) => ({
         };
 
         object.dimensions = nextDimensions;
-        object.rotation = nextRotation;
-        object.position = clampObjectPositionToRoom(
-          roomData,
-          object,
-          desiredPosition,
-          nextRotation,
-        );
+
+        if (isWallAttachedObject(object)) {
+          const placement = getWallAttachedObjectTransform(
+            roomData,
+            object,
+            desiredPosition,
+          );
+
+          object.position = placement.position;
+          object.rotation = placement.rotation;
+        } else {
+          object.rotation = nextRotation;
+          object.position = clampObjectPositionToRoom(
+            roomData,
+            object,
+            desiredPosition,
+            nextRotation,
+          );
+        }
 
         if (payload.color) {
           object.color = payload.color;
@@ -649,15 +908,28 @@ export const useRoomStore = create<RoomStore>((set) => ({
         locked: false,
         movable: true,
       };
-      pasted.position = clampObjectPositionToRoom(
-        roomData,
-        pasted,
-        {
-          x: pasted.position.x + 0.35,
-          z: pasted.position.z + 0.35,
-        },
-        pasted.rotation,
-      );
+      const pastedPosition = {
+        x: pasted.position.x + 0.35,
+        z: pasted.position.z + 0.35,
+      };
+
+      if (isWallAttachedObject(pasted)) {
+        const placement = getWallAttachedObjectTransform(
+          roomData,
+          pasted,
+          pastedPosition,
+        );
+
+        pasted.position = placement.position;
+        pasted.rotation = placement.rotation;
+      } else {
+        pasted.position = clampObjectPositionToRoom(
+          roomData,
+          pasted,
+          pastedPosition,
+          pasted.rotation,
+        );
+      }
 
       roomData.objects.push(pasted);
 
@@ -739,6 +1011,19 @@ export const useRoomStore = create<RoomStore>((set) => ({
         }
 
         const nextRotation = normalizeRotation(object.rotation + delta);
+
+        if (isWallAttachedObject(object)) {
+          const placement = getWallAttachedObjectTransform(
+            roomData,
+            object,
+            object.position,
+          );
+
+          object.rotation = placement.rotation;
+          object.position = placement.position;
+          return;
+        }
+
         object.rotation = nextRotation;
         object.position = clampObjectPositionToRoom(
           roomData,

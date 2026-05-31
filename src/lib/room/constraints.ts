@@ -1,10 +1,7 @@
 import { getObjectBounds, getRotatedHalfExtents } from "@/lib/room/collision";
 import type { Bounds2D } from "@/lib/room/collision";
-import {
-  getRoomCutoutZone,
-  getWallSegment,
-} from "@/lib/room/roomGeometry";
-import type { Opening, RoomData, RoomObject } from "@/types/room";
+import { getRoomCutoutZone, getWallSegment } from "@/lib/room/roomGeometry";
+import type { Opening, RoomData, RoomObject, WallSegment } from "@/types/room";
 
 const EDGE_PADDING = 0.06;
 
@@ -19,9 +16,88 @@ export const getMountHeight = (object: Pick<RoomObject, "params">) =>
 export const isWallMountedObject = (object: Pick<RoomObject, "params">) =>
   getMountHeight(object) > 0;
 
+export const isWallAttachedObject = (object: Pick<RoomObject, "params">) => {
+  const baseShape = String(object.params.baseShape ?? "");
+
+  return (
+    isWallMountedObject(object) ||
+    baseShape === "wall_panel" ||
+    baseShape === "wall_box" ||
+    baseShape === "door_panel"
+  );
+};
+
 export const normalizeRotation = (rotation: number) => {
   const wrapped = rotation % 360;
   return wrapped < 0 ? wrapped + 360 : wrapped;
+};
+
+const getWallMetrics = (wall: WallSegment) => {
+  const dx = wall.to[0] - wall.from[0];
+  const dz = wall.to[1] - wall.from[1];
+  const length = Math.hypot(dx, dz) || 1;
+
+  return {
+    length,
+    directionX: dx / length,
+    directionZ: dz / length,
+    inwardNormalX: -dz / length,
+    inwardNormalZ: dx / length,
+  };
+};
+
+export const getWallAttachedObjectTransform = (
+  roomData: RoomData,
+  object: RoomObject,
+  desiredPosition: RoomObject["position"],
+) => {
+  const wallCandidates = roomData.room.walls.map((wall) => {
+    const metrics = getWallMetrics(wall);
+    const fromX = wall.from[0];
+    const fromZ = wall.from[1];
+    const desiredAlong =
+      (desiredPosition.x - fromX) * metrics.directionX +
+      (desiredPosition.z - fromZ) * metrics.directionZ;
+    const halfAlong = Math.min(object.dimensions.width / 2, metrics.length / 2);
+    const minAlong = Math.min(metrics.length / 2, halfAlong + 0.08);
+    const maxAlong = Math.max(minAlong, metrics.length - halfAlong - 0.08);
+    const along = Math.min(maxAlong, Math.max(minAlong, desiredAlong));
+    const wallX = fromX + metrics.directionX * along;
+    const wallZ = fromZ + metrics.directionZ * along;
+    const distance = Math.hypot(desiredPosition.x - wallX, desiredPosition.z - wallZ);
+
+    return {
+      wall,
+      metrics,
+      along,
+      distance,
+    };
+  });
+
+  const closestWall =
+    wallCandidates.sort((left, right) => left.distance - right.distance)[0] ?? null;
+
+  if (!closestWall) {
+    return {
+      position: desiredPosition,
+      rotation: normalizeRotation(object.rotation),
+    };
+  }
+
+  const wall = closestWall.wall;
+  const metrics = closestWall.metrics;
+  const wallX = wall.from[0] + metrics.directionX * closestWall.along;
+  const wallZ = wall.from[1] + metrics.directionZ * closestWall.along;
+  const wallOffset = object.dimensions.depth / 2 + EDGE_PADDING;
+  const position = {
+    x: Number((wallX + metrics.inwardNormalX * wallOffset).toFixed(3)),
+    z: Number((wallZ + metrics.inwardNormalZ * wallOffset).toFixed(3)),
+  };
+  const rotation = normalizeRotation(
+    (Math.atan2(metrics.inwardNormalX, metrics.inwardNormalZ) * 180) / Math.PI,
+  );
+
+  return { position, rotation };
 };
 
 export const clampObjectPositionToRoom = (
@@ -30,6 +106,10 @@ export const clampObjectPositionToRoom = (
   desiredPosition: RoomObject["position"],
   rotation = object.rotation,
 ) => {
+  if (isWallAttachedObject(object)) {
+    return getWallAttachedObjectTransform(roomData, object, desiredPosition).position;
+  }
+
   const { halfWidth, halfDepth } = getRotatedHalfExtents(
     object.dimensions.width,
     object.dimensions.depth,

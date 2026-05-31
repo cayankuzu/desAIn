@@ -218,7 +218,7 @@ export const defaultRoom: RoomData = {
       category: "wardrobe",
       generator: "WardrobeGenerator",
       position: { x: 5.82, z: 0.42 },
-      rotation: 180,
+      rotation: 0,
       dimensions: { width: 1.35, depth: 0.72, height: 2.3 },
       color: "#c9b396",
       movable: true,

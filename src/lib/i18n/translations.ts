@@ -90,7 +90,15 @@ export type MessageKey =
   | "rotation"
   | "color"
   | "category"
+  | "placement"
+  | "dimensions"
+  | "appearance"
+  | "itemState"
+  | "movableObject"
+  | "fixedObject"
+  | "maxHeight"
   | "wall"
+  | "wallNumber"
   | "rotateMinus15"
   | "rotatePlus15"
   | "unlock"
@@ -165,14 +173,22 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
       "Select an object in the viewport or outliner to edit size, position, rotation, and color.",
     worldOutliner: "Scene Items",
     locked: "Locked",
-    open: "Open",
+    open: "Free",
     editable: "Editable",
     positionX: "Position X",
     positionZ: "Position Z",
     rotation: "Rotation",
     color: "Color",
     category: "Category",
+    placement: "Placement",
+    dimensions: "Dimensions",
+    appearance: "Appearance",
+    itemState: "State",
+    movableObject: "Movable",
+    fixedObject: "Fixed",
+    maxHeight: "Max height",
     wall: "Wall",
+    wallNumber: "Wall",
     rotateMinus15: "Rotate -15",
     rotatePlus15: "Rotate +15",
     unlock: "Unlock",
@@ -247,14 +263,22 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
       "Boyut, konum, d\u00f6n\u00fc\u015f ve rengi d\u00fczenlemek i\u00e7in viewport'tan veya outliner'dan bir \u00f6\u011fe se\u00e7.",
     worldOutliner: "Sahne \u00d6\u011feleri",
     locked: "Kilitli",
-    open: "A\u00e7\u0131k",
+    open: "Serbest",
     editable: "D\u00fczenlenebilir",
     positionX: "Konum X",
     positionZ: "Konum Z",
     rotation: "D\u00f6n\u00fc\u015f",
     color: "Renk",
     category: "Kategori",
+    placement: "Yerle\u015fim",
+    dimensions: "\u00d6l\u00e7\u00fcler",
+    appearance: "G\u00f6r\u00fcn\u00fcm",
+    itemState: "Durum",
+    movableObject: "Ta\u015f\u0131nabilir",
+    fixedObject: "Sabit",
+    maxHeight: "Maks. y\u00fckseklik",
     wall: "Duvar",
+    wallNumber: "Duvar",
     rotateMinus15: "-15 D\u00f6nd\u00fcr",
     rotatePlus15: "+15 D\u00f6nd\u00fcr",
     unlock: "Kilidi A\u00e7",
@@ -324,6 +348,24 @@ const labelTranslations: Record<string, Record<Locale, string>> = {
   "object.planter": { en: "Planter", tr: "Saks\u0131" },
   "object.windowFrame": { en: "Window Frame", tr: "Pencere \u00c7er\u00e7evesi" },
   "object.guitarStand": { en: "Guitar Stand", tr: "Gitar Stand\u0131" },
+  "object.roundTable": { en: "Round Table", tr: "Yuvarlak Masa" },
+  "object.barStool": { en: "Bar Stool", tr: "Bar Taburesi" },
+  "object.lSofa": { en: "L Sofa", tr: "L Koltuk" },
+  "object.tallPlant": { en: "Tall Plant", tr: "Uzun Bitki" },
+  "object.kitchenSink": { en: "Kitchen Sink", tr: "Mutfak Evyesi" },
+  "object.cooktop": { en: "Cooktop", tr: "Ocak" },
+  "object.oven": { en: "Oven", tr: "F\u0131r\u0131n" },
+  "object.dishwasher": { en: "Dishwasher", tr: "Bula\u015f\u0131k Makinesi" },
+  "object.washer": { en: "Washing Machine", tr: "\u00c7ama\u015f\u0131r Makinesi" },
+  "object.bathtub": { en: "Bathtub", tr: "K\u00fcvet" },
+  "object.toilet": { en: "Toilet", tr: "Klozet" },
+  "object.vanity": { en: "Bathroom Vanity", tr: "Banyo Dolab\u0131" },
+  "object.wallClock": { en: "Wall Clock", tr: "Duvar Saati" },
+  "object.curtainPanel": { en: "Curtain Panel", tr: "Perde Paneli" },
+  "object.balconyDoor": { en: "Balcony Door", tr: "Balkon Kap\u0131s\u0131" },
+  "object.ladderStair": { en: "Ladder Stair", tr: "Dikey Merdiven" },
+  "object.piano": { en: "Piano", tr: "Piyano" },
+  "object.floorMirror": { en: "Floor Mirror", tr: "Ayakl\u0131 Ayna" },
   "object.doorPanel": { en: "Door Panel", tr: "Kap\u0131 Paneli" },
 };
 
@@ -335,7 +377,7 @@ const categoryTranslations: Record<ObjectCategory, Record<Locale, string>> = {
   wardrobe: { en: "Wardrobe", tr: "Gard\u0131rop" },
   tv_unit: { en: "TV Unit", tr: "TV \u00dcnitesi" },
   carpet: { en: "Carpet", tr: "Hal\u0131" },
-  generic_box: { en: "Storage", tr: "Depolama" },
+  generic_box: { en: "Object", tr: "Nesne" },
 };
 
 export const t = (locale: Locale, key: MessageKey) => translations[locale][key];

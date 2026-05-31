@@ -7,10 +7,46 @@ interface SofaGeneratorProps {
 
 export function SofaGenerator({ object, selected }: SofaGeneratorProps) {
   const { width, depth, height } = object.dimensions;
+  const isLShape = object.params.shape === "l";
   const seatHeight = height * 0.42;
   const backHeight = height * 0.48;
   const armWidth = width * 0.11;
   const highlight = selected ? "#f1b07a" : "#f3e5d0";
+
+  if (isLShape) {
+    return (
+      <group>
+        <mesh position={[0, seatHeight / 2, -depth * 0.18]} castShadow receiveShadow>
+          <boxGeometry args={[width, seatHeight, depth * 0.58]} />
+          <meshStandardMaterial color={object.color} />
+        </mesh>
+        <mesh
+          position={[-width * 0.28, seatHeight / 2, depth * 0.18]}
+          castShadow
+          receiveShadow
+        >
+          <boxGeometry args={[width * 0.44, seatHeight, depth * 0.82]} />
+          <meshStandardMaterial color={object.color} />
+        </mesh>
+        <mesh
+          position={[0, seatHeight + backHeight / 2 - 0.04, -depth / 2 + 0.08]}
+          castShadow
+          receiveShadow
+        >
+          <boxGeometry args={[width, backHeight, depth * 0.14]} />
+          <meshStandardMaterial color={highlight} />
+        </mesh>
+        <mesh
+          position={[-width / 2 + armWidth / 2, seatHeight + armWidth / 2, 0]}
+          castShadow
+          receiveShadow
+        >
+          <boxGeometry args={[armWidth, height * 0.55, depth]} />
+          <meshStandardMaterial color={object.color} />
+        </mesh>
+      </group>
+    );
+  }
 
   return (
     <group>

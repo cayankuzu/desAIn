@@ -118,11 +118,76 @@ export function InventoryPreview({ item }: { item: InventoryTemplate }) {
         </div>
       );
     case "lamp":
+    case "lighting":
       return (
         <div className={baseClasses}>
           <div className="absolute bottom-4 left-1/2 h-10 w-1 -translate-x-1/2 rounded bg-[#bda37a]" />
           <div className="absolute bottom-14 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[14px] border-b-[20px] border-x-transparent border-b-[#f0d5aa]" />
           <div className="absolute bottom-3 left-1/2 h-2 w-8 -translate-x-1/2 rounded-full bg-[#6f5d4e]" />
+        </div>
+      );
+    case "door":
+      return (
+        <div className={baseClasses}>
+          <div
+            className="absolute bottom-3 left-1/2 h-16 w-11 -translate-x-1/2 rounded-t-lg border border-white/15"
+            style={accentStyle}
+          />
+          <div className="absolute bottom-10 left-[calc(50%+0.55rem)] h-1.5 w-1.5 rounded-full bg-[#f1d08d]" />
+        </div>
+      );
+    case "window":
+      return (
+        <div className={baseClasses}>
+          <div
+            className="absolute left-1/2 top-1/2 h-12 w-16 -translate-x-1/2 -translate-y-1/2 rounded-lg border-4 border-white/25"
+            style={accentStyle}
+          />
+          <div className="absolute left-1/2 top-1/2 h-12 w-px -translate-x-1/2 -translate-y-1/2 bg-white/35" />
+          <div className="absolute left-1/2 top-1/2 h-px w-16 -translate-x-1/2 -translate-y-1/2 bg-white/35" />
+        </div>
+      );
+    case "kitchen":
+      return (
+        <div className={baseClasses}>
+          <div
+            className="absolute bottom-4 left-1/2 h-9 w-16 -translate-x-1/2 rounded-lg border border-white/15"
+            style={accentStyle}
+          />
+          <div className="absolute bottom-11 left-1/2 h-3 w-9 -translate-x-1/2 rounded-full bg-[#cfd6dc]" />
+          <div className="absolute bottom-[3.3rem] left-[calc(50%+0.75rem)] h-4 w-1 rounded bg-[#d8c59d]" />
+        </div>
+      );
+    case "bath":
+      return (
+        <div className={baseClasses}>
+          <div
+            className="absolute bottom-5 left-1/2 h-8 w-16 -translate-x-1/2 rounded-b-2xl rounded-t-lg border border-white/15"
+            style={accentStyle}
+          />
+          <div className="absolute bottom-10 left-1/2 h-2 w-12 -translate-x-1/2 rounded-full bg-white/65" />
+        </div>
+      );
+    case "plant":
+      return (
+        <div className={baseClasses}>
+          <div className="absolute bottom-4 left-1/2 h-5 w-9 -translate-x-1/2 rounded-b-lg bg-[#8b6044]" />
+          <div
+            className="absolute bottom-8 left-1/2 h-12 w-12 -translate-x-1/2 rounded-full border border-white/10"
+            style={accentStyle}
+          />
+          <div className="absolute bottom-11 left-[calc(50%-0.8rem)] h-7 w-7 rounded-full bg-[#6f9a63]" />
+        </div>
+      );
+    case "instrument":
+      return (
+        <div className={baseClasses}>
+          <div
+            className="absolute bottom-5 left-1/2 h-9 w-8 -translate-x-1/2 rounded-full border border-white/15"
+            style={accentStyle}
+          />
+          <div className="absolute bottom-12 left-1/2 h-8 w-2 -translate-x-1/2 rounded bg-[#6c4d36]" />
+          <div className="absolute bottom-3 left-1/2 h-2 w-12 -translate-x-1/2 rounded bg-[#4f4037]" />
         </div>
       );
     case "appliance":

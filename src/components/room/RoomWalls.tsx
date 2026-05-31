@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useRoomStore } from "@/store/roomStore";
 import { useUIStore } from "@/store/uiStore";
 import { getWallSegment } from "@/lib/room/roomGeometry";
@@ -31,6 +32,24 @@ const getWallMetrics = (wall: WallSegment) => {
     inwardNormalX: -dz / length,
     inwardNormalZ: dx / length,
   };
+};
+
+const getOpeningCutout = (opening: Opening, roomHeight: number) => {
+  if (opening.type === "door" || opening.type === "balcony_door") {
+    return {
+      bottom: 0,
+      height: Math.min(2.08, Math.max(1.6, roomHeight - 0.18)),
+    };
+  }
+
+  if (opening.type === "window") {
+    return {
+      bottom: Math.min(0.9, Math.max(0.45, roomHeight * 0.28)),
+      height: Math.min(1.12, Math.max(0.55, roomHeight * 0.42)),
+    };
+  }
+
+  return null;
 };
 
 function OpeningVisual({
@@ -166,37 +185,97 @@ export function RoomWalls({ room }: RoomWallsProps) {
   return (
     <group>
       {room.walls.map((wall, index) => {
-        const { horizontal, length } = getWallMetrics(wall);
+        const { horizontal, length, directionX, directionZ } = getWallMetrics(wall);
         const selected =
           selectedStructure?.type === "wall" && selectedStructure.id === wall.id;
+        const wallColor = selected ? "#8cb9ff" : index % 2 === 0 ? "#717a85" : "#646d78";
+        const wallOpenings = room.openings
+          .filter((opening) => opening.wallId === wall.id)
+          .map((opening) => ({
+            opening,
+            cutout: getOpeningCutout(opening, wallHeight),
+          }));
+        const cutOpenings = wallOpenings
+          .filter(
+            (entry): entry is { opening: Opening; cutout: { bottom: number; height: number } } =>
+              Boolean(entry.cutout),
+          )
+          .sort((left, right) => left.opening.position - right.opening.position);
 
-        return (
-          <mesh
-            key={wall.id}
-            position={[
-              (wall.from[0] + wall.to[0]) / 2,
-              wallHeight / 2,
-              (wall.from[1] + wall.to[1]) / 2,
-            ]}
-            castShadow
-            receiveShadow
-            onClick={(event) => {
-              event.stopPropagation();
-              handleStructureSelect("wall", wall.id);
-            }}
-          >
-            <boxGeometry
-              args={
-                horizontal
-                  ? [length, wallHeight, wallThickness]
-                  : [wallThickness, wallHeight, length]
-              }
-            />
-            <meshStandardMaterial
-              color={selected ? "#8cb9ff" : index % 2 === 0 ? "#717a85" : "#646d78"}
-            />
-          </mesh>
-        );
+        const renderWallPiece = (
+          startAlong: number,
+          endAlong: number,
+          bottom: number,
+          height: number,
+          key: string,
+        ) => {
+          const pieceLength = endAlong - startAlong;
+
+          if (pieceLength <= 0.02 || height <= 0.02) {
+            return null;
+          }
+
+          const centerAlong = startAlong + pieceLength / 2;
+          const centerX = wall.from[0] + directionX * centerAlong;
+          const centerZ = wall.from[1] + directionZ * centerAlong;
+
+          return (
+            <mesh
+              key={key}
+              position={[centerX, bottom + height / 2, centerZ]}
+              castShadow
+              receiveShadow
+              onClick={(event) => {
+                event.stopPropagation();
+                handleStructureSelect("wall", wall.id);
+              }}
+            >
+              <boxGeometry
+                args={
+                  horizontal
+                    ? [pieceLength, height, wallThickness]
+                    : [wallThickness, height, pieceLength]
+                }
+              />
+              <meshStandardMaterial color={wallColor} />
+            </mesh>
+          );
+        };
+
+        const wallPieces: ReactNode[] = [];
+        let cursor = 0;
+
+        cutOpenings.forEach(({ opening, cutout }) => {
+          const start = Math.max(0, opening.position - opening.width / 2);
+          const end = Math.min(length, opening.position + opening.width / 2);
+
+          wallPieces.push(
+            renderWallPiece(cursor, start, 0, wallHeight, `${wall.id}-before-${opening.id}`),
+          );
+          wallPieces.push(
+            renderWallPiece(
+              start,
+              end,
+              0,
+              cutout.bottom,
+              `${wall.id}-below-${opening.id}`,
+            ),
+          );
+          wallPieces.push(
+            renderWallPiece(
+              start,
+              end,
+              cutout.bottom + cutout.height,
+              Math.max(0, wallHeight - cutout.bottom - cutout.height),
+              `${wall.id}-above-${opening.id}`,
+            ),
+          );
+          cursor = Math.max(cursor, end);
+        });
+
+        wallPieces.push(renderWallPiece(cursor, length, 0, wallHeight, `${wall.id}-after`));
+
+        return <group key={wall.id}>{wallPieces}</group>;
       })}
 
       {room.openings.map((opening) => {

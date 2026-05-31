@@ -17,7 +17,7 @@ export function TVUnitGenerator({ object, selected }: TVUnitGeneratorProps) {
         <meshStandardMaterial color={object.color} />
       </mesh>
       <mesh
-        position={[0, cabinetHeight + screenHeight / 2 + 0.08, -depth * 0.08]}
+        position={[0, cabinetHeight + screenHeight / 2 + 0.08, depth / 2 + 0.035]}
         castShadow
         receiveShadow
       >
@@ -25,7 +25,7 @@ export function TVUnitGenerator({ object, selected }: TVUnitGeneratorProps) {
         <meshStandardMaterial color={selected ? "#4e6671" : "#1f2830"} />
       </mesh>
       <mesh
-        position={[0, cabinetHeight + 0.05, -depth * 0.08]}
+        position={[0, cabinetHeight + 0.05, depth / 2 + 0.04]}
         castShadow
         receiveShadow
       >

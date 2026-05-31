@@ -51,9 +51,11 @@ export function Topbar() {
   const selectedLabel = selectedObject
     ? getLocalizedObjectLabel(locale, selectedObject)
     : selectedOpening
-      ? `${getLocalizedOpeningType(locale, selectedOpening.type)} / ${selectedOpening.id}`
+      ? `${getLocalizedOpeningType(locale, selectedOpening.type)} ${selectedOpening.id
+          .replace(`${selectedOpening.type}_`, "")
+          .replace("_", " ")}`
       : selectedStructure?.type === "wall"
-        ? `${t(locale, "wall")} / ${selectedStructure.id}`
+        ? `${t(locale, "wall")} ${selectedStructure.id.replace("wall_", "")}`
         : t(locale, "noObjectSelected");
 
   return (

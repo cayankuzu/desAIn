@@ -92,6 +92,18 @@ const dedupeInventoryTemplates = () => {
 const uniqueInventoryCatalog = dedupeInventoryTemplates();
 const uniqueFeaturedInventory = uniqueInventoryCatalog.filter((item) => item.featured);
 
+const formatWallLabel = (locale: Locale, wallId: string) => {
+  const wallNumber = wallId.replace("wall_", "");
+
+  return `${t(locale, "wallNumber")} ${wallNumber}`;
+};
+
+const formatOpeningLabel = (locale: Locale, opening: Opening) => {
+  const openingNumber = opening.id.replace(`${opening.type}_`, "").replace("_", " ");
+
+  return `${getLocalizedOpeningType(locale, opening.type)} ${openingNumber}`;
+};
+
 export function Sidebar() {
   const locale = useUIStore((state) => state.locale);
   const activeSidebarTab = useUIStore((state) => state.activeSidebarTab);
@@ -376,7 +388,7 @@ function RoomSettingsEditor({ locale }: { locale: Locale }) {
               }`}
             >
               <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                {wall.id}
+                {formatWallLabel(locale, wall.id)}
               </div>
               <div className="mt-1 font-semibold text-white">{`${length.toFixed(2)}m`}</div>
             </button>
@@ -433,7 +445,7 @@ function OpeningEditor({
       }`}
     >
       <div className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-        {`${getLocalizedOpeningType(locale, opening.type)} / ${opening.id}`}
+        {formatOpeningLabel(locale, opening)}
       </div>
       <div className="grid grid-cols-3 gap-2">
         <label className="space-y-1">
@@ -447,7 +459,7 @@ function OpeningEditor({
           >
             {wallIds.map((wallId) => (
               <option key={wallId} value={wallId}>
-                {wallId}
+                {formatWallLabel(locale, wallId)}
               </option>
             ))}
           </select>
@@ -530,7 +542,9 @@ function SelectedWallEditor({
   return (
     <div className="mt-4 space-y-4 text-sm text-slate-300">
       <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-        <div className="text-lg font-semibold text-white">{wall.id}</div>
+        <div className="text-lg font-semibold text-white">
+          {formatWallLabel(locale, wall.id)}
+        </div>
         <div className="mt-1 text-xs uppercase tracking-[0.22em] text-slate-500">
           {t(locale, "wall")}
         </div>
@@ -680,6 +694,10 @@ function SelectedObjectEditor({
   const toggleObjectLock = useRoomStore((state) => state.toggleObjectLock);
   const updateObjectProperties = useRoomStore((state) => state.updateObjectProperties);
   const deleteObject = useRoomStore((state) => state.deleteObject);
+  const roomHeight = useRoomStore((state) => state.roomData.room.height);
+  const mountHeight =
+    typeof object.params.mountHeight === "number" ? object.params.mountHeight : 0;
+  const maxObjectHeight = Math.max(0.05, Number((roomHeight - mountHeight).toFixed(2)));
 
   const updateNumericProperty = (
     value: number,
@@ -694,28 +712,55 @@ function SelectedObjectEditor({
 
   return (
     <div className="mt-4 space-y-4 text-sm text-slate-300">
-      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-        <div className="flex items-start justify-between gap-3">
+      <div className="rounded-xl border border-white/10 bg-[#101822] p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="text-lg font-semibold text-white">
               {getLocalizedObjectLabel(locale, object)}
             </div>
-            <div className="text-xs uppercase tracking-[0.22em] text-slate-500">
-              {`${t(locale, "category")}: ${getLocalizedCategoryLabel(locale, object.category)}`}
+            <div className="mt-1 flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.14em]">
+              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-slate-400">
+                {getLocalizedCategoryLabel(locale, object.category)}
+              </span>
+              <span
+                className={`rounded-full px-2.5 py-1 ${
+                  object.movable
+                    ? "bg-[#102234] text-[#8cb9ff]"
+                    : "bg-[#25180f] text-[#f5c28b]"
+                }`}
+              >
+                {object.movable ? t(locale, "movableObject") : t(locale, "fixedObject")}
+              </span>
             </div>
           </div>
-          <span
-            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-              object.locked
-                ? "bg-[#2a1910] text-[#ffb16a]"
-                : "bg-[#102234] text-[#8cb9ff]"
-            }`}
-          >
-            {object.locked ? t(locale, "locked") : t(locale, "editable")}
-          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => toggleObjectLock(object.id)}
+              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 font-medium transition ${
+                object.locked
+                  ? "border-[#6d4a29] bg-[#25180f] text-[#f5c28b] hover:border-[#ffb16a]"
+                  : "border-white/10 bg-[#111924] text-slate-200 hover:border-[#32516c] hover:text-white"
+              }`}
+            >
+              <Lock className="h-4 w-4" />
+              {object.locked ? t(locale, "unlock") : t(locale, "lock")}
+            </button>
+            <button
+              type="button"
+              onClick={() => deleteObject(object.id)}
+              className="inline-flex items-center gap-2 rounded-xl border border-[#6e2a2a] bg-[#2a1313] px-3 py-2 font-medium text-[#ff8e8e] transition hover:border-[#ff5a5a] hover:text-white"
+            >
+              <Trash2 className="h-4 w-4" />
+              {t(locale, "deleteObject")}
+            </button>
+          </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="mt-5 text-xs font-semibold uppercase tracking-[0.22em] text-[#8cb9ff]">
+          {t(locale, "placement")}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3">
           <label className="space-y-1">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
               {t(locale, "positionX")}
@@ -767,6 +812,12 @@ function SelectedObjectEditor({
               className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
             />
           </label>
+        </div>
+
+        <div className="mt-5 text-xs font-semibold uppercase tracking-[0.22em] text-[#8cb9ff]">
+          {t(locale, "appearance")}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3">
           <label className="space-y-1">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
               {t(locale, "color")}
@@ -783,6 +834,20 @@ function SelectedObjectEditor({
               className="h-11 w-full rounded-xl border border-white/10 bg-[#111924] px-2 py-2 outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
             />
           </label>
+          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">
+            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              {t(locale, "itemState")}
+            </div>
+            <div className="mt-1 font-medium text-white">
+              {object.locked ? t(locale, "locked") : t(locale, "editable")}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 text-xs font-semibold uppercase tracking-[0.22em] text-[#8cb9ff]">
+          {t(locale, "dimensions")}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3">
           <label className="space-y-1">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
               {t(locale, "width")}
@@ -827,6 +892,7 @@ function SelectedObjectEditor({
               type="number"
               step="0.05"
               min="0.05"
+              max={maxObjectHeight}
               value={object.dimensions.height}
               disabled={object.locked}
               onChange={(event) =>
@@ -837,26 +903,13 @@ function SelectedObjectEditor({
               className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
             />
           </label>
+          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2">
+            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              {t(locale, "maxHeight")}
+            </div>
+            <div className="mt-1 font-medium text-white">{`${maxObjectHeight.toFixed(2)}m`}</div>
+          </div>
         </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => toggleObjectLock(object.id)}
-          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#111924] px-3 py-2 font-medium text-slate-200 transition hover:border-[#32516c] hover:text-white"
-        >
-          <Lock className="h-4 w-4" />
-          {object.locked ? t(locale, "unlock") : t(locale, "lock")}
-        </button>
-        <button
-          type="button"
-          onClick={() => deleteObject(object.id)}
-          className="inline-flex items-center gap-2 rounded-xl border border-[#6e2a2a] bg-[#2a1313] px-3 py-2 font-medium text-[#ff8e8e] transition hover:border-[#ff5a5a] hover:text-white"
-        >
-          <Trash2 className="h-4 w-4" />
-          {t(locale, "deleteObject")}
-        </button>
       </div>
 
       {object.locked ? (
