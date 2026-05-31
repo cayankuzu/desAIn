@@ -11,6 +11,7 @@ interface ObjectControlsProps {
   onBegin: () => void;
   onEnd: () => void;
   onObjectChange: () => void;
+  showTranslateY?: boolean;
 }
 
 export function ObjectControls({
@@ -20,6 +21,7 @@ export function ObjectControls({
   onBegin,
   onEnd,
   onObjectChange,
+  showTranslateY = false,
 }: ObjectControlsProps) {
   if (!enabled || !object) {
     return null;
@@ -34,7 +36,7 @@ export function ObjectControls({
       translationSnap={0.1}
       rotationSnap={Math.PI / 12}
       showX={mode === "translate"}
-      showY={mode === "rotate"}
+      showY={mode === "rotate" || (mode === "translate" && showTranslateY)}
       showZ={mode === "translate"}
       onMouseDown={onBegin}
       onMouseUp={onEnd}

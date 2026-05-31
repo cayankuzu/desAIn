@@ -19,6 +19,10 @@ export const isWallMountedObject = (object: Pick<RoomObject, "params">) =>
 export const isWallAttachedObject = (object: Pick<RoomObject, "params">) => {
   const baseShape = String(object.params.baseShape ?? "");
 
+  if (baseShape === "ceiling_light") {
+    return false;
+  }
+
   return (
     isWallMountedObject(object) ||
     baseShape === "wall_panel" ||

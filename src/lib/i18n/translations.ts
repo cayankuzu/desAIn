@@ -11,8 +11,18 @@ export type Locale = "en" | "tr";
 export type StatusKey =
   | "roomLoaded"
   | "roomUpdated"
+  | "roomPresetApplied"
   | "roomSaved"
   | "roomRandomized"
+  | "randomLayoutOptionApplied"
+  | "randomLayoutOptionsReady"
+  | "selectionUpdated"
+  | "selectionRandomized"
+  | "selectionDeleted"
+  | "selectionLocked"
+  | "selectionUnlocked"
+  | "groupCreated"
+  | "groupRemoved"
   | "objectAdded"
   | "objectSelected"
   | "selectionCleared"
@@ -66,6 +76,7 @@ export type MessageKey =
   | "depthShort"
   | "heightShort"
   | "shape"
+  | "roomPurpose"
   | "rectangle"
   | "square"
   | "lShape"
@@ -124,9 +135,30 @@ export type MessageKey =
   | "inventoryHint"
   | "dropToViewport"
   | "selectedLabel"
+  | "selectedItems"
+  | "group"
+  | "groups"
+  | "ungroup"
+  | "groupSelection"
+  | "randomizeSelection"
+  | "lockSelection"
+  | "unlockSelection"
+  | "deleteSelection"
+  | "multiSelectShortcut"
+  | "multiSelectHint"
+  | "smartArrangeHint"
+  | "ungroupHint"
+  | "groupHint"
   | "recommended"
   | "saveRoom"
   | "randomizeRoom"
+  | "randomLayouts"
+  | "randomLayoutsHint"
+  | "activeLayout"
+  | "closePanel"
+  | "noWarningsShort"
+  | "warningsShort"
+  | "errorsShort"
   | "resetDefault"
   | "resetSaved"
   | "resetSceneOptions"
@@ -170,6 +202,7 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     depthShort: "D",
     heightShort: "H",
     shape: "Shape",
+    roomPurpose: "Room Type",
     rectangle: "Rectangle",
     square: "Square",
     lShape: "L-Shape",
@@ -230,9 +263,30 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     inventoryHint: "Drag any item into the viewport to create it instantly.",
     dropToViewport: "Drop into the viewport to add this object",
     selectedLabel: "Selected",
+    selectedItems: "Selected items",
+    group: "Group",
+    groups: "Groups",
+    ungroup: "Ungroup",
+    groupSelection: "Group",
+    randomizeSelection: "Arrange Selection",
+    lockSelection: "Lock Selection",
+    unlockSelection: "Unlock Selection",
+    deleteSelection: "Delete Selection",
+    multiSelectShortcut: "Ctrl + click",
+    multiSelectHint: "Multi-select objects, then group, lock, delete, or arrange only that set.",
+    smartArrangeHint: "Smart arrange keeps fixed items in place and uses object relationships only inside explicit groups.",
+    ungroupHint: "Remove the selected group while keeping its objects in the room.",
+    groupHint: "Create a reusable group from the current multi-selection.",
     recommended: "Recommended",
     saveRoom: "Save Room",
     randomizeRoom: "Randomize",
+    randomLayouts: "Random Layouts",
+    randomLayoutsHint: "Choose a generated option for this room. Locked and fixed items stay where they are.",
+    activeLayout: "Active",
+    closePanel: "Close",
+    noWarningsShort: "Clean",
+    warningsShort: "warnings",
+    errorsShort: "errors",
     resetDefault: "Default Layout",
     resetSaved: "Saved Layout",
     resetSceneOptions: "Reset Options",
@@ -275,6 +329,7 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     depthShort: "BOY",
     heightShort: "YUK",
     shape: "Oda Tipi",
+    roomPurpose: "Oda Türü",
     rectangle: "Dikd\u00f6rtgen",
     square: "Kare",
     lShape: "L Tipi",
@@ -335,9 +390,30 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     inventoryHint: "Herhangi bir \u00f6\u011feyi viewport'a s\u00fcr\u00fckleyip an\u0131nda ekleyebilirsin.",
     dropToViewport: "Eklemek i\u00e7in viewport'a b\u0131rak",
     selectedLabel: "Se\u00e7ili",
+    selectedItems: "Se\u00e7ili \u00f6\u011feler",
+    group: "Grup",
+    groups: "Gruplar",
+    ungroup: "Grubu \u00c7\u00f6z",
+    groupSelection: "Grupla",
+    randomizeSelection: "Se\u00e7imi Diz",
+    lockSelection: "Se\u00e7imi Kilitle",
+    unlockSelection: "Kilidi A\u00e7",
+    deleteSelection: "Se\u00e7imi Sil",
+    multiSelectShortcut: "Ctrl + t\u0131kla",
+    multiSelectHint: "Nesneleri \u00e7oklu se\u00e7, sonra yaln\u0131zca bu se\u00e7imi grupla, kilitle, sil veya yeniden d\u00fczenle.",
+    smartArrangeHint: "Ak\u0131ll\u0131 dizim sabit \u00f6\u011feleri korur; e\u015fya ili\u015fkilerini yaln\u0131zca kullan\u0131c\u0131n\u0131n olu\u015fturdu\u011fu gruplarda kullan\u0131r.",
+    ungroupHint: "Se\u00e7ili grubu kald\u0131r\u0131r, i\u00e7indeki \u00f6\u011feler odada kal\u0131r.",
+    groupHint: "Mevcut \u00e7oklu se\u00e7imden tekrar se\u00e7ilebilir bir grup olu\u015fturur.",
     recommended: "\u00d6nerilenler",
     saveRoom: "Oday\u0131 Kaydet",
     randomizeRoom: "Rastgele Diz",
+    randomLayouts: "Rastgele D\u00fczenler",
+    randomLayoutsHint: "Bu oda i\u00e7in olu\u015fturulan d\u00fczeni se\u00e7. Kilitli ve sabit \u00f6\u011feler yerinde kal\u0131r.",
+    activeLayout: "Aktif",
+    closePanel: "Kapat",
+    noWarningsShort: "Temiz",
+    warningsShort: "uyar\u0131",
+    errorsShort: "hata",
     resetDefault: "Varsay\u0131lan D\u00fczen",
     resetSaved: "Kay\u0131tl\u0131 D\u00fczen",
     resetSceneOptions: "S\u0131f\u0131rlama Se\u00e7enekleri",
@@ -357,6 +433,18 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
 
 const labelTranslations: Record<string, Record<Locale, string>> = {
   "room.studioLoft": { en: "Studio Loft", tr: "St\u00fcdyo Oda" },
+  "room.purpose.empty": { en: "Empty Room", tr: "Bo\u015f Oda" },
+  "room.purpose.living": { en: "Living Room", tr: "Salon" },
+  "room.purpose.kitchen": { en: "Kitchen", tr: "Mutfak" },
+  "room.purpose.bedroom": { en: "Bedroom", tr: "Yatak Odas\u0131" },
+  "room.purpose.kids": { en: "Kids Room", tr: "\u00c7ocuk Odas\u0131" },
+  "room.purpose.study": { en: "Study", tr: "\u00c7al\u0131\u015fma Odas\u0131" },
+  "room.purpose.bathroom": { en: "Bathroom", tr: "Banyo" },
+  "room.purpose.dining": { en: "Dining Room", tr: "Yemek Odas\u0131" },
+  "room.purpose.laundry": { en: "Laundry", tr: "\u00c7ama\u015f\u0131r Odas\u0131" },
+  "room.purpose.entry": { en: "Entry Hall", tr: "Antre / Hol" },
+  "room.purpose.balcony": { en: "Balcony / Terrace", tr: "Balkon / Teras" },
+  "room.purpose.dressing": { en: "Dressing Room", tr: "Giyinme Odas\u0131" },
   "object.tvUnit": { en: "TV Unit", tr: "TV \u00dcnitesi" },
   "object.sofa": { en: "Sofa", tr: "Koltuk" },
   "object.loungeSofa": { en: "Lounge Sofa", tr: "Geni\u015f Koltuk" },
@@ -426,6 +514,19 @@ const labelTranslations: Record<string, Record<Locale, string>> = {
   "object.coatStand": { en: "Coat Stand", tr: "Ask\u0131l\u0131k" },
   "object.roomDivider": { en: "Room Divider", tr: "Paravan" },
   "object.modularCabinet": { en: "Modular Cabinet", tr: "Mod\u00fcler Dolap" },
+  "object.dresser": { en: "Dresser", tr: "\u015eifonyer" },
+  "object.sideboard": { en: "Sideboard", tr: "Konsol Dolap" },
+  "object.pouf": { en: "Pouf", tr: "Puf" },
+  "object.beanBag": { en: "Bean Bag", tr: "Armut Koltuk" },
+  "object.baseCabinet": { en: "Base Cabinet", tr: "Alt Mutfak Dolab\u0131" },
+  "object.upperCabinet": { en: "Upper Cabinet", tr: "\u00dcst Mutfak Dolab\u0131" },
+  "object.microwave": { en: "Microwave", tr: "Mikrodalga" },
+  "object.rangeHood": { en: "Range Hood", tr: "Davlumbaz" },
+  "object.dryer": { en: "Dryer", tr: "Kurutma Makinesi" },
+  "object.showerCabin": { en: "Shower Cabin", tr: "Du\u015f Kabini" },
+  "object.towelRack": { en: "Towel Rack", tr: "Havlu Ask\u0131s\u0131" },
+  "object.monitor": { en: "Monitor", tr: "Monit\u00f6r" },
+  "object.windowBlinds": { en: "Window Blinds", tr: "Jaluzi" },
   "object.doorPanel": { en: "Door Panel", tr: "Kap\u0131 Paneli" },
 };
 
@@ -494,12 +595,42 @@ export const formatEditorStatus = (
       return locale === "en"
         ? "Room measurements updated"
         : "Oda \u00f6l\u00e7\u00fcleri g\u00fcncellendi";
+    case "roomPresetApplied":
+      return locale === "en"
+        ? "Room type preset loaded"
+        : "Oda t\u00fcr\u00fc yerle\u015fimi y\u00fcklendi";
     case "roomSaved":
       return locale === "en" ? "Room layout saved" : "Oda d\u00fczeni kaydedildi";
     case "roomRandomized":
       return locale === "en"
         ? "Room randomized without moving fixed items"
         : "Sabit \u00f6\u011feler korunarak oda rastgele dizildi";
+    case "randomLayoutOptionApplied":
+      return locale === "en"
+        ? "Random layout option applied"
+        : "Rastgele d\u00fczen se\u00e7ildi";
+    case "randomLayoutOptionsReady":
+      return locale === "en"
+        ? "Random layout options opened"
+        : "Rastgele d\u00fczen listesi a\u00e7\u0131ld\u0131";
+    case "selectionUpdated":
+      return locale === "en" ? "Selection updated" : "Se\u00e7im g\u00fcncellendi";
+    case "selectionRandomized":
+      return locale === "en"
+        ? "Selected items arranged"
+        : "Se\u00e7ili \u00f6\u011feler d\u00fczenlendi";
+    case "selectionDeleted":
+      return locale === "en" ? "Selected items deleted" : "Se\u00e7ili \u00f6\u011feler silindi";
+    case "selectionLocked":
+      return locale === "en" ? "Selected items locked" : "Se\u00e7ili \u00f6\u011feler kilitlendi";
+    case "selectionUnlocked":
+      return locale === "en"
+        ? "Selected items unlocked"
+        : "Se\u00e7ili \u00f6\u011felerin kilidi a\u00e7\u0131ld\u0131";
+    case "groupCreated":
+      return locale === "en" ? "Group created" : "Grup olu\u015fturuldu";
+    case "groupRemoved":
+      return locale === "en" ? "Group removed" : "Grup kald\u0131r\u0131ld\u0131";
     case "objectAdded":
       return objectLabel
         ? locale === "en"

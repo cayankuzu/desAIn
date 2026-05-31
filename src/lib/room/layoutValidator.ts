@@ -1,5 +1,6 @@
 import { boundsIntersect, getObjectBounds } from "@/lib/room/collision";
 import {
+  getMountHeight,
   getActiveClearanceZones,
   isWallAttachedObject,
   objectIntersectsZone,
@@ -10,12 +11,18 @@ import type { LayoutWarning, RoomData } from "@/types/room";
 const isFloorCovering = (roomObject: RoomData["objects"][number]) =>
   roomObject.category === "carpet" || roomObject.dimensions.height <= 0.06;
 
+const isOverheadObject = (roomObject: RoomData["objects"][number]) =>
+  String(roomObject.params.baseShape ?? "") === "ceiling_light" ||
+  getMountHeight(roomObject) >= 2;
+
 const shouldIgnoreCollision = (
   left: RoomData["objects"][number],
   right: RoomData["objects"][number],
 ) =>
   isFloorCovering(left) ||
   isFloorCovering(right) ||
+  isOverheadObject(left) ||
+  isOverheadObject(right) ||
   isWallAttachedObject(left) ||
   isWallAttachedObject(right);
 
@@ -50,7 +57,7 @@ export const validateRoomLayout = (roomData: RoomData): LayoutWarning[] => {
       });
     }
 
-    if (!isWallAttachedObject(object)) {
+    if (!isWallAttachedObject(object) && !isOverheadObject(object)) {
       zones.forEach((zone) => {
         if (objectIntersectsZone(object, zone)) {
           warnings.push({

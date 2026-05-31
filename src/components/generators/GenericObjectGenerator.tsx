@@ -92,6 +92,26 @@ export function GenericObjectGenerator({
     );
   }
 
+  if (baseShape === "bean_bag") {
+    return (
+      <group>
+        <mesh
+          position={[0, height * 0.45, 0]}
+          scale={[width * 0.5, height * 0.58, depth * 0.5]}
+          castShadow
+          receiveShadow
+        >
+          <sphereGeometry args={[1, 24, 16]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height * 0.18, depth * 0.08]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.68, height * 0.08, depth * 0.46]} />
+          <meshStandardMaterial color="#5c6473" />
+        </mesh>
+      </group>
+    );
+  }
+
   if (baseShape === "kitchen_sink") {
     return (
       <group>
@@ -177,6 +197,29 @@ export function GenericObjectGenerator({
         <mesh position={[0, height * 0.55, -depth * 0.24]} castShadow receiveShadow>
           <boxGeometry args={[width * 0.76, height * 0.42, depth * 0.18]} />
           <meshStandardMaterial color={primaryColor} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "shower") {
+    return (
+      <group>
+        <mesh position={[0, height / 2, -depth / 2 + 0.03]} castShadow receiveShadow>
+          <boxGeometry args={[width, height, 0.06]} />
+          <meshStandardMaterial color={primaryColor} transparent opacity={0.42} />
+        </mesh>
+        <mesh position={[-width / 2 + 0.03, height / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.06, height, depth]} />
+          <meshStandardMaterial color={primaryColor} transparent opacity={0.36} />
+        </mesh>
+        <mesh position={[0, 0.04, 0]} receiveShadow>
+          <boxGeometry args={[width, 0.08, depth]} />
+          <meshStandardMaterial color="#dce8ee" />
+        </mesh>
+        <mesh position={[width * 0.24, height * 0.72, -depth / 2 + 0.08]} castShadow>
+          <cylinderGeometry args={[0.05, 0.05, 0.04, 18]} />
+          <meshStandardMaterial color="#d8c59d" />
         </mesh>
       </group>
     );
@@ -419,6 +462,25 @@ export function GenericObjectGenerator({
     );
   }
 
+  if (baseShape === "floor_mirror") {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height, Math.max(depth, 0.08)]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height / 2, Math.max(depth, 0.08) / 2 + 0.01]} castShadow>
+          <boxGeometry args={[width * 0.76, height * 0.78, 0.02]} />
+          <meshStandardMaterial color="#dcecf4" metalness={0.25} roughness={0.18} />
+        </mesh>
+        <mesh position={[0, 0.04, -depth * 0.36]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.72, 0.08, Math.max(depth * 0.85, 0.12)]} />
+          <meshStandardMaterial color="#6f5f50" />
+        </mesh>
+      </group>
+    );
+  }
+
   if (baseShape === "wall_box") {
     return (
       <group>
@@ -453,6 +515,29 @@ export function GenericObjectGenerator({
         >
           <sphereGeometry args={[0.04, 12, 12]} />
           <meshStandardMaterial color="#e7c17f" />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (baseShape === "monitor") {
+    return (
+      <group>
+        <mesh position={[0, height * 0.62, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, height * 0.62, Math.max(depth * 0.28, 0.04)]} />
+          <meshStandardMaterial color={primaryColor} />
+        </mesh>
+        <mesh position={[0, height * 0.62, Math.max(depth * 0.16, 0.03)]} castShadow>
+          <boxGeometry args={[width * 0.86, height * 0.48, 0.018]} />
+          <meshStandardMaterial color="#1f87b7" emissive="#1a5e85" emissiveIntensity={0.12} />
+        </mesh>
+        <mesh position={[0, height * 0.22, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.12, height * 0.32, depth * 0.14]} />
+          <meshStandardMaterial color="#303840" />
+        </mesh>
+        <mesh position={[0, height * 0.05, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.42, height * 0.1, depth * 0.55]} />
+          <meshStandardMaterial color="#303840" />
         </mesh>
       </group>
     );

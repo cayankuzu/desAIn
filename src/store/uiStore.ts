@@ -9,7 +9,8 @@ export type SidebarTab =
   | "outliner"
   | "shortcuts"
   | "validation"
-  | "inventory";
+  | "inventory"
+  | "random";
 
 interface UIStore {
   activeSidebarTab: SidebarTab;
@@ -25,6 +26,20 @@ interface UIStore {
       | {
           type: "wall" | "opening";
           id: string;
+        }
+      | null,
+  ) => void;
+  multiSelectMenu:
+    | {
+        x: number;
+        y: number;
+      }
+    | null;
+  setMultiSelectMenu: (
+    menu:
+      | {
+          x: number;
+          y: number;
         }
       | null,
   ) => void;
@@ -46,6 +61,8 @@ export const useUIStore = create<UIStore>((set) => ({
   setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
   selectedStructure: null,
   setSelectedStructure: (selectedStructure) => set({ selectedStructure }),
+  multiSelectMenu: null,
+  setMultiSelectMenu: (multiSelectMenu) => set({ multiSelectMenu }),
   locale: getInitialLocale(),
   setLocale: (locale) => {
     if (typeof window !== "undefined") {

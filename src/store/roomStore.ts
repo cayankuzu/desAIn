@@ -9,11 +9,14 @@ import {
 } from "@/lib/room/inventoryCatalog";
 import {
   clampObjectPositionToRoom,
+  getActiveClearanceZones,
   getWallAttachedObjectTransform,
   isWallAttachedObject,
   normalizeRotation,
+  objectIntersectsZone,
 } from "@/lib/room/constraints";
 import { defaultRoom, resizeRoomDefinition } from "@/lib/room/defaultRoom";
+import { createRoomPreset } from "@/lib/room/roomPresets";
 import { validateRoomLayout } from "@/lib/room/layoutValidator";
 import {
   findWallByRotation,
@@ -27,7 +30,9 @@ import type {
   Opening,
   RoomData,
   RoomDefinition,
+  RoomObjectGroup,
   RoomObject,
+  RoomPurpose,
   RoomShape,
   TransformMode,
   WallSegment,
@@ -94,6 +99,42 @@ const createWallId = (walls: WallSegment[]) => {
   return `wall_${index}`;
 };
 
+const createGroupId = (groups: RoomObjectGroup[]) =>
+  `group_${Date.now().toString(36)}_${groups.length + 1}`;
+
+const getRoomGroups = (roomData: RoomData) => roomData.groups ?? [];
+
+const pruneGroups = (roomData: RoomData) => {
+  const objectIds = new Set(roomData.objects.map((object) => object.id));
+
+  roomData.groups = getRoomGroups(roomData)
+    .map((group) => ({
+      ...group,
+      objectIds: group.objectIds.filter((objectId) => objectIds.has(objectId)),
+    }))
+    .filter((group) => group.objectIds.length > 1);
+};
+
+const getNextGroupLabel = (roomData: RoomData, objectIds: string[]) => {
+  const objects = roomData.objects.filter((object) => objectIds.includes(object.id));
+  const hasTv = objects.some((object) => object.category === "tv_unit");
+  const hasSeat = objects.some(
+    (object) => object.category === "sofa" || object.category === "chair",
+  );
+  const hasTable = objects.some((object) => object.category === "table");
+  const index = getRoomGroups(roomData).length + 1;
+
+  if (hasTv && hasSeat) {
+    return `Oturma Grubu ${index}`;
+  }
+
+  if (hasTable && hasSeat) {
+    return `Masa Grubu ${index}`;
+  }
+
+  return `Grup ${index}`;
+};
+
 const getObjectBaseShape = (object: Pick<RoomObject, "params">) =>
   String(object.params.baseShape ?? "");
 
@@ -121,6 +162,32 @@ const shouldIgnorePlacementCollision = (left: RoomObject, right: RoomObject) =>
   isFloorCovering(right) ||
   isWallAttachedObject(left) ||
   isWallAttachedObject(right);
+
+const canRepairRandomObject = (object: RoomObject) =>
+  !isFixedDuringRandomize(object) && !isWallAttachedObject(object);
+
+const positionsEqual = (
+  left: RoomObject["position"],
+  right: RoomObject["position"],
+) =>
+  Math.abs(left.x - right.x) < 0.001 && Math.abs(left.z - right.z) < 0.001;
+
+const moveRandomObjectBy = (
+  roomData: RoomData,
+  object: RoomObject,
+  delta: RoomObject["position"],
+) => ({
+  ...object,
+  position: clampObjectPositionToRoom(
+    roomData,
+    object,
+    {
+      x: object.position.x + delta.x,
+      z: object.position.z + delta.z,
+    },
+    object.rotation,
+  ),
+});
 
 const getFacingRotation = (
   from: RoomObject["position"],
@@ -154,30 +221,82 @@ const getFacingQuality = (
   return Math.max(0, Math.min(1, (dot + 1) / 2));
 };
 
+const getExplicitGroupObjects = (
+  roomData: RoomData,
+  objectId: string,
+  objects: RoomObject[],
+) => {
+  const group = getRoomGroups(roomData).find((entry) =>
+    entry.objectIds.includes(objectId),
+  );
+
+  if (!group) {
+    return [];
+  }
+
+  return group.objectIds
+    .map((groupObjectId) => objects.find((object) => object.id === groupObjectId))
+    .filter((object): object is RoomObject => Boolean(object));
+};
+
+const getNearestObject = (
+  object: RoomObject,
+  candidates: RoomObject[],
+) =>
+  [...candidates].sort(
+    (left, right) =>
+      Math.hypot(
+        object.position.x - left.position.x,
+        object.position.z - left.position.z,
+      ) -
+      Math.hypot(
+        object.position.x - right.position.x,
+        object.position.z - right.position.z,
+      ),
+  )[0] ?? null;
+
 const getDesignPenalty = (roomData: RoomData, objects: RoomObject[]) => {
   const roomCenter = {
     x: roomData.room.width / 2,
     z: roomData.room.depth / 2,
   };
-  const tvObjects = objects.filter((object) => object.category === "tv_unit");
 
   return objects.reduce((total, object) => {
     if (isFixedDuringRandomize(object) || isWallAttachedObject(object)) {
       return total;
     }
 
+    const explicitGroupObjects = getExplicitGroupObjects(roomData, object.id, objects);
+    const groupedTvObjects = explicitGroupObjects.filter(
+      (groupObject) => groupObject.category === "tv_unit" && groupObject.id !== object.id,
+    );
+    const groupedTableObjects = explicitGroupObjects.filter(
+      (groupObject) => groupObject.category === "table" && groupObject.id !== object.id,
+    );
+
+    if (object.category === "chair") {
+      const nearestTable = getNearestObject(object, groupedTableObjects);
+
+      if (nearestTable) {
+        const distanceToTable = Math.hypot(
+          object.position.x - nearestTable.position.x,
+          object.position.z - nearestTable.position.z,
+        );
+
+        return (
+          total +
+          (1 - getFacingQuality(object, nearestTable.position)) * 24 +
+          (distanceToTable < 0.55
+            ? (0.55 - distanceToTable) * 28
+            : distanceToTable > 1.35
+              ? (distanceToTable - 1.35) * 14
+              : 0)
+        );
+      }
+    }
+
     if (object.category === "sofa" || object.category === "chair") {
-      const nearestTv = [...tvObjects].sort(
-        (left, right) =>
-          Math.hypot(
-            object.position.x - left.position.x,
-            object.position.z - left.position.z,
-          ) -
-          Math.hypot(
-            object.position.x - right.position.x,
-            object.position.z - right.position.z,
-          ),
-      )[0];
+      const nearestTv = getNearestObject(object, groupedTvObjects);
 
       if (nearestTv) {
         const distanceToTv = Math.hypot(
@@ -200,7 +319,7 @@ const getDesignPenalty = (roomData: RoomData, objects: RoomObject[]) => {
         );
       }
 
-      return total + (1 - getFacingQuality(object, roomCenter)) * 8;
+      return total + (1 - getFacingQuality(object, roomCenter)) * 5;
     }
 
     if (shouldPreferWallPlacement(object)) {
@@ -211,48 +330,75 @@ const getDesignPenalty = (roomData: RoomData, objects: RoomObject[]) => {
   }, 0);
 };
 
-const orientSocialObjects = (objects: RoomObject[]) => {
-  const tvObjects = objects.filter((object) => object.category === "tv_unit");
-
-  if (!tvObjects.length) {
-    return objects;
-  }
+const orientSocialObjects = (roomData: RoomData, objects: RoomObject[]) => {
+  const roomCenter = {
+    x: roomData.room.width / 2,
+    z: roomData.room.depth / 2,
+  };
 
   return objects.map((object) => {
     if (isFixedDuringRandomize(object)) {
       return object;
     }
 
-    const shouldFaceTv =
+    const explicitGroupObjects = getExplicitGroupObjects(roomData, object.id, objects);
+    const groupedTables = explicitGroupObjects.filter(
+      (entry) => entry.category === "table" && entry.id !== object.id,
+    );
+    const groupedTvs = explicitGroupObjects.filter(
+      (entry) => entry.category === "tv_unit" && entry.id !== object.id,
+    );
+
+    if (object.category === "chair") {
+      const nearestTable = getNearestObject(object, groupedTables);
+
+      if (nearestTable) {
+        return {
+          ...object,
+          rotation: getFacingRotation(object.position, nearestTable.position),
+        };
+      }
+    }
+
+    if (
       !shouldPreferWallPlacement(object) &&
-      (object.category === "sofa" ||
-        object.category === "chair" ||
-        getObjectBaseShape(object) === "piano");
+      (object.category === "sofa" || object.category === "chair" || getObjectBaseShape(object) === "piano")
+    ) {
+      const nearestTv = getNearestObject(object, groupedTvs);
 
-    if (!shouldFaceTv) {
-      return object;
-    }
-
-    const nearestTv = [...tvObjects].sort(
-      (left, right) =>
-        Math.hypot(
-          object.position.x - left.position.x,
-          object.position.z - left.position.z,
-        ) -
-        Math.hypot(
-          object.position.x - right.position.x,
-          object.position.z - right.position.z,
+      return {
+        ...object,
+        rotation: getFacingRotation(
+          object.position,
+          nearestTv?.position ?? roomCenter,
         ),
-    )[0];
-
-    if (!nearestTv) {
-      return object;
+      };
     }
 
-    return {
-      ...object,
-      rotation: getFacingRotation(object.position, nearestTv.position),
-    };
+    if (object.category === "tv_unit") {
+      const nearestSeat = getNearestObject(
+        object,
+        explicitGroupObjects.filter(
+          (entry) =>
+            (entry.category === "sofa" || entry.category === "chair") &&
+            entry.id !== object.id,
+        ),
+      );
+
+      return {
+        ...object,
+        rotation: getFacingRotation(object.position, nearestSeat?.position ?? roomCenter),
+      };
+    }
+
+    if (shouldPreferWallPlacement(object)) {
+      return {
+        ...object,
+        rotation: getFacingRotation(object.position, roomCenter),
+      };
+    }
+
+    return object;
   });
 };
 
@@ -349,6 +495,179 @@ const normalizeRoomObjects = (roomData: RoomData, objects: RoomObject[]) =>
     };
   });
 
+const pushObjectOutsideZone = (
+  roomData: RoomData,
+  object: RoomObject,
+  zone: ReturnType<typeof getActiveClearanceZones>[number],
+) => {
+  const bounds = getObjectBounds(object);
+  const padding = 0.08;
+  const candidates = [
+    { x: zone.minX - bounds.maxX - padding, z: 0 },
+    { x: zone.maxX - bounds.minX + padding, z: 0 },
+    { x: 0, z: zone.minZ - bounds.maxZ - padding },
+    { x: 0, z: zone.maxZ - bounds.minZ + padding },
+  ]
+    .map((delta) => {
+      const moved = moveRandomObjectBy(roomData, object, delta);
+
+      return {
+        object: moved,
+        distance: Math.hypot(delta.x, delta.z),
+        stillBlocked: objectIntersectsZone(moved, zone),
+      };
+    })
+    .sort((left, right) => {
+      if (left.stillBlocked !== right.stillBlocked) {
+        return left.stillBlocked ? 1 : -1;
+      }
+
+      return left.distance - right.distance;
+    });
+
+  return candidates[0]?.object ?? object;
+};
+
+const resolveRandomCollisionPair = (
+  roomData: RoomData,
+  objects: RoomObject[],
+  leftIndex: number,
+  rightIndex: number,
+) => {
+  const left = objects[leftIndex];
+  const right = objects[rightIndex];
+
+  if (shouldIgnorePlacementCollision(left, right)) {
+    return false;
+  }
+
+  const leftBounds = getObjectBounds(left);
+  const rightBounds = getObjectBounds(right);
+  const padding = 0.04;
+
+  if (!boundsIntersect(leftBounds, rightBounds, padding)) {
+    return false;
+  }
+
+  const leftRepairable = canRepairRandomObject(left);
+  const rightRepairable = canRepairRandomObject(right);
+
+  if (!leftRepairable && !rightRepairable) {
+    return false;
+  }
+
+  const leftArea = left.dimensions.width * left.dimensions.depth;
+  const rightArea = right.dimensions.width * right.dimensions.depth;
+  const moveLeft = leftRepairable && (!rightRepairable || leftArea <= rightArea);
+  const moverIndex = moveLeft ? leftIndex : rightIndex;
+  const anchor = moveLeft ? right : left;
+  const mover = objects[moverIndex];
+  const moverBounds = moveLeft ? leftBounds : rightBounds;
+  const anchorBounds = moveLeft ? rightBounds : leftBounds;
+  const overlapX =
+    Math.min(moverBounds.maxX, anchorBounds.maxX) -
+    Math.max(moverBounds.minX, anchorBounds.minX) +
+    padding;
+  const overlapZ =
+    Math.min(moverBounds.maxZ, anchorBounds.maxZ) -
+    Math.max(moverBounds.minZ, anchorBounds.minZ) +
+    padding;
+  const directionX = mover.position.x >= anchor.position.x ? 1 : -1;
+  const directionZ = mover.position.z >= anchor.position.z ? 1 : -1;
+  const delta =
+    overlapX <= overlapZ
+      ? { x: directionX * (overlapX + 0.04), z: 0 }
+      : { x: 0, z: directionZ * (overlapZ + 0.04) };
+  const moved = moveRandomObjectBy(roomData, mover, delta);
+
+  if (positionsEqual(mover.position, moved.position)) {
+    return false;
+  }
+
+  objects[moverIndex] = moved;
+  return true;
+};
+
+const stabilizeRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
+  let layout = orientSocialObjects(
+    roomData,
+    objects.map((object) => cloneRoomObject(object)),
+  ).map((object) => {
+    if (isFixedDuringRandomize(object)) {
+      return object;
+    }
+
+    return normalizeRoomObjects(roomData, [object])[0];
+  });
+  const zones = getActiveClearanceZones(roomData);
+
+  for (let pass = 0; pass < 8; pass += 1) {
+    let changed = false;
+
+    layout = layout.map((object) => {
+      if (isFixedDuringRandomize(object)) {
+        return object;
+      }
+
+      const normalized = normalizeRoomObjects(roomData, [object])[0];
+
+      if (
+        !positionsEqual(object.position, normalized.position) ||
+        normalizeRotation(object.rotation) !== normalizeRotation(normalized.rotation)
+      ) {
+        changed = true;
+      }
+
+      return normalized;
+    });
+
+    layout = layout.map((object) => {
+      if (!canRepairRandomObject(object)) {
+        return object;
+      }
+
+      return zones.reduce((current, zone) => {
+        if (!objectIntersectsZone(current, zone)) {
+          return current;
+        }
+
+        const next = pushObjectOutsideZone(roomData, current, zone);
+
+        if (!positionsEqual(current.position, next.position)) {
+          changed = true;
+        }
+
+        return next;
+      }, object);
+    });
+
+    for (let leftIndex = 0; leftIndex < layout.length; leftIndex += 1) {
+      for (
+        let rightIndex = leftIndex + 1;
+        rightIndex < layout.length;
+        rightIndex += 1
+      ) {
+        if (resolveRandomCollisionPair(roomData, layout, leftIndex, rightIndex)) {
+          changed = true;
+        }
+      }
+    }
+
+    if (!changed) {
+      break;
+    }
+  }
+
+  return layout.map((object) => ({
+    ...object,
+    position: {
+      x: Number(object.position.x.toFixed(3)),
+      z: Number(object.position.z.toFixed(3)),
+    },
+    rotation: Math.round(normalizeRotation(object.rotation)),
+  }));
+};
+
 const createObjectFromTemplate = (
   template: InventoryTemplate,
   roomData: RoomData,
@@ -409,6 +728,57 @@ const createObjectFromTemplate = (
   };
 };
 
+type RandomLayoutOption = {
+  id: string;
+  label: string;
+  objects: RoomObject[];
+  warnings: LayoutWarning[];
+};
+
+const getRoomDataSignature = (
+  roomData: RoomData,
+  objects: RoomObject[] = roomData.objects,
+) =>
+  JSON.stringify({
+    room: {
+      shape: roomData.room.shape,
+      width: Number(roomData.room.width.toFixed(2)),
+      depth: Number(roomData.room.depth.toFixed(2)),
+      height: Number(roomData.room.height.toFixed(2)),
+      cutoutWidth: Number(roomData.room.cutoutWidth.toFixed(2)),
+      cutoutDepth: Number(roomData.room.cutoutDepth.toFixed(2)),
+      walls: roomData.room.walls,
+      openings: roomData.room.openings,
+    },
+    constraints: roomData.constraints,
+    groups: getRoomGroups(roomData).map((group) => ({
+      ...group,
+      objectIds: [...group.objectIds].sort(),
+    })),
+    objects: objects
+      .map((object) => ({
+        id: object.id,
+        labelKey: object.labelKey,
+        category: object.category,
+        generator: object.generator,
+        position: {
+          x: Number(object.position.x.toFixed(2)),
+          z: Number(object.position.z.toFixed(2)),
+        },
+        rotation: Math.round(normalizeRotation(object.rotation)),
+        dimensions: {
+          width: Number(object.dimensions.width.toFixed(2)),
+          depth: Number(object.dimensions.depth.toFixed(2)),
+          height: Number(object.dimensions.height.toFixed(2)),
+        },
+        color: object.color,
+        movable: object.movable,
+        locked: object.locked,
+        params: object.params,
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+  });
+
 const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
   const fixedObjects = objects
     .filter((object) => isFixedDuringRandomize(object))
@@ -425,7 +795,7 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
   const sourceMap = new Map(objects.map((object) => [object.id, object]));
 
   const scoreLayout = (layoutObjects: RoomObject[], includeValidation = true) => {
-    const orientedObjects = orientSocialObjects(layoutObjects);
+    const orientedObjects = orientSocialObjects(roomData, layoutObjects);
     const validationPenalty = includeValidation
       ? validateRoomLayout({
           ...roomData,
@@ -471,8 +841,8 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
   let bestScore = scoreLayout(bestObjects);
   let bestMovement = movementScore(bestObjects);
 
-  const layoutAttempts = movableObjects.length > 24 ? 12 : 18;
-  const candidateAttempts = movableObjects.length > 24 ? 22 : 32;
+  const layoutAttempts = movableObjects.length > 24 ? 8 : movableObjects.length > 12 ? 10 : 12;
+  const candidateAttempts = movableObjects.length > 24 ? 16 : movableObjects.length > 12 ? 24 : 34;
 
   for (let layoutAttempt = 0; layoutAttempt < layoutAttempts; layoutAttempt += 1) {
     const draftObjects = fixedObjects.map((object) => cloneRoomObject(object));
@@ -522,7 +892,22 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
           continue;
         }
 
-        const candidateScore = scoreLayout([...draftObjects, candidate]);
+        const draftWithCandidate = [...draftObjects, candidate];
+        const candidateWarnings = validateRoomLayout({
+          ...roomData,
+          objects: orientSocialObjects(roomData, draftWithCandidate),
+        });
+        const candidateCausesWarning = candidateWarnings.some(
+          (warning) =>
+            warning.objectId === candidate.id ||
+            warning.relatedObjectId === candidate.id,
+        );
+
+        if (candidateCausesWarning) {
+          continue;
+        }
+
+        const candidateScore = scoreLayout(draftWithCandidate);
         const candidateMovement =
           Math.hypot(
             candidate.position.x - object.position.x,
@@ -578,7 +963,7 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
       layoutScore < bestScore ||
       (layoutScore === bestScore && layoutMovement > bestMovement)
     ) {
-      bestObjects = orientSocialObjects(draftObjects).map((object) =>
+      bestObjects = orientSocialObjects(roomData, draftObjects).map((object) =>
         cloneRoomObject(object),
       );
       bestScore = layoutScore;
@@ -586,41 +971,151 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
     }
   }
 
-  if (hasBlockingWarnings(roomData, bestObjects)) {
-    return orientSocialObjects(bestObjects).map((object) => {
-      if (isFixedDuringRandomize(object)) {
-        return object;
-      }
-
-      const sourceObject = sourceMap.get(object.id) ?? object;
-      return {
-        ...object,
-        position: clampObjectPositionToRoom(
-          roomData,
-          object,
-          object.position,
-          object.rotation,
-        ),
-        dimensions: { ...sourceObject.dimensions },
-      };
-    });
-  }
-
-  return orientSocialObjects(bestObjects).map((object) => {
+  const needsRepair = hasBlockingWarnings(roomData, bestObjects);
+  const resolvedObjects = orientSocialObjects(roomData, bestObjects).map((object) => {
     const sourceObject = sourceMap.get(object.id);
-
-    return sourceObject
+    const withSourceDimensions = sourceObject
       ? {
           ...object,
           dimensions: { ...sourceObject.dimensions },
         }
       : object;
+
+    return needsRepair && !isFixedDuringRandomize(withSourceDimensions)
+      ? {
+          ...withSourceDimensions,
+          position: clampObjectPositionToRoom(
+            roomData,
+            withSourceDimensions,
+            withSourceDimensions.position,
+            withSourceDimensions.rotation,
+          ),
+        }
+      : withSourceDimensions;
   });
+
+  return stabilizeRandomLayout(roomData, resolvedObjects);
+};
+
+const getRandomLayoutSourceObjects = (roomData: RoomData) => {
+  const fixedCurrentObjects = roomData.objects
+    .filter((object) => isFixedDuringRandomize(object))
+    .map((object) => cloneRoomObject(object));
+  const fixedIds = new Set(fixedCurrentObjects.map((object) => object.id));
+  const movableSourceObjects = roomData.objects
+    .filter((object) => !isFixedDuringRandomize(object))
+    .map((object) => cloneRoomObject(object));
+
+  return [
+    ...fixedCurrentObjects,
+    ...movableSourceObjects.filter((object) => !fixedIds.has(object.id)),
+  ];
+};
+
+const getLayoutSignature = (objects: RoomObject[]) =>
+  objects
+    .map(
+      (object) =>
+        `${object.id}:${object.position.x.toFixed(1)}:${object.position.z.toFixed(
+          1,
+        )}:${Math.round(object.rotation / 15) * 15}`,
+    )
+    .sort()
+    .join("|");
+
+const getRandomLayoutOptionCount = (objectCount: number) => {
+  if (objectCount > 28) {
+    return 18;
+  }
+
+  if (objectCount > 18) {
+    return 24;
+  }
+
+  if (objectCount > 10) {
+    return 32;
+  }
+
+  return 40;
+};
+
+const createRandomLayoutOptions = (
+  roomData: RoomData,
+  sourceLayoutObjects: RoomObject[],
+): RandomLayoutOption[] => {
+  const optionCount = getRandomLayoutOptionCount(sourceLayoutObjects.length);
+  const options: RandomLayoutOption[] = [];
+  const seenSignatures = new Set<string>();
+  const maxAttempts = optionCount * 10;
+
+  for (
+    let attempt = 0;
+    attempt < maxAttempts && options.length < optionCount;
+    attempt += 1
+  ) {
+    const objects = tryRandomLayout(roomData, sourceLayoutObjects);
+    const signature = getLayoutSignature(objects);
+
+    if (seenSignatures.has(signature)) {
+      continue;
+    }
+
+    seenSignatures.add(signature);
+    const warnings = validateRoomLayout({
+      ...roomData,
+      objects,
+    });
+
+    if (warnings.length) {
+      continue;
+    }
+
+    const option = {
+      id: `random_${options.length + 1}`,
+      label: `random_${options.length + 1}`,
+      objects,
+      warnings,
+    };
+
+    options.push(option);
+  }
+
+  if (!options.length) {
+    const fallbackObjects = stabilizeRandomLayout(
+      roomData,
+      sourceLayoutObjects,
+    );
+    const fallbackWarnings = validateRoomLayout({
+      ...roomData,
+      objects: fallbackObjects,
+    });
+
+    if (!fallbackWarnings.length) {
+      options.push({
+        id: "random_1",
+        label: "random_1",
+        objects: fallbackObjects,
+        warnings: fallbackWarnings,
+      });
+    }
+  }
+
+  return options
+    .sort(
+      (left, right) =>
+        getDesignPenalty(roomData, left.objects) - getDesignPenalty(roomData, right.objects),
+    )
+    .map((option, index) => ({
+      ...option,
+      label: `random_${index + 1}`,
+    }));
 };
 
 interface RoomStore {
   roomData: RoomData;
   selectedObjectId: string | null;
+  selectedObjectIds: string[];
+  selectedGroupId: string | null;
   cameraMode: CameraMode;
   transformMode: TransformMode;
   validationWarnings: LayoutWarning[];
@@ -629,7 +1124,14 @@ interface RoomStore {
   lastEditorStatus: EditorStatus;
   activeTransformObjectId: string | null;
   clipboardObject: RoomObject | null;
+  randomLayoutOptions: RandomLayoutOption[];
+  activeRandomLayoutOptionId: string | null;
+  randomLayoutSourceSignature: string | null;
+  randomLayoutOptionSignatures: string[];
   setSelectedObjectId: (objectId: string | null) => void;
+  toggleObjectSelection: (objectId: string) => void;
+  setSelectedObjectIds: (objectIds: string[]) => void;
+  selectGroup: (groupId: string) => void;
   setCameraMode: (mode: CameraMode) => void;
   setTransformMode: (mode: TransformMode) => void;
   beginTransform: (objectId: string) => void;
@@ -637,6 +1139,7 @@ interface RoomStore {
   endTransform: () => void;
   updateRoomProperties: (payload: {
     shape?: RoomShape;
+    purpose?: RoomPurpose;
     width?: number;
     depth?: number;
     height?: number;
@@ -664,7 +1167,9 @@ interface RoomStore {
   splitWall: (wallId: string) => void;
   updateObjectTransform: (
     objectId: string,
-    payload: Partial<Pick<RoomObject, "rotation" | "position">>,
+    payload: Partial<Pick<RoomObject, "rotation" | "position">> & {
+      mountHeight?: number;
+    },
   ) => void;
   updateObjectProperties: (
     objectId: string,
@@ -680,10 +1185,17 @@ interface RoomStore {
     position?: RoomObject["position"],
   ) => void;
   deleteObject: (objectId?: string) => void;
+  deleteSelectedObjects: () => void;
+  groupSelectedObjects: () => void;
+  ungroupSelectedObjects: () => void;
+  toggleSelectedObjectsLock: (locked?: boolean) => void;
   copySelectedObject: () => void;
   cutSelectedObject: () => void;
   pasteClipboardObject: () => void;
   randomizeLayout: () => void;
+  applyRandomLayoutOption: (optionId: string) => void;
+  clearRandomLayoutOptions: () => void;
+  randomizeSelectedObjects: () => void;
   saveRoomSnapshot: () => void;
   rotateObjectBy: (objectId: string, delta: number) => void;
   toggleObjectLock: (objectId: string) => void;
@@ -695,6 +1207,8 @@ interface RoomStore {
 export const useRoomStore = create<RoomStore>((set) => ({
   roomData: cloneRoomData(defaultRoom),
   selectedObjectId: "sofa_1",
+  selectedObjectIds: ["sofa_1"],
+  selectedGroupId: null,
   cameraMode: "orbit",
   transformMode: "select",
   validationWarnings: validateRoomLayout(defaultRoom),
@@ -703,12 +1217,57 @@ export const useRoomStore = create<RoomStore>((set) => ({
   lastEditorStatus: { key: "roomLoaded" },
   activeTransformObjectId: null,
   clipboardObject: null,
+  randomLayoutOptions: [],
+  activeRandomLayoutOptionId: null,
+  randomLayoutSourceSignature: null,
+  randomLayoutOptionSignatures: [],
   setSelectedObjectId: (objectId) =>
     set({
       selectedObjectId: objectId,
+      selectedObjectIds: objectId ? [objectId] : [],
+      selectedGroupId: null,
       lastEditorStatus: objectId
         ? { key: "objectSelected", objectId }
         : { key: "selectionCleared" },
+    }),
+  toggleObjectSelection: (objectId) =>
+    set((state) => {
+      const selectedObjectIds = state.selectedObjectIds.includes(objectId)
+        ? state.selectedObjectIds.filter((selectedId) => selectedId !== objectId)
+        : [...state.selectedObjectIds, objectId];
+
+      return {
+        selectedObjectId: objectId,
+        selectedObjectIds,
+        selectedGroupId: null,
+        lastEditorStatus: {
+          key: selectedObjectIds.length ? "selectionUpdated" : "selectionCleared",
+        },
+      };
+    }),
+  setSelectedObjectIds: (objectIds) =>
+    set({
+      selectedObjectId: objectIds.at(-1) ?? null,
+      selectedObjectIds: Array.from(new Set(objectIds)),
+      selectedGroupId: null,
+      lastEditorStatus: objectIds.length
+        ? { key: "selectionUpdated" }
+        : { key: "selectionCleared" },
+    }),
+  selectGroup: (groupId) =>
+    set((state) => {
+      const group = getRoomGroups(state.roomData).find((entry) => entry.id === groupId);
+
+      if (!group) {
+        return state;
+      }
+
+      return {
+        selectedObjectId: group.objectIds.at(-1) ?? null,
+        selectedObjectIds: group.objectIds,
+        selectedGroupId: group.id,
+        lastEditorStatus: { key: "selectionUpdated" },
+      };
     }),
   setCameraMode: (mode) =>
     set({
@@ -773,6 +1332,32 @@ export const useRoomStore = create<RoomStore>((set) => ({
     })),
   updateRoomProperties: (payload) =>
     set((state) => {
+      if (payload.shape !== undefined || payload.purpose !== undefined) {
+        const nextShape = payload.shape ?? state.roomData.room.shape;
+        const nextPurpose =
+          payload.purpose ?? state.roomData.room.purpose ?? "living";
+        const roomData = createRoomPreset(nextShape, nextPurpose);
+        const selectedObjectId = roomData.objects[0]?.id ?? null;
+
+        return {
+          roomData,
+          selectedObjectId,
+          selectedObjectIds: selectedObjectId ? [selectedObjectId] : [],
+          selectedGroupId: null,
+          validationWarnings: validateRoomLayout(roomData),
+          randomLayoutOptions: [],
+          activeRandomLayoutOptionId: null,
+          randomLayoutSourceSignature: null,
+          randomLayoutOptionSignatures: [],
+          historyPast: limitHistory([
+            ...state.historyPast,
+            cloneRoomData(state.roomData),
+          ]),
+          historyFuture: [],
+          lastEditorStatus: { key: "roomPresetApplied" },
+        };
+      }
+
       const roomData = cloneRoomData(state.roomData);
       roomData.room = resizeRoomDefinition(roomData.room, payload);
       roomData.room.openings = roomData.room.openings.map((opening) =>
@@ -783,6 +1368,10 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
+        randomLayoutSourceSignature: null,
+        randomLayoutOptionSignatures: [],
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -857,6 +1446,10 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
+        randomLayoutSourceSignature: null,
+        randomLayoutOptionSignatures: [],
       };
     }),
   updateWallSegment: (wallId, payload) =>
@@ -895,6 +1488,8 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -962,6 +1557,10 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
+        randomLayoutSourceSignature: null,
+        randomLayoutOptionSignatures: [],
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -983,6 +1582,14 @@ export const useRoomStore = create<RoomStore>((set) => ({
         const desiredPosition = payload.position ?? object.position;
 
         if (isWallAttachedObject(object)) {
+          if (typeof payload.mountHeight === "number") {
+            object.params.mountHeight = clampDimension(
+              payload.mountHeight,
+              getMountHeight(object),
+              Math.max(0.05, roomData.room.height - object.dimensions.height),
+            );
+          }
+
           const placement = getWallAttachedObjectTransform(
             roomData,
             object,
@@ -1006,6 +1613,10 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
+        randomLayoutSourceSignature: null,
+        randomLayoutOptionSignatures: [],
       };
     }),
   updateObjectProperties: (objectId, payload) =>
@@ -1068,6 +1679,10 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
+        randomLayoutSourceSignature: null,
+        randomLayoutOptionSignatures: [],
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1091,7 +1706,11 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         selectedObjectId: newObject.id,
+        selectedObjectIds: [newObject.id],
+        selectedGroupId: null,
         validationWarnings: validateRoomLayout(roomData),
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1116,18 +1735,162 @@ export const useRoomStore = create<RoomStore>((set) => ({
 
       const roomData = cloneRoomData(state.roomData);
       roomData.objects = roomData.objects.filter((object) => object.id !== targetId);
+      pruneGroups(roomData);
       const nextSelection = roomData.objects.at(-1)?.id ?? null;
 
       return {
         roomData,
         selectedObjectId: nextSelection,
+        selectedObjectIds: nextSelection ? [nextSelection] : [],
+        selectedGroupId: null,
         validationWarnings: validateRoomLayout(roomData),
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
         ]),
         historyFuture: [],
         lastEditorStatus: { key: "objectUpdated", objectId: targetId },
+      };
+    }),
+  deleteSelectedObjects: () =>
+    set((state) => {
+      if (!state.selectedObjectIds.length) {
+        return state;
+      }
+
+      const selectedIds = new Set(state.selectedObjectIds);
+      const roomData = cloneRoomData(state.roomData);
+      roomData.objects = roomData.objects.filter((object) => !selectedIds.has(object.id));
+      pruneGroups(roomData);
+
+      return {
+        roomData,
+        selectedObjectId: null,
+        selectedObjectIds: [],
+        selectedGroupId: null,
+        validationWarnings: validateRoomLayout(roomData),
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastEditorStatus: { key: "selectionDeleted" },
+      };
+    }),
+  groupSelectedObjects: () =>
+    set((state) => {
+      const selectedObjectIds = state.selectedObjectIds.filter((objectId) =>
+        state.roomData.objects.some((object) => object.id === objectId),
+      );
+
+      if (selectedObjectIds.length < 2) {
+        return state;
+      }
+
+      const roomData = cloneRoomData(state.roomData);
+      const existingGroups = getRoomGroups(roomData)
+        .map((group) => ({
+          ...group,
+          objectIds: group.objectIds.filter((objectId) => !selectedObjectIds.includes(objectId)),
+        }))
+        .filter((group) => group.objectIds.length > 1);
+      const newGroup = {
+        id: createGroupId(existingGroups),
+        label: getNextGroupLabel(roomData, selectedObjectIds),
+        objectIds: selectedObjectIds,
+      };
+
+      roomData.groups = [...existingGroups, newGroup];
+
+      return {
+        roomData,
+        selectedObjectId: selectedObjectIds.at(-1) ?? null,
+        selectedObjectIds,
+        selectedGroupId: newGroup.id,
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
+        randomLayoutSourceSignature: null,
+        randomLayoutOptionSignatures: [],
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastEditorStatus: { key: "groupCreated" },
+      };
+    }),
+  ungroupSelectedObjects: () =>
+    set((state) => {
+      const selectedIds = new Set(state.selectedObjectIds);
+      const roomData = cloneRoomData(state.roomData);
+      const groups = getRoomGroups(roomData);
+      const selectedGroup = state.selectedGroupId
+        ? groups.find((group) => group.id === state.selectedGroupId)
+        : null;
+
+      roomData.groups = groups.filter((group) => {
+        if (selectedGroup && group.id === selectedGroup.id) {
+          return false;
+        }
+
+        return !group.objectIds.some((objectId) => selectedIds.has(objectId));
+      });
+
+      return {
+        roomData,
+        selectedGroupId: null,
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
+        randomLayoutSourceSignature: null,
+        randomLayoutOptionSignatures: [],
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastEditorStatus: { key: "groupRemoved" },
+      };
+    }),
+  toggleSelectedObjectsLock: (locked) =>
+    set((state) => {
+      if (!state.selectedObjectIds.length) {
+        return state;
+      }
+
+      const selectedIds = new Set(state.selectedObjectIds);
+      const roomData = cloneRoomData(state.roomData);
+      let nextLocked = locked;
+
+      if (nextLocked === undefined) {
+        nextLocked = roomData.objects
+          .filter((object) => selectedIds.has(object.id))
+          .some((object) => !object.locked);
+      }
+
+      roomData.objects = roomData.objects.map((object) =>
+        selectedIds.has(object.id)
+          ? {
+              ...object,
+              locked: Boolean(nextLocked),
+            }
+          : object,
+      );
+
+      return {
+        roomData,
+        validationWarnings: validateRoomLayout(roomData),
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastEditorStatus: { key: nextLocked ? "selectionLocked" : "selectionUnlocked" },
       };
     }),
   copySelectedObject: () =>
@@ -1158,11 +1921,14 @@ export const useRoomStore = create<RoomStore>((set) => ({
       roomData.objects = roomData.objects.filter(
         (object) => object.id !== selectedObject.id,
       );
+      pruneGroups(roomData);
 
       return {
         clipboardObject: cloneRoomObject(selectedObject),
         roomData,
         selectedObjectId: roomData.objects.at(-1)?.id ?? null,
+        selectedObjectIds: roomData.objects.at(-1)?.id ? [roomData.objects.at(-1)!.id] : [],
+        selectedGroupId: null,
         validationWarnings: validateRoomLayout(roomData),
         historyPast: limitHistory([
           ...state.historyPast,
@@ -1212,7 +1978,11 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         selectedObjectId: pasted.id,
+        selectedObjectIds: [pasted.id],
+        selectedGroupId: null,
         validationWarnings: validateRoomLayout(roomData),
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1224,57 +1994,137 @@ export const useRoomStore = create<RoomStore>((set) => ({
   randomizeLayout: () =>
     set((state) => {
       const roomData = cloneRoomData(state.roomData);
-      let sourceObjects = roomData.objects;
+      const currentSignature = getRoomDataSignature(roomData);
+      const activeOptionBySignature = state.randomLayoutOptions.find(
+        (_option, index) => state.randomLayoutOptionSignatures[index] === currentSignature,
+      );
 
-      if (typeof window !== "undefined") {
-        const savedRaw = window.localStorage.getItem(SAVED_ROOM_KEY);
-
-        if (savedRaw) {
-          try {
-            const parsed = JSON.parse(savedRaw) as RoomData;
-            const savedObjectsById = new Map(
-              normalizeRoomObjects(roomData, parsed.objects).map((object) => [
-                object.id,
-                object,
-              ]),
-            );
-
-            sourceObjects = roomData.objects.map((currentObject) => {
-              if (isFixedDuringRandomize(currentObject)) {
-                return currentObject;
-              }
-
-              return savedObjectsById.get(currentObject.id) ?? currentObject;
-            });
-          } catch {
-            sourceObjects = roomData.objects;
-          }
-        }
+      if (
+        state.randomLayoutSourceSignature === currentSignature ||
+        (state.randomLayoutOptions.length &&
+          state.randomLayoutOptionSignatures.includes(currentSignature))
+      ) {
+        return {
+          activeRandomLayoutOptionId:
+            activeOptionBySignature?.id ??
+            (state.randomLayoutSourceSignature === currentSignature
+              ? null
+              : state.activeRandomLayoutOptionId),
+          lastEditorStatus: { key: "randomLayoutOptionsReady" },
+        };
       }
 
-      const fixedCurrentObjects = roomData.objects
-        .filter((object) => isFixedDuringRandomize(object))
-        .map((object) => cloneRoomObject(object));
-      const fixedIds = new Set(fixedCurrentObjects.map((object) => object.id));
-      const movableSourceObjects = sourceObjects
-        .filter((object) => !isFixedDuringRandomize(object))
-        .map((object) => cloneRoomObject(object));
-      const sourceLayoutObjects = [
-        ...fixedCurrentObjects,
-        ...movableSourceObjects.filter((object) => !fixedIds.has(object.id)),
-      ];
+      const sourceLayoutObjects = getRandomLayoutSourceObjects(roomData);
+      const randomLayoutOptions = createRandomLayoutOptions(roomData, sourceLayoutObjects);
+      const randomLayoutSourceSignature = currentSignature;
+      const randomLayoutOptionSignatures = randomLayoutOptions.map((option) =>
+        getRoomDataSignature(roomData, option.objects),
+      );
 
-      roomData.objects = tryRandomLayout(roomData, sourceLayoutObjects);
+      return {
+        randomLayoutOptions,
+        activeRandomLayoutOptionId: null,
+        randomLayoutSourceSignature,
+        randomLayoutOptionSignatures,
+        lastEditorStatus: { key: "randomLayoutOptionsReady" },
+      };
+    }),
+  applyRandomLayoutOption: (optionId) =>
+    set((state) => {
+      const option = state.randomLayoutOptions.find((entry) => entry.id === optionId);
+
+      if (!option) {
+        return state;
+      }
+
+      const roomData = {
+        ...cloneRoomData(state.roomData),
+        objects: option.objects.map((object) => cloneRoomObject(object)),
+      };
 
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
+        activeRandomLayoutOptionId: option.id,
+        randomLayoutOptionSignatures: state.randomLayoutOptions.map((entry) =>
+          entry.id === option.id
+            ? getRoomDataSignature(roomData, option.objects)
+            : getRoomDataSignature(state.roomData, entry.objects),
+        ),
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
         ]),
         historyFuture: [],
-        lastEditorStatus: { key: "roomRandomized" },
+        lastEditorStatus: { key: "randomLayoutOptionApplied" },
+      };
+    }),
+  clearRandomLayoutOptions: () =>
+    set({
+      randomLayoutOptions: [],
+      activeRandomLayoutOptionId: null,
+      randomLayoutSourceSignature: null,
+      randomLayoutOptionSignatures: [],
+    }),
+  randomizeSelectedObjects: () =>
+    set((state) => {
+      if (!state.selectedObjectIds.length) {
+        return state;
+      }
+
+      const scopeIds = new Set(state.selectedObjectIds);
+      const roomData = cloneRoomData(state.roomData);
+      const originalObjectsById = new Map(
+        roomData.objects.map((object) => [object.id, cloneRoomObject(object)]),
+      );
+      const scopedLayoutSource = roomData.objects.map((object) => {
+        const clone = cloneRoomObject(object);
+
+        if (scopeIds.has(object.id)) {
+          return clone;
+        }
+
+        return {
+          ...clone,
+          movable: false,
+          locked: true,
+          params: {
+            ...clone.params,
+            fixedDuringRandomize: true,
+          },
+        };
+      });
+      const arrangedObjects = tryRandomLayout(roomData, scopedLayoutSource);
+
+      roomData.objects = arrangedObjects.map((object) => {
+        const original = originalObjectsById.get(object.id);
+
+        if (!original) {
+          return object;
+        }
+
+        return scopeIds.has(object.id)
+          ? {
+              ...object,
+              movable: original.movable,
+              locked: original.locked,
+              params: original.params,
+              dimensions: original.dimensions,
+            }
+          : original;
+      });
+
+      return {
+        roomData,
+        validationWarnings: validateRoomLayout(roomData),
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastEditorStatus: { key: "selectionRandomized" },
       };
     }),
   saveRoomSnapshot: () =>
@@ -1325,6 +2175,10 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData,
         validationWarnings: validateRoomLayout(roomData),
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
+        randomLayoutSourceSignature: null,
+        randomLayoutOptionSignatures: [],
         historyPast: limitHistory([
           ...state.historyPast,
           cloneRoomData(state.roomData),
@@ -1413,6 +2267,8 @@ export const useRoomStore = create<RoomStore>((set) => ({
       return {
         roomData: nextRoomData,
         selectedObjectId: nextRoomData.objects[0]?.id ?? null,
+        selectedObjectIds: nextRoomData.objects[0]?.id ? [nextRoomData.objects[0].id] : [],
+        selectedGroupId: null,
         cameraMode: "orbit",
         transformMode: "select",
         validationWarnings: validateRoomLayout(nextRoomData),
@@ -1424,6 +2280,10 @@ export const useRoomStore = create<RoomStore>((set) => ({
         lastEditorStatus: status,
         activeTransformObjectId: null,
         clipboardObject: null,
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
+        randomLayoutSourceSignature: null,
+        randomLayoutOptionSignatures: [],
       };
     }),
 }));

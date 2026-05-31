@@ -13,13 +13,9 @@ import {
   RefreshCw,
   RotateCcw,
   RotateCw,
-  Shuffle,
   Undo2,
 } from "lucide-react";
 import {
-  getLocalizedObjectLabel,
-  getLocalizedOpeningType,
-  getLocalizedRoomLabel,
   t,
 } from "@/lib/i18n/translations";
 import { useRoomStore } from "@/store/roomStore";
@@ -42,16 +38,12 @@ export function Topbar({
   const locale = useUIStore((state) => state.locale);
   const setLocale = useUIStore((state) => state.setLocale);
   const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
-  const selectedStructure = useUIStore((state) => state.selectedStructure);
-  const roomData = useRoomStore((state) => state.roomData);
-  const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
   const transformMode = useRoomStore((state) => state.transformMode);
   const setTransformMode = useRoomStore((state) => state.setTransformMode);
   const undo = useRoomStore((state) => state.undo);
   const redo = useRoomStore((state) => state.redo);
   const resetRoom = useRoomStore((state) => state.resetRoom);
   const saveRoomSnapshot = useRoomStore((state) => state.saveRoomSnapshot);
-  const randomizeLayout = useRoomStore((state) => state.randomizeLayout);
   const historyPastLength = useRoomStore((state) => state.historyPast.length);
   const historyFutureLength = useRoomStore((state) => state.historyFuture.length);
   const validationWarnings = useRoomStore((state) => state.validationWarnings);
@@ -64,43 +56,9 @@ export function Topbar({
     return Boolean(window.localStorage.getItem("desain-saved-room-data"));
   });
 
-  const selectedObject =
-    roomData.objects.find((object) => object.id === selectedObjectId) ?? null;
-  const roomLabel = getLocalizedRoomLabel(locale, roomData.room);
-  const selectedOpening = selectedStructure?.type === "opening"
-    ? roomData.room.openings.find((opening) => opening.id === selectedStructure.id) ?? null
-    : null;
-  const selectedLabel = selectedObject
-    ? getLocalizedObjectLabel(locale, selectedObject)
-    : selectedOpening
-      ? `${getLocalizedOpeningType(locale, selectedOpening.type)} ${selectedOpening.id
-          .replace(`${selectedOpening.type}_`, "")
-          .replace("_", " ")}`
-      : selectedStructure?.type === "wall"
-        ? `${t(locale, "wall")} ${selectedStructure.id.replace("wall_", "")}`
-        : t(locale, "noObjectSelected");
-
   return (
-    <header className="editor-panel relative px-4 py-3">
+    <header className="editor-panel relative z-50 overflow-visible px-4 py-3">
       <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-          <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
-              {t(locale, "editorTitle")}
-            </div>
-            <div className="mt-1 text-lg font-semibold text-white">{roomLabel}</div>
-          </div>
-
-          <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2 text-sm text-slate-300">
-            <span className="text-slate-500">{t(locale, "selectedLabel")}:</span>{" "}
-            <span className="text-white">{selectedLabel}</span>
-          </div>
-
-          <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2 text-sm text-slate-300">
-            {`${roomData.room.width.toFixed(2)}m x ${roomData.room.depth.toFixed(2)}m x ${roomData.room.height.toFixed(2)}m`}
-          </div>
-        </div>
-
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-[#0d141d] p-1">
             <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
@@ -219,7 +177,7 @@ export function Topbar({
             {t(locale, "resetScene")}
           </button>
           {resetMenuOpen ? (
-            <div className="absolute right-4 top-[calc(100%+0.5rem)] z-40 w-64 rounded-2xl border border-white/10 bg-[#0d141d] p-3 text-sm shadow-[0_18px_45px_rgba(0,0,0,0.42)]">
+            <div className="absolute right-4 top-[calc(100%+0.5rem)] z-[90] w-64 rounded-2xl border border-white/10 bg-[#0d141d] p-3 text-sm shadow-[0_18px_45px_rgba(0,0,0,0.42)]">
               <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
                 {t(locale, "resetSceneOptions")}
               </div>
@@ -259,14 +217,6 @@ export function Topbar({
           >
             <Save className="h-4 w-4" />
             {t(locale, "saveRoom")}
-          </button>
-          <button
-            type="button"
-            onClick={randomizeLayout}
-            className="inline-flex items-center gap-2 rounded-xl border border-[#1f4b65] bg-[#102234] px-3 py-2 text-sm font-medium text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white"
-          >
-            <Shuffle className="h-4 w-4" />
-            {t(locale, "randomizeRoom")}
           </button>
           <button
             type="button"

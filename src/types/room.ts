@@ -1,5 +1,19 @@
 export type RoomShape = "rectangle" | "square" | "l_shape" | "custom";
 
+export type RoomPurpose =
+  | "empty"
+  | "living"
+  | "kitchen"
+  | "bedroom"
+  | "kids"
+  | "study"
+  | "bathroom"
+  | "dining"
+  | "laundry"
+  | "entry"
+  | "balcony"
+  | "dressing";
+
 export type OpeningType = "door" | "window" | "balcony_door" | "radiator";
 
 export type ObjectCategory =
@@ -47,6 +61,7 @@ export interface RoomDefinition {
   label: string;
   labelKey: string;
   shape: RoomShape;
+  purpose: RoomPurpose;
   width: number;
   depth: number;
   height: number;
@@ -82,6 +97,12 @@ export interface RoomObject {
   params: ObjectParams;
 }
 
+export interface RoomObjectGroup {
+  id: string;
+  label: string;
+  objectIds: string[];
+}
+
 export interface RoomConstraints {
   keepWindowClear: boolean;
   keepDoorClear: boolean;
@@ -92,6 +113,7 @@ export interface RoomConstraints {
 export interface RoomData {
   room: RoomDefinition;
   objects: RoomObject[];
+  groups?: RoomObjectGroup[];
   constraints: RoomConstraints;
   notes?: string[];
 }

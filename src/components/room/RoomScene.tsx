@@ -4,7 +4,11 @@ import { useCallback, useMemo, useState } from "react";
 import { ContactShadows } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import type { Group } from "three";
-import { clampObjectPositionToRoom, normalizeRotation } from "@/lib/room/constraints";
+import {
+  clampObjectPositionToRoom,
+  isWallAttachedObject,
+  normalizeRotation,
+} from "@/lib/room/constraints";
 import { useRoomStore } from "@/store/roomStore";
 import { useUIStore } from "@/store/uiStore";
 import { CameraControls } from "./CameraControls";
@@ -12,10 +16,16 @@ import { ObjectControls } from "./ObjectControls";
 import { RoomFloor } from "./RoomFloor";
 import { RoomObject } from "./RoomObject";
 import { RoomWalls } from "./RoomWalls";
+import type { RoomObject as RoomObjectType } from "@/types/room";
 
-export function RoomScene() {
+interface RoomSceneProps {
+  previewObject?: RoomObjectType | null;
+}
+
+export function RoomScene({ previewObject = null }: RoomSceneProps) {
   const roomData = useRoomStore((state) => state.roomData);
   const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
+  const selectedObjectIds = useRoomStore((state) => state.selectedObjectIds);
   const cameraMode = useRoomStore((state) => state.cameraMode);
   const transformMode = useRoomStore((state) => state.transformMode);
   const beginTransform = useRoomStore((state) => state.beginTransform);
@@ -26,6 +36,7 @@ export function RoomScene() {
   const setSelectedObjectId = useRoomStore((state) => state.setSelectedObjectId);
   const selectedStructure = useUIStore((state) => state.selectedStructure);
   const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
+  const setMultiSelectMenu = useUIStore((state) => state.setMultiSelectMenu);
   const [isTransforming, setIsTransforming] = useState(false);
   const [objectMap, setObjectMap] = useState<Record<string, Group | null>>({});
   const [openingMap, setOpeningMap] = useState<Record<string, Group | null>>({});
@@ -84,6 +95,13 @@ export function RoomScene() {
       typeof selectedObject.params.mountHeight === "number"
         ? selectedObject.params.mountHeight
         : 0;
+    const isWallObject = isWallAttachedObject(selectedObject);
+    const nextMountHeight = isWallObject
+      ? Math.min(
+          Math.max(0, selectedSceneObject.position.y),
+          Math.max(0, roomData.room.height - selectedObject.dimensions.height),
+        )
+      : mountHeight;
     const nextRotation = normalizeRotation(
       (selectedSceneObject.rotation.y * 180) / Math.PI,
     );
@@ -98,11 +116,12 @@ export function RoomScene() {
       nextRotation,
     );
 
-    selectedSceneObject.position.set(clamped.x, mountHeight, clamped.z);
+    selectedSceneObject.position.set(clamped.x, nextMountHeight, clamped.z);
     selectedSceneObject.rotation.set(0, (nextRotation * Math.PI) / 180, 0);
     updateObjectTransform(selectedObject.id, {
       position: clamped,
       rotation: nextRotation,
+      mountHeight: nextMountHeight,
     });
   };
 
@@ -127,22 +146,23 @@ export function RoomScene() {
       camera={{ position: [6.4, 5.8, 6.4], fov: 40 }}
       onPointerMissed={() => {
         setSelectedStructure(null);
+        setMultiSelectMenu(null);
         setSelectedObjectId(null);
       }}
     >
       <color attach="background" args={["#0b1016"]} />
-      <fog attach="fog" args={["#0b1016", 11, 22]} />
-
-      <ambientLight intensity={0.85} />
+      <ambientLight intensity={1.35} />
+      <hemisphereLight args={["#e9f4ff", "#4c3828", 0.85]} />
       <directionalLight
         castShadow
         position={[8, 12, 6]}
-        intensity={1.35}
+        intensity={1.55}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
       />
-      <pointLight position={[0.8, 4.4, 0.8]} intensity={0.5} color="#7fb7ff" />
-      <pointLight position={[-2.4, 3.8, 2.2]} intensity={0.35} color="#ff914d" />
+      <directionalLight position={[-8, 8, -6]} intensity={0.72} color="#d8ecff" />
+      <pointLight position={[0.8, 4.8, 0.8]} intensity={0.72} color="#7fb7ff" distance={18} />
+      <pointLight position={[-2.4, 4.2, 2.2]} intensity={0.48} color="#ffbf8a" distance={18} />
 
       <ObjectControls
         object={selectedSceneObject}
@@ -161,6 +181,7 @@ export function RoomScene() {
           endTransform();
         }}
         onObjectChange={syncSelectedFromScene}
+        showTranslateY={selectedObject ? isWallAttachedObject(selectedObject) : false}
       />
       <ObjectControls
         object={selectedSceneOpening}
@@ -188,10 +209,19 @@ export function RoomScene() {
           <RoomObject
             key={object.id}
             object={object}
-            isSelected={selectedObjectId === object.id}
+            isSelected={selectedObjectId === object.id || selectedObjectIds.includes(object.id)}
             onObjectReady={handleObjectReady}
           />
         ))}
+        {previewObject ? (
+          <RoomObject
+            key={previewObject.id}
+            object={previewObject}
+            isSelected={false}
+            interactive={false}
+            isGhost
+          />
+        ) : null}
         <ContactShadows
           position={[roomData.room.width / 2, 0.01, roomData.room.depth / 2]}
           scale={Math.max(roomData.room.width, roomData.room.depth) * 1.2}

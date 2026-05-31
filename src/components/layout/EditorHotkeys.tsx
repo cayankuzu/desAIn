@@ -64,9 +64,25 @@ export function EditorHotkeys() {
         return;
       }
 
+      if ((event.metaKey || event.ctrlKey) && key === "g" && event.shiftKey) {
+        event.preventDefault();
+        store.ungroupSelectedObjects();
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && key === "g") {
+        event.preventDefault();
+        store.groupSelectedObjects();
+        return;
+      }
+
       if (key === "delete" || key === "backspace") {
         event.preventDefault();
-        store.deleteObject();
+        if (store.selectedObjectIds.length > 1) {
+          store.deleteSelectedObjects();
+        } else {
+          store.deleteObject();
+        }
         return;
       }
 
@@ -90,6 +106,7 @@ export function EditorHotkeys() {
 
       if (key === "escape") {
         event.preventDefault();
+        useUIStore.getState().setMultiSelectMenu(null);
         store.setSelectedObjectId(null);
         useUIStore.getState().setSelectedStructure(null);
       }

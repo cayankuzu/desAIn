@@ -2,6 +2,7 @@ import type {
   Opening,
   RoomData,
   RoomDefinition,
+  RoomPurpose,
   RoomShape,
 } from "@/types/room";
 import {
@@ -46,6 +47,7 @@ export const resizeRoomDefinition = (
   room: RoomDefinition,
   payload: {
     shape?: RoomShape;
+    purpose?: RoomPurpose;
     width?: number;
     depth?: number;
     height?: number;
@@ -81,6 +83,7 @@ export const resizeRoomDefinition = (
     const nextRoom: RoomDefinition = {
       ...room,
       shape: "custom",
+      purpose: payload.purpose ?? room.purpose ?? "living",
       width,
       depth,
       height: clampRoomHeight(nextHeight),
@@ -122,6 +125,7 @@ export const resizeRoomDefinition = (
   const nextRoom: RoomDefinition = {
     ...room,
     shape: safeShape,
+    purpose: payload.purpose ?? room.purpose ?? "living",
     width: shapeConfig.width,
     depth: shapeConfig.depth,
     height,
@@ -161,6 +165,7 @@ const room: RoomDefinition = {
   label: "Studio Loft",
   labelKey: "room.studioLoft",
   shape: "rectangle",
+  purpose: "living",
   width: 7.2,
   depth: 5.2,
   height: 2.8,
@@ -172,6 +177,7 @@ const room: RoomDefinition = {
 
 export const defaultRoom: RoomData = {
   room,
+  groups: [],
   constraints: {
     keepWindowClear: true,
     keepDoorClear: true,
