@@ -13,6 +13,12 @@ export interface ClearanceZone extends Bounds2D {
   type: Opening["type"];
 }
 
+export const getMountHeight = (object: Pick<RoomObject, "params">) =>
+  typeof object.params.mountHeight === "number" ? object.params.mountHeight : 0;
+
+export const isWallMountedObject = (object: Pick<RoomObject, "params">) =>
+  getMountHeight(object) > 0;
+
 export const normalizeRotation = (rotation: number) => {
   const wrapped = rotation % 360;
   return wrapped < 0 ? wrapped + 360 : wrapped;

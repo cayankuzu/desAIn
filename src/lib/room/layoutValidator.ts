@@ -1,10 +1,23 @@
 import { boundsIntersect, getObjectBounds } from "@/lib/room/collision";
 import {
   getActiveClearanceZones,
+  isWallMountedObject,
   objectIntersectsZone,
 } from "@/lib/room/constraints";
 import { getRoomCutoutZone } from "@/lib/room/roomGeometry";
 import type { LayoutWarning, RoomData } from "@/types/room";
+
+const isFloorCovering = (roomObject: RoomData["objects"][number]) =>
+  roomObject.category === "carpet" || roomObject.dimensions.height <= 0.06;
+
+const shouldIgnoreCollision = (
+  left: RoomData["objects"][number],
+  right: RoomData["objects"][number],
+) =>
+  isFloorCovering(left) ||
+  isFloorCovering(right) ||
+  isWallMountedObject(left) ||
+  isWallMountedObject(right);
 
 export const validateRoomLayout = (roomData: RoomData): LayoutWarning[] => {
   const warnings: LayoutWarning[] = [];
@@ -37,16 +50,18 @@ export const validateRoomLayout = (roomData: RoomData): LayoutWarning[] => {
       });
     }
 
-    zones.forEach((zone) => {
-      if (objectIntersectsZone(object, zone)) {
-        warnings.push({
-          code: `${zone.type}_clearance`,
-          level: zone.type === "door" ? "error" : "warning",
-          objectId: object.id,
-          message: `${object.label} partially blocks the ${zone.type} area.`,
-        });
-      }
-    });
+    if (!isWallMountedObject(object)) {
+      zones.forEach((zone) => {
+        if (objectIntersectsZone(object, zone)) {
+          warnings.push({
+            code: `${zone.type}_clearance`,
+            level: zone.type === "door" ? "error" : "warning",
+            objectId: object.id,
+            message: `${object.label} partially blocks the ${zone.type} area.`,
+          });
+        }
+      });
+    }
   });
 
   for (let index = 0; index < roomData.objects.length; index += 1) {
@@ -57,6 +72,10 @@ export const validateRoomLayout = (roomData: RoomData): LayoutWarning[] => {
     ) {
       const left = roomData.objects[index];
       const right = roomData.objects[compareIndex];
+
+      if (shouldIgnoreCollision(left, right)) {
+        continue;
+      }
 
       if (boundsIntersect(getObjectBounds(left), getObjectBounds(right), 0.04)) {
         warnings.push({

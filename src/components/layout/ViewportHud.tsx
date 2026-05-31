@@ -18,8 +18,11 @@ const getWarningSignature = (
 
 export function ViewportHud() {
   const locale = useUIStore((state) => state.locale);
+  const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
+  const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
   const roomData = useRoomStore((state) => state.roomData);
   const validationWarnings = useRoomStore((state) => state.validationWarnings);
+  const setSelectedObjectId = useRoomStore((state) => state.setSelectedObjectId);
   const activeWarningSource = useMemo(
     () => validationWarnings.map(getWarningSignature).join("|"),
     [validationWarnings],
@@ -51,6 +54,15 @@ export function ViewportHud() {
         return (
           <div
             key={signature}
+            onClick={() => {
+              if (!warning.objectId) {
+                return;
+              }
+
+              setSelectedStructure(null);
+              setSelectedObjectId(warning.objectId);
+              setActiveSidebarTab("details");
+            }}
             className="group pointer-events-auto rounded-2xl border border-[#7b4f2c] bg-[#21150e]/92 px-4 py-3 text-sm text-[#f5c28b] shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur"
           >
             <div className="mb-1 flex items-start justify-between gap-3">
@@ -61,15 +73,18 @@ export function ViewportHud() {
               <button
                 type="button"
                 aria-label={t(locale, "dismissWarning")}
-                onClick={() =>
+                onClick={(event) => {
+                  event.stopPropagation();
                   setDismissedState((current) => ({
                     source: activeWarningSource,
                     keys:
                       current.source === activeWarningSource
                         ? [...current.keys, signature]
                         : [signature],
-                  }))
-                }
+                  }));
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+                onMouseDown={(event) => event.stopPropagation()}
                 className="rounded-full border border-transparent p-1 text-[#f5c28b] opacity-0 transition hover:border-white/10 hover:bg-white/10 hover:text-white group-hover:opacity-100"
               >
                 <X className="h-3.5 w-3.5" />

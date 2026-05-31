@@ -4,7 +4,7 @@ import type { InventoryTemplate } from "@/lib/room/inventoryCatalog";
 
 export function InventoryPreview({ item }: { item: InventoryTemplate }) {
   const baseClasses =
-    "relative h-20 w-full overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(180deg,#152031_0%,#0d141d_100%)]";
+    "relative h-24 w-full overflow-hidden rounded-xl border border-white/10 bg-[radial-gradient(circle_at_top,rgba(140,185,255,0.18),transparent_40%),linear-gradient(180deg,#152031_0%,#0d141d_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]";
 
   const accentStyle = { backgroundColor: item.color };
 

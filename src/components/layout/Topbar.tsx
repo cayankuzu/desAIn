@@ -53,7 +53,7 @@ export function Topbar() {
     : selectedOpening
       ? `${getLocalizedOpeningType(locale, selectedOpening.type)} / ${selectedOpening.id}`
       : selectedStructure?.type === "wall"
-        ? selectedStructure.id
+        ? `${t(locale, "wall")} / ${selectedStructure.id}`
         : t(locale, "noObjectSelected");
 
   return (

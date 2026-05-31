@@ -20,6 +20,7 @@ export function RoomObject({
 }: RoomObjectProps) {
   const Generator = generatorMap[object.generator];
   const setSelectedObjectId = useRoomStore((state) => state.setSelectedObjectId);
+  const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
   const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
   const handleRef = useCallback(
     (node: Group | null) => {
@@ -41,6 +42,7 @@ export function RoomObject({
         event.stopPropagation();
         setSelectedStructure(null);
         setSelectedObjectId(object.id);
+        setActiveSidebarTab("details");
       }}
     >
       <Generator object={object} selected={isSelected} />

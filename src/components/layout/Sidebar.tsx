@@ -4,17 +4,24 @@ import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   Boxes,
+  BoxSelect,
+  ClipboardPaste,
+  Copy,
+  RefreshCw,
   Lock,
   Move3d,
   Package2,
   PanelRight,
   Ruler,
+  Save,
   Scissors,
   Search,
+  Shuffle,
   Trash2,
+  Undo2,
+  RotateCw,
 } from "lucide-react";
 import {
-  featuredInventory,
   inventoryCatalog,
   INVENTORY_DRAG_MIME,
 } from "@/lib/room/inventoryCatalog";
@@ -43,6 +50,7 @@ const sidebarTabs: Array<{
   { id: "outliner", labelKey: "outliner", icon: Boxes },
   { id: "inventory", labelKey: "inventory", icon: Package2 },
   { id: "validation", labelKey: "validate", icon: AlertTriangle },
+  { id: "shortcuts", labelKey: "shortcuts", icon: Scissors },
 ];
 
 type WallControlSpec = {
@@ -57,6 +65,32 @@ type WallControlSpec = {
     cutoutDepth?: number;
   };
 };
+
+const dedupeInventoryTemplates = () => {
+  const seen = new Set<string>();
+
+  return inventoryCatalog.filter((item) => {
+    const signature = [
+      item.labelKey,
+      item.category,
+      item.generator,
+      item.previewType,
+      item.dimensions.width,
+      item.dimensions.depth,
+      item.dimensions.height,
+    ].join(":");
+
+    if (seen.has(signature)) {
+      return false;
+    }
+
+    seen.add(signature);
+    return true;
+  });
+};
+
+const uniqueInventoryCatalog = dedupeInventoryTemplates();
+const uniqueFeaturedInventory = uniqueInventoryCatalog.filter((item) => item.featured);
 
 export function Sidebar() {
   const locale = useUIStore((state) => state.locale);
@@ -150,6 +184,7 @@ export function Sidebar() {
             setSelectedObjectId={(objectId) => {
               setSelectedStructure(null);
               setSelectedObjectId(objectId);
+              setActiveSidebarTab("details");
             }}
           />
         ) : null}
@@ -163,12 +198,18 @@ export function Sidebar() {
             setSelectedObjectId={(objectId) => {
               setSelectedStructure(null);
               setSelectedObjectId(objectId);
+              setActiveSidebarTab("details");
             }}
           />
         ) : null}
-      </div>
 
-      <ShortcutFooter locale={locale} />
+        {activeSidebarTab === "shortcuts" ? (
+          <ShortcutActionsPanel
+            locale={locale}
+            openTab={(tab) => setActiveSidebarTab(tab)}
+          />
+        ) : null}
+      </div>
     </aside>
   );
 }
@@ -178,6 +219,9 @@ function RoomSettingsEditor({ locale }: { locale: Locale }) {
   const updateRoomProperties = useRoomStore((state) => state.updateRoomProperties);
   const updateOpening = useRoomStore((state) => state.updateOpening);
   const selectedStructure = useUIStore((state) => state.selectedStructure);
+  const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
+  const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
+  const setSelectedObjectId = useRoomStore((state) => state.setSelectedObjectId);
 
   const handleDimensionChange = (
     key: "width" | "depth" | "height",
@@ -317,19 +361,25 @@ function RoomSettingsEditor({ locale }: { locale: Locale }) {
           );
 
           return (
-            <div
+            <button
               key={wall.id}
-              className={`rounded-xl border p-3 ${
+              type="button"
+              onClick={() => {
+                setSelectedObjectId(null);
+                setSelectedStructure({ type: "wall", id: wall.id });
+                setActiveSidebarTab("details");
+              }}
+              className={`rounded-xl border p-3 text-left transition ${
                 selected
                   ? "border-[#4ea8ff] bg-[#102234]"
-                  : "border-white/10 bg-white/5"
+                  : "border-white/10 bg-white/5 hover:border-[#32516c] hover:text-white"
               }`}
             >
               <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
                 {wall.id}
               </div>
               <div className="mt-1 font-semibold text-white">{`${length.toFixed(2)}m`}</div>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -345,6 +395,11 @@ function RoomSettingsEditor({ locale }: { locale: Locale }) {
               selectedStructure?.type === "opening" &&
               selectedStructure.id === opening.id
             }
+            onSelect={() => {
+              setSelectedObjectId(null);
+              setSelectedStructure({ type: "opening", id: opening.id });
+              setActiveSidebarTab("details");
+            }}
             onChange={(payload) => updateOpening(opening.id, payload)}
           />
         ))}
@@ -358,16 +413,19 @@ function OpeningEditor({
   opening,
   wallIds,
   selected,
+  onSelect,
   onChange,
 }: {
   locale: Locale;
   opening: Opening;
   wallIds: string[];
   selected: boolean;
+  onSelect?: () => void;
   onChange: (payload: Partial<Pick<Opening, "wallId" | "position" | "width">>) => void;
 }) {
   return (
     <div
+      onClick={onSelect}
       className={`rounded-xl border p-3 text-sm text-slate-300 ${
         selected
           ? "border-[#4ea8ff] bg-[#102234]"
@@ -442,6 +500,7 @@ function SelectedOpeningEditor({
         opening={opening}
         wallIds={wallIds}
         selected
+        onSelect={undefined}
         onChange={(payload) => updateOpening(opening.id, payload)}
       />
     </div>
@@ -867,10 +926,10 @@ function InventoryPanel({ locale }: { locale: Locale }) {
     const normalizedQuery = query.trim().toLowerCase();
 
     if (!normalizedQuery) {
-      return inventoryCatalog;
+      return uniqueInventoryCatalog;
     }
 
-    return inventoryCatalog.filter((item) => {
+    return uniqueInventoryCatalog.filter((item) => {
       const localizedLabel = getLocalizedObjectLabel(locale, item).toLowerCase();
       const localizedCategory = getLocalizedCategoryLabel(locale, item.category).toLowerCase();
       const tagMatch = item.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery));
@@ -912,7 +971,7 @@ function InventoryPanel({ locale }: { locale: Locale }) {
             {t(locale, "recommended")}
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            {featuredInventory.map((item) => (
+            {uniqueFeaturedInventory.map((item) => (
               <InventoryCard key={item.id} item={item} locale={locale} />
             ))}
           </div>
@@ -947,6 +1006,7 @@ function InventoryCard({
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "copy";
         event.dataTransfer.setData(INVENTORY_DRAG_MIME, item.id);
+        event.dataTransfer.setData("text/plain", item.id);
       }}
       className="rounded-2xl border border-white/10 bg-[#111924] p-3 text-left transition hover:border-[#4ea8ff] hover:bg-[#132030]"
     >
@@ -1010,39 +1070,167 @@ function ValidationPanel({
   );
 }
 
-function ShortcutFooter({ locale }: { locale: Locale }) {
-  const shortcuts = [
-    { key: "Q", label: t(locale, "selectMode") },
-    { key: "W", label: t(locale, "moveMode") },
-    { key: "E", label: t(locale, "rotateMode") },
-    { key: "Ctrl/Cmd+Z", label: t(locale, "undo") },
-    { key: "Ctrl/Cmd+Y", label: t(locale, "redo") },
-    { key: "Ctrl/Cmd+C", label: t(locale, "copyAction") },
-    { key: "Ctrl/Cmd+V", label: t(locale, "pasteAction") },
-    { key: "Ctrl/Cmd+X", label: t(locale, "cutAction") },
-    { key: "Delete", label: t(locale, "removeAction") },
-  ];
+function ShortcutActionsPanel({
+  locale,
+  openTab,
+}: {
+  locale: Locale;
+  openTab: (tab: SidebarTab) => void;
+}) {
+  const setTransformMode = useRoomStore((state) => state.setTransformMode);
+  const undo = useRoomStore((state) => state.undo);
+  const redo = useRoomStore((state) => state.redo);
+  const copySelectedObject = useRoomStore((state) => state.copySelectedObject);
+  const cutSelectedObject = useRoomStore((state) => state.cutSelectedObject);
+  const pasteClipboardObject = useRoomStore((state) => state.pasteClipboardObject);
+  const deleteObject = useRoomStore((state) => state.deleteObject);
+  const saveRoomSnapshot = useRoomStore((state) => state.saveRoomSnapshot);
+  const randomizeLayout = useRoomStore((state) => state.randomizeLayout);
+  const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
+  const clipboardObject = useRoomStore((state) => state.clipboardObject);
+  const historyPastLength = useRoomStore((state) => state.historyPast.length);
+  const historyFutureLength = useRoomStore((state) => state.historyFuture.length);
 
   return (
-    <div className="shrink-0 border-t border-white/8 px-4 py-4">
-      <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
+    <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
         <Scissors className="h-3.5 w-3.5" />
         {t(locale, "shortcuts")}
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        {shortcuts.map((shortcut) => (
-          <button
-            key={`${shortcut.key}-${shortcut.label}`}
-            type="button"
-            className="flex items-center justify-between rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-left text-xs text-slate-200 transition hover:border-[#32516c] hover:text-white"
-          >
-            <span className="rounded-md border border-white/10 bg-[#0b1016] px-2 py-1 font-semibold text-[#8cb9ff]">
-              {shortcut.key}
-            </span>
-            <span className="ml-3">{shortcut.label}</span>
-          </button>
-        ))}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <ShortcutTile
+          icon={Ruler}
+          label={t(locale, "roomSettings")}
+          keyLabel={null}
+          onClick={() => openTab("room")}
+        />
+        <ShortcutTile
+          icon={Move3d}
+          label={t(locale, "details")}
+          keyLabel={null}
+          onClick={() => openTab("details")}
+        />
+        <ShortcutTile
+          icon={Package2}
+          label={t(locale, "inventory")}
+          keyLabel={null}
+          onClick={() => openTab("inventory")}
+        />
+        <ShortcutTile
+          icon={AlertTriangle}
+          label={t(locale, "validate")}
+          keyLabel={null}
+          onClick={() => openTab("validation")}
+        />
       </div>
-    </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <ShortcutTile
+          icon={BoxSelect}
+          label={t(locale, "selectMode")}
+          keyLabel="Q"
+          onClick={() => setTransformMode("select")}
+        />
+        <ShortcutTile
+          icon={Move3d}
+          label={t(locale, "moveMode")}
+          keyLabel="W"
+          onClick={() => setTransformMode("translate")}
+        />
+        <ShortcutTile
+          icon={RefreshCw}
+          label={t(locale, "rotateMode")}
+          keyLabel="E"
+          onClick={() => setTransformMode("rotate")}
+        />
+        <ShortcutTile
+          icon={Undo2}
+          label={t(locale, "undo")}
+          keyLabel="Ctrl/Cmd+Z"
+          onClick={undo}
+          disabled={historyPastLength === 0}
+        />
+        <ShortcutTile
+          icon={RotateCw}
+          label={t(locale, "redo")}
+          keyLabel="Ctrl/Cmd+Y"
+          onClick={redo}
+          disabled={historyFutureLength === 0}
+        />
+        <ShortcutTile
+          icon={Copy}
+          label={t(locale, "copyAction")}
+          keyLabel="Ctrl/Cmd+C"
+          onClick={copySelectedObject}
+          disabled={!selectedObjectId}
+        />
+        <ShortcutTile
+          icon={ClipboardPaste}
+          label={t(locale, "pasteAction")}
+          keyLabel="Ctrl/Cmd+V"
+          onClick={pasteClipboardObject}
+          disabled={!clipboardObject}
+        />
+        <ShortcutTile
+          icon={Scissors}
+          label={t(locale, "cutAction")}
+          keyLabel="Ctrl/Cmd+X"
+          onClick={cutSelectedObject}
+          disabled={!selectedObjectId}
+        />
+        <ShortcutTile
+          icon={Trash2}
+          label={t(locale, "removeAction")}
+          keyLabel="Delete"
+          onClick={() => deleteObject()}
+          disabled={!selectedObjectId}
+        />
+        <ShortcutTile
+          icon={Save}
+          label={t(locale, "saveRoom")}
+          keyLabel={null}
+          onClick={saveRoomSnapshot}
+        />
+        <ShortcutTile
+          icon={Shuffle}
+          label={t(locale, "randomizeRoom")}
+          keyLabel={null}
+          onClick={randomizeLayout}
+        />
+      </div>
+    </section>
+  );
+}
+
+function ShortcutTile({
+  icon: Icon,
+  label,
+  keyLabel,
+  onClick,
+  disabled = false,
+}: {
+  icon: typeof Move3d;
+  label: string;
+  keyLabel: string | null;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#111924] px-3 py-3 text-left text-sm text-slate-200 transition hover:border-[#32516c] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+    >
+      <span className="inline-flex items-center gap-2">
+        <Icon className="h-4 w-4 text-[#8cb9ff]" />
+        <span>{label}</span>
+      </span>
+      {keyLabel ? (
+        <span className="rounded-md border border-white/10 bg-[#0b1016] px-2 py-1 text-[11px] font-semibold text-[#8cb9ff]">
+          {keyLabel}
+        </span>
+      ) : null}
+    </button>
   );
 }

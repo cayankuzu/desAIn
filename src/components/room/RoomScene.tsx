@@ -9,7 +9,6 @@ import { useRoomStore } from "@/store/roomStore";
 import { useUIStore } from "@/store/uiStore";
 import { CameraControls } from "./CameraControls";
 import { ObjectControls } from "./ObjectControls";
-import { RoomDimensionGuides } from "./RoomDimensionGuides";
 import { RoomFloor } from "./RoomFloor";
 import { RoomObject } from "./RoomObject";
 import { RoomWalls } from "./RoomWalls";
@@ -130,11 +129,6 @@ export function RoomScene() {
       <group position={roomOffset}>
         <RoomFloor room={roomData.room} />
         <RoomWalls room={roomData.room} />
-        <RoomDimensionGuides
-          width={roomData.room.width}
-          depth={roomData.room.depth}
-          height={roomData.room.height}
-        />
         {roomData.objects.map((object) => (
           <RoomObject
             key={object.id}

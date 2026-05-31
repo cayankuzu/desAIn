@@ -35,6 +35,12 @@ const cloneRoomObject = (object: RoomObject): RoomObject =>
 const getMountHeight = (object: Pick<RoomObject, "params">) =>
   typeof object.params.mountHeight === "number" ? object.params.mountHeight : 0;
 
+const isFixedDuringRandomize = (object: Pick<RoomObject, "locked" | "movable" | "params">) =>
+  object.locked ||
+  !object.movable ||
+  getMountHeight(object) > 0 ||
+  object.params.fixedDuringRandomize === true;
+
 const limitHistory = (history: RoomData[]) => history.slice(-50);
 
 const updateObjectInRoom = (
@@ -156,16 +162,10 @@ const createObjectFromTemplate = (
 
 const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
   const fixedObjects = objects
-    .filter(
-      (object) =>
-        object.locked || !object.movable || getMountHeight(object) > 0,
-    )
+    .filter((object) => isFixedDuringRandomize(object))
     .map((object) => cloneRoomObject(object));
   const movableObjects = objects
-    .filter(
-      (object) =>
-        !object.locked && object.movable && getMountHeight(object) === 0,
-    )
+    .filter((object) => !isFixedDuringRandomize(object))
     .map((object) => cloneRoomObject(object))
     .sort(
       (left, right) =>
@@ -173,28 +173,57 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
         left.dimensions.width * left.dimensions.depth,
     );
 
+  const sourceMap = new Map(objects.map((object) => [object.id, object]));
+
   const scoreLayout = (layoutObjects: RoomObject[]) =>
     validateRoomLayout({
       ...roomData,
       objects: layoutObjects,
     }).length;
 
+  const movementScore = (layoutObjects: RoomObject[]) =>
+    layoutObjects.reduce((total, object) => {
+      if (isFixedDuringRandomize(object)) {
+        return total;
+      }
+
+      const sourceObject = sourceMap.get(object.id);
+
+      if (!sourceObject) {
+        return total;
+      }
+
+      const rotationDelta = Math.abs(object.rotation - sourceObject.rotation) % 360;
+      const shortestRotation = Math.min(rotationDelta, 360 - rotationDelta);
+
+      return (
+        total +
+        Math.hypot(
+          object.position.x - sourceObject.position.x,
+          object.position.z - sourceObject.position.z,
+        ) +
+        shortestRotation / 90
+      );
+    }, 0);
+
   let bestObjects: RoomObject[] = [
     ...fixedObjects,
     ...movableObjects.map((object) => cloneRoomObject(object)),
   ];
   let bestScore = scoreLayout(bestObjects);
+  let bestMovement = movementScore(bestObjects);
 
-  for (let layoutAttempt = 0; layoutAttempt < 140; layoutAttempt += 1) {
+  for (let layoutAttempt = 0; layoutAttempt < 220; layoutAttempt += 1) {
     const draftObjects = fixedObjects.map((object) => cloneRoomObject(object));
 
     movableObjects.forEach((object) => {
       const draft = cloneRoomObject(object);
       let bestCandidate: RoomObject | null = null;
       let bestCandidateScore = Number.POSITIVE_INFINITY;
+      let bestCandidateMovement = Number.NEGATIVE_INFINITY;
       const rotations = [0, 90, 180, 270];
 
-      for (let attempt = 0; attempt < 80; attempt += 1) {
+      for (let attempt = 0; attempt < 120; attempt += 1) {
         const rotation = rotations[Math.floor(Math.random() * rotations.length)];
         const desiredPosition = {
           x: 0.3 + Math.random() * Math.max(0.4, roomData.room.width - 0.6),
@@ -220,14 +249,20 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
         }
 
         const candidateScore = scoreLayout([...draftObjects, candidate]);
+        const candidateMovement =
+          Math.hypot(
+            candidate.position.x - object.position.x,
+            candidate.position.z - object.position.z,
+          ) + Math.abs(candidate.rotation - object.rotation) / 90;
 
-        if (candidateScore < bestCandidateScore) {
+        if (
+          candidateScore < bestCandidateScore ||
+          (candidateScore === bestCandidateScore &&
+            candidateMovement > bestCandidateMovement)
+        ) {
           bestCandidate = candidate;
           bestCandidateScore = candidateScore;
-
-          if (candidateScore === 0) {
-            break;
-          }
+          bestCandidateMovement = candidateMovement;
         }
       }
 
@@ -248,14 +283,15 @@ const tryRandomLayout = (roomData: RoomData, objects: RoomObject[]) => {
     });
 
     const layoutScore = scoreLayout(draftObjects);
+    const layoutMovement = movementScore(draftObjects);
 
-    if (layoutScore < bestScore) {
+    if (
+      layoutScore < bestScore ||
+      (layoutScore === bestScore && layoutMovement > bestMovement)
+    ) {
       bestObjects = draftObjects.map((object) => cloneRoomObject(object));
       bestScore = layoutScore;
-    }
-
-    if (bestScore === 0) {
-      break;
+      bestMovement = layoutMovement;
     }
   }
 
@@ -640,7 +676,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
   randomizeLayout: () =>
     set((state) => {
       const roomData = cloneRoomData(state.roomData);
-      let sourceRoom = roomData;
+      let sourceObjects = roomData.objects;
 
       if (typeof window !== "undefined") {
         const savedRaw = window.localStorage.getItem(SAVED_ROOM_KEY);
@@ -648,17 +684,26 @@ export const useRoomStore = create<RoomStore>((set) => ({
         if (savedRaw) {
           try {
             const parsed = JSON.parse(savedRaw) as RoomData;
-            sourceRoom = {
-              ...roomData,
-              objects: normalizeRoomObjects(roomData, parsed.objects),
-            };
+            sourceObjects = normalizeRoomObjects(roomData, parsed.objects);
           } catch {
-            sourceRoom = roomData;
+            sourceObjects = roomData.objects;
           }
         }
       }
 
-      roomData.objects = tryRandomLayout(roomData, sourceRoom.objects);
+      const fixedCurrentObjects = roomData.objects
+        .filter((object) => isFixedDuringRandomize(object))
+        .map((object) => cloneRoomObject(object));
+      const fixedIds = new Set(fixedCurrentObjects.map((object) => object.id));
+      const movableSourceObjects = sourceObjects
+        .filter((object) => !isFixedDuringRandomize(object))
+        .map((object) => cloneRoomObject(object));
+      const sourceLayoutObjects = [
+        ...fixedCurrentObjects,
+        ...movableSourceObjects.filter((object) => !fixedIds.has(object.id)),
+      ];
+
+      roomData.objects = tryRandomLayout(roomData, sourceLayoutObjects);
 
       return {
         roomData,

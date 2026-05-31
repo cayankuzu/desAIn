@@ -7,6 +7,7 @@ export type SidebarTab =
   | "room"
   | "details"
   | "outliner"
+  | "shortcuts"
   | "validation"
   | "inventory";
 
