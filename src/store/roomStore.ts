@@ -66,19 +66,6 @@ const hashString = (input: string) => {
   return hash >>> 0;
 };
 
-const createSeededRandom = (seed: string): RandomNumberGenerator => {
-  let state = hashString(seed) || 0x9e3779b9;
-
-  return () => {
-    state += 0x6d2b79f5;
-    let value = state;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
-};
-
 const getMountHeight = (object: Pick<RoomObject, "params">) =>
   typeof object.params.mountHeight === "number" ? object.params.mountHeight : 0;
 
@@ -199,6 +186,9 @@ const positionsEqual = (
 ) =>
   Math.abs(left.x - right.x) < 0.001 && Math.abs(left.z - right.z) < 0.001;
 
+const wallPointsEqual = (left: [number, number], right: [number, number]) =>
+  Math.abs(left[0] - right[0]) < 0.001 && Math.abs(left[1] - right[1]) < 0.001;
+
 const moveRandomObjectBy = (
   roomData: RoomData,
   object: RoomObject,
@@ -266,6 +256,18 @@ const getExplicitGroupObjects = (
     .filter((object): object is RoomObject => Boolean(object));
 };
 
+const getRelationalObjects = (
+  roomData: RoomData,
+  objectId: string,
+  objects: RoomObject[],
+) => {
+  const explicitGroupObjects = getExplicitGroupObjects(roomData, objectId, objects);
+
+  return explicitGroupObjects.length
+    ? explicitGroupObjects
+    : objects.filter((object) => object.id !== objectId);
+};
+
 const getNearestObject = (
   object: RoomObject,
   candidates: RoomObject[],
@@ -293,11 +295,11 @@ const getDesignPenalty = (roomData: RoomData, objects: RoomObject[]) => {
       return total;
     }
 
-    const explicitGroupObjects = getExplicitGroupObjects(roomData, object.id, objects);
-    const groupedTvObjects = explicitGroupObjects.filter(
+    const relationalObjects = getRelationalObjects(roomData, object.id, objects);
+    const groupedTvObjects = relationalObjects.filter(
       (groupObject) => groupObject.category === "tv_unit" && groupObject.id !== object.id,
     );
-    const groupedTableObjects = explicitGroupObjects.filter(
+    const groupedTableObjects = relationalObjects.filter(
       (groupObject) => groupObject.category === "table" && groupObject.id !== object.id,
     );
 
@@ -368,11 +370,11 @@ const orientSocialObjects = (roomData: RoomData, objects: RoomObject[]) => {
       return object;
     }
 
-    const explicitGroupObjects = getExplicitGroupObjects(roomData, object.id, objects);
-    const groupedTables = explicitGroupObjects.filter(
+    const relationalObjects = getRelationalObjects(roomData, object.id, objects);
+    const groupedTables = relationalObjects.filter(
       (entry) => entry.category === "table" && entry.id !== object.id,
     );
-    const groupedTvs = explicitGroupObjects.filter(
+    const groupedTvs = relationalObjects.filter(
       (entry) => entry.category === "tv_unit" && entry.id !== object.id,
     );
 
@@ -388,8 +390,9 @@ const orientSocialObjects = (roomData: RoomData, objects: RoomObject[]) => {
     }
 
     if (
-      !shouldPreferWallPlacement(object) &&
-      (object.category === "sofa" || object.category === "chair" || getObjectBaseShape(object) === "piano")
+      (object.category === "sofa" && !shouldPreferWallPlacement(object)) ||
+      object.category === "chair" ||
+      getObjectBaseShape(object) === "piano"
     ) {
       const nearestTv = getNearestObject(object, groupedTvs);
 
@@ -405,7 +408,7 @@ const orientSocialObjects = (roomData: RoomData, objects: RoomObject[]) => {
     if (object.category === "tv_unit") {
       const nearestSeat = getNearestObject(
         object,
-        explicitGroupObjects.filter(
+        relationalObjects.filter(
           (entry) =>
             (entry.category === "sofa" || entry.category === "chair") &&
             entry.id !== object.id,
@@ -419,10 +422,7 @@ const orientSocialObjects = (roomData: RoomData, objects: RoomObject[]) => {
     }
 
     if (shouldPreferWallPlacement(object)) {
-      return {
-        ...object,
-        rotation: getFacingRotation(object.position, roomCenter),
-      };
+      return object;
     }
 
     return object;
@@ -493,6 +493,50 @@ const normalizeCustomRoom = (room: RoomDefinition, walls: WallSegment[]) => {
   return {
     ...nextRoom,
     openings: room.openings.map((opening) => normalizeOpeningForRoom(nextRoom, opening)),
+  };
+};
+
+const createDividerWallSegment = (
+  room: RoomDefinition,
+  walls: WallSegment[],
+): WallSegment => {
+  const ratios = [0.5, 0.35, 0.65, 0.25, 0.75];
+  let outlineWallCount = 0;
+
+  for (const wall of walls) {
+    const previousWall = walls[outlineWallCount - 1];
+
+    if (previousWall && !wallPointsEqual(previousWall.to, wall.from)) {
+      break;
+    }
+
+    outlineWallCount += 1;
+
+    if (outlineWallCount > 1 && wallPointsEqual(wall.to, walls[0].from)) {
+      break;
+    }
+  }
+
+  const dividerIndex = Math.max(0, walls.length - outlineWallCount);
+  const ratio = ratios[dividerIndex % ratios.length];
+  const margin = 0.45;
+
+  if (room.width >= room.depth) {
+    const x = Number((room.width * ratio).toFixed(2));
+
+    return {
+      id: createWallId(walls),
+      from: [x, Number(Math.min(room.depth / 2, margin).toFixed(2))],
+      to: [x, Number(Math.max(room.depth - margin, room.depth / 2).toFixed(2))],
+    };
+  }
+
+  const z = Number((room.depth * ratio).toFixed(2));
+
+  return {
+    id: createWallId(walls),
+    from: [Number(Math.min(room.width / 2, margin).toFixed(2)), z],
+    to: [Number(Math.max(room.width - margin, room.width / 2).toFixed(2)), z],
   };
 };
 
@@ -848,6 +892,7 @@ const getRoomDataSignature = (
 
 const getRandomLayoutInputSignature = (roomData: RoomData) =>
   JSON.stringify({
+    algorithm: "systematic-layout-v3",
     room: {
       shape: roomData.room.shape,
       purpose: roomData.room.purpose,
@@ -1195,20 +1240,687 @@ const getLayoutSignature = (objects: RoomObject[]) =>
     .sort()
     .join("|");
 
-const getRandomLayoutOptionCount = (objectCount: number) => {
-  if (objectCount > 28) {
-    return 44;
+const isDiversityObject = (object: RoomObject) =>
+  !isFixedDuringRandomize(object) &&
+  object.category !== "carpet" &&
+  object.dimensions.height > 0.06;
+
+const getLayoutZone = (roomData: RoomData, object: RoomObject) => {
+  const xRatio = object.position.x / Math.max(roomData.room.width, 0.01);
+  const zRatio = object.position.z / Math.max(roomData.room.depth, 0.01);
+  const xZone = Math.min(2, Math.max(0, Math.floor(xRatio * 3)));
+  const zZone = Math.min(2, Math.max(0, Math.floor(zRatio * 3)));
+  const rotationZone = Math.round(normalizeRotation(object.rotation) / 45) % 8;
+  const mountZone = Math.round(getMountHeight(object) / 0.35);
+
+  return `${xZone}:${zZone}:${rotationZone}:${mountZone}:${
+    isWallAttachedObject(object) ? "wall" : "floor"
+  }`;
+};
+
+const getDiversitySignature = (roomData: RoomData, objects: RoomObject[]) =>
+  objects
+    .filter(isDiversityObject)
+    .map((object) => `${object.id}:${getLayoutZone(roomData, object)}`)
+    .sort()
+    .join("|");
+
+const getCategoryDiversityTokens = (roomData: RoomData, objects: RoomObject[]) =>
+  objects
+    .filter(isDiversityObject)
+    .map(
+      (object) =>
+        `${object.category}:${getObjectBaseShape(object)}:${getLayoutZone(roomData, object)}`,
+    )
+    .sort();
+
+const getShortestRotationDelta = (left: number, right: number) => {
+  const delta = Math.abs(normalizeRotation(left) - normalizeRotation(right)) % 360;
+
+  return Math.min(delta, 360 - delta);
+};
+
+const getTokenOverlapRatio = (leftTokens: string[], rightTokens: string[]) => {
+  const rightCounts = new Map<string, number>();
+
+  rightTokens.forEach((token) => {
+    rightCounts.set(token, (rightCounts.get(token) ?? 0) + 1);
+  });
+
+  const overlap = leftTokens.reduce((total, token) => {
+    const count = rightCounts.get(token) ?? 0;
+
+    if (!count) {
+      return total;
+    }
+
+    rightCounts.set(token, count - 1);
+    return total + 1;
+  }, 0);
+
+  return overlap / Math.max(1, Math.min(leftTokens.length, rightTokens.length));
+};
+
+const areRandomLayoutsTooSimilar = (
+  roomData: RoomData,
+  leftObjects: RoomObject[],
+  rightObjects: RoomObject[],
+) => {
+  const leftMap = new Map(
+    leftObjects.filter(isDiversityObject).map((object) => [object.id, object]),
+  );
+  const rightMap = new Map(
+    rightObjects.filter(isDiversityObject).map((object) => [object.id, object]),
+  );
+  const sharedIds = [...leftMap.keys()].filter((objectId) => rightMap.has(objectId));
+
+  if (!sharedIds.length) {
+    return false;
   }
 
-  if (objectCount > 18) {
-    return 56;
+  let closeObjects = 0;
+  let sameZoneObjects = 0;
+  let sameRotationObjects = 0;
+  let meaningfulChanges = 0;
+  let totalDistance = 0;
+  let totalRotationDelta = 0;
+
+  sharedIds.forEach((objectId) => {
+    const left = leftMap.get(objectId)!;
+    const right = rightMap.get(objectId)!;
+    const distance = Math.hypot(
+      left.position.x - right.position.x,
+      left.position.z - right.position.z,
+    );
+    const rotationDelta = getShortestRotationDelta(left.rotation, right.rotation);
+    const closeDistance = Math.max(
+      0.45,
+      Math.min(0.9, Math.min(left.dimensions.width, left.dimensions.depth) * 0.75),
+    );
+    const meaningfulDistance = Math.max(
+      0.65,
+      Math.min(1.1, Math.min(left.dimensions.width, left.dimensions.depth) * 0.95),
+    );
+    const sameZone = getLayoutZone(roomData, left) === getLayoutZone(roomData, right);
+
+    totalDistance += distance;
+    totalRotationDelta += rotationDelta;
+
+    if (distance < closeDistance && rotationDelta < 45) {
+      closeObjects += 1;
+    }
+
+    if (sameZone) {
+      sameZoneObjects += 1;
+    }
+
+    if (rotationDelta < 45) {
+      sameRotationObjects += 1;
+    }
+
+    if (distance >= meaningfulDistance || rotationDelta >= 60 || !sameZone) {
+      meaningfulChanges += 1;
+    }
+  });
+
+  const comparedCount = sharedIds.length;
+  const closeRatio = closeObjects / comparedCount;
+  const sameZoneRatio = sameZoneObjects / comparedCount;
+  const sameRotationRatio = sameRotationObjects / comparedCount;
+  const averageDistance = totalDistance / comparedCount;
+  const averageRotationDelta = totalRotationDelta / comparedCount;
+  const minimumMeaningfulChanges =
+    comparedCount >= 8 ? 3 : comparedCount >= 4 ? 2 : 1;
+  const categoryOverlap = getTokenOverlapRatio(
+    getCategoryDiversityTokens(roomData, leftObjects),
+    getCategoryDiversityTokens(roomData, rightObjects),
+  );
+
+  return (
+    (meaningfulChanges < minimumMeaningfulChanges && closeRatio >= 0.55) ||
+    (closeRatio >= 0.72 && averageRotationDelta < 45) ||
+    (sameZoneRatio >= 0.72 && sameRotationRatio >= 0.72 && averageDistance < 0.85) ||
+    (categoryOverlap >= 0.82 && averageDistance < 0.95)
+  );
+};
+
+const getLayoutBalancePenalty = (roomData: RoomData, objects: RoomObject[]) => {
+  const weightedObjects = objects.filter(isDiversityObject);
+
+  if (weightedObjects.length < 2) {
+    return 0;
   }
 
-  if (objectCount > 10) {
-    return 64;
+  const weightedCenter = weightedObjects.reduce(
+    (total, object) => {
+      const weight = Math.max(0.2, object.dimensions.width * object.dimensions.depth);
+
+      return {
+        x: total.x + object.position.x * weight,
+        z: total.z + object.position.z * weight,
+        weight: total.weight + weight,
+      };
+    },
+    { x: 0, z: 0, weight: 0 },
+  );
+  const centerX = weightedCenter.x / weightedCenter.weight;
+  const centerZ = weightedCenter.z / weightedCenter.weight;
+  const roomCenter = {
+    x: roomData.room.width / 2,
+    z: roomData.room.depth / 2,
+  };
+  const normalizedDrift =
+    Math.abs(centerX - roomCenter.x) / Math.max(roomData.room.width, 0.01) +
+    Math.abs(centerZ - roomCenter.z) / Math.max(roomData.room.depth, 0.01);
+
+  return normalizedDrift * 18;
+};
+
+const getAwkwardGapPenalty = (objects: RoomObject[]) => {
+  const layoutObjects = objects.filter(isDiversityObject);
+  let penalty = 0;
+
+  for (let leftIndex = 0; leftIndex < layoutObjects.length; leftIndex += 1) {
+    for (
+      let rightIndex = leftIndex + 1;
+      rightIndex < layoutObjects.length;
+      rightIndex += 1
+    ) {
+      const left = layoutObjects[leftIndex];
+      const right = layoutObjects[rightIndex];
+      const leftBounds = getObjectBounds(left);
+      const rightBounds = getObjectBounds(right);
+      const gapX = Math.max(
+        0,
+        Math.max(
+          leftBounds.minX - rightBounds.maxX,
+          rightBounds.minX - leftBounds.maxX,
+        ),
+      );
+      const gapZ = Math.max(
+        0,
+        Math.max(
+          leftBounds.minZ - rightBounds.maxZ,
+          rightBounds.minZ - leftBounds.maxZ,
+        ),
+      );
+      const gap = Math.hypot(gapX, gapZ);
+
+      if (gap > 0 && gap < 0.18) {
+        penalty += (0.18 - gap) * 8;
+      }
+    }
   }
 
-  return 72;
+  return penalty;
+};
+
+const getRandomLayoutQualityScore = (
+  roomData: RoomData,
+  objects: RoomObject[],
+  warnings: LayoutWarning[],
+) =>
+  getDesignPenalty(roomData, objects) +
+  getLayoutBalancePenalty(roomData, objects) +
+  getAwkwardGapPenalty(objects) +
+  warnings.reduce(
+    (total, warning) => total + (warning.level === "error" ? 1000 : 160),
+    0,
+  );
+
+type PlacementCandidate = {
+  key: string;
+  object: RoomObject;
+};
+
+type PlacementPool = {
+  sourceObject: RoomObject;
+  candidates: PlacementCandidate[];
+};
+
+const LAYOUT_SEARCH_SAFETY_LIMIT = 3600;
+
+const getLayoutObjectPriority = (object: RoomObject) => {
+  const wallPriority =
+    isWallAttachedObject(object) || shouldPreferWallPlacement(object) ? 1000 : 0;
+  const categoryPriority =
+    object.category === "sofa"
+      ? 90
+      : object.category === "bed"
+        ? 85
+        : object.category === "tv_unit"
+          ? 72
+          : object.category === "wardrobe"
+            ? 68
+            : object.category === "table"
+              ? 48
+              : object.category === "chair"
+                ? 36
+                : 0;
+
+  return (
+    wallPriority +
+    categoryPriority +
+    object.dimensions.width * object.dimensions.depth * 10
+  );
+};
+
+const getPlacementCandidateSignature = (object: RoomObject) =>
+  `${object.position.x.toFixed(2)}:${object.position.z.toFixed(2)}:${Math.round(
+    normalizeRotation(object.rotation) / 15,
+  ) * 15}:${Math.round(getMountHeight(object) / 0.05)}`;
+
+const dedupePlacementCandidates = (candidates: PlacementCandidate[]) => {
+  const seen = new Set<string>();
+
+  return candidates.filter((candidate) => {
+    const signature = getPlacementCandidateSignature(candidate.object);
+
+    if (seen.has(signature)) {
+      return false;
+    }
+
+    seen.add(signature);
+    return true;
+  });
+};
+
+const getWallAlongStops = (wallLength: number, object: RoomObject) => {
+  const halfAlong = Math.min(object.dimensions.width / 2, wallLength / 2);
+  const minAlong = Math.min(wallLength / 2, halfAlong + 0.08);
+  const maxAlong = Math.max(minAlong, wallLength - halfAlong - 0.08);
+  const spacing = Math.max(
+    0.45,
+    Math.min(1.15, Math.max(object.dimensions.width * 0.7, 0.55)),
+  );
+  const stops = new Set<number>();
+  const addStop = (value: number) => {
+    const safeValue = Math.min(maxAlong, Math.max(minAlong, value));
+    stops.add(Number(safeValue.toFixed(2)));
+  };
+
+  for (let along = minAlong; along <= maxAlong + 0.001; along += spacing) {
+    addStop(along);
+  }
+
+  [minAlong, maxAlong, (minAlong + maxAlong) / 2].forEach(addStop);
+  [0.2, 0.35, 0.5, 0.65, 0.8].forEach((ratio) =>
+    addStop(minAlong + (maxAlong - minAlong) * ratio),
+  );
+
+  return [...stops].sort((left, right) => left - right);
+};
+
+const getLinearPlacementStops = (span: number, objectSpan: number) => {
+  const margin = Math.min(span / 2, Math.max(0.28, objectSpan / 2 + 0.08));
+  const min = margin;
+  const max = Math.max(min, span - margin);
+  const spacing = Math.max(0.72, Math.min(1.35, Math.max(objectSpan * 0.9, 0.85)));
+  const stops = new Set<number>();
+  const addStop = (value: number) => {
+    const safeValue = Math.min(max, Math.max(min, value));
+    stops.add(Number(safeValue.toFixed(2)));
+  };
+
+  for (let value = min; value <= max + 0.001; value += spacing) {
+    addStop(value);
+  }
+
+  [min, max, span / 2].forEach(addStop);
+  [0.2, 0.35, 0.5, 0.65, 0.8].forEach((ratio) => addStop(span * ratio));
+
+  return [...stops].sort((left, right) => left - right);
+};
+
+const getWallPlacementCandidates = (
+  roomData: RoomData,
+  object: RoomObject,
+): PlacementCandidate[] => {
+  const candidates: PlacementCandidate[] = [];
+
+  roomData.room.walls.forEach((wall) => {
+    const metrics = getWallMetrics(wall);
+    const stops = getWallAlongStops(metrics.length, object);
+
+    stops.forEach((along, index) => {
+      const desiredPosition = {
+        x: wall.from[0] + metrics.directionX * along,
+        z: wall.from[1] + metrics.directionZ * along,
+      };
+      const placement = getWallAttachedObjectTransform(
+        roomData,
+        object,
+        desiredPosition,
+      );
+      const candidate = {
+        ...cloneRoomObject(object),
+        position: placement.position,
+        rotation: placement.rotation,
+      };
+
+      candidates.push({
+        key: `${wall.id}:${index}`,
+        object: candidate,
+      });
+    });
+  });
+
+  return dedupePlacementCandidates(candidates);
+};
+
+const getFloorPlacementCandidates = (
+  roomData: RoomData,
+  object: RoomObject,
+): PlacementCandidate[] => {
+  const candidates: PlacementCandidate[] = [];
+  const xStops = getLinearPlacementStops(roomData.room.width, object.dimensions.width);
+  const zStops = getLinearPlacementStops(roomData.room.depth, object.dimensions.depth);
+  const rotations = [0, 90, 180, 270];
+
+  rotations.forEach((rotation) => {
+    xStops.forEach((x) => {
+      zStops.forEach((z) => {
+        const normalizedRotation = normalizeRotation(rotation);
+        const candidate = {
+          ...cloneRoomObject(object),
+          rotation: normalizedRotation,
+          position: clampObjectPositionToRoom(
+            roomData,
+            object,
+            { x, z },
+            normalizedRotation,
+          ),
+        };
+
+        candidates.push({
+          key: `floor:${x}:${z}:${normalizedRotation}`,
+          object: candidate,
+        });
+      });
+    });
+  });
+
+  return dedupePlacementCandidates(candidates);
+};
+
+const getPlacementCandidates = (
+  roomData: RoomData,
+  object: RoomObject,
+): PlacementCandidate[] => {
+  const wallCandidates =
+    isWallAttachedObject(object) || shouldPreferWallPlacement(object)
+      ? getWallPlacementCandidates(roomData, object)
+      : [];
+  const floorCandidates =
+    wallCandidates.length || isWallAttachedObject(object)
+      ? []
+      : getFloorPlacementCandidates(roomData, object);
+  const candidates = [...wallCandidates, ...floorCandidates];
+
+  if (candidates.length) {
+    return candidates;
+  }
+
+  const fallbackObject = normalizeRoomObjects(roomData, [object])[0];
+
+  return [
+    {
+      key: "fallback",
+      object: fallbackObject,
+    },
+  ];
+};
+
+const getGreatestCommonDivisor = (left: number, right: number): number => {
+  let a = Math.abs(left);
+  let b = Math.abs(right);
+
+  while (b) {
+    const next = a % b;
+    a = b;
+    b = next;
+  }
+
+  return a || 1;
+};
+
+const getCoprimeStride = (count: number, seed: number) => {
+  if (count <= 1) {
+    return 1;
+  }
+
+  let stride = (seed % (count - 1)) + 1;
+
+  while (getGreatestCommonDivisor(stride, count) !== 1) {
+    stride = (stride % (count - 1)) + 1;
+  }
+
+  return stride;
+};
+
+const getCandidateIndexOrder = (
+  count: number,
+  passIndex: number,
+  objectId: string,
+  seedSignature: string,
+  forcedIndex?: number,
+) => {
+  if (!count) {
+    return [];
+  }
+
+  const seed = hashString(`${seedSignature}:${objectId}:${passIndex}`);
+  const start = forcedIndex ?? seed % count;
+  const stride = getCoprimeStride(count, seed || 1);
+  const indexes: number[] = [];
+
+  for (let offset = 0; offset < count; offset += 1) {
+    indexes.push((start + offset * stride) % count);
+  }
+
+  return indexes;
+};
+
+const getCandidateMovement = (sourceObject: RoomObject, candidate: RoomObject) =>
+  Math.hypot(
+    candidate.position.x - sourceObject.position.x,
+    candidate.position.z - sourceObject.position.z,
+  ) + getShortestRotationDelta(candidate.rotation, sourceObject.rotation) / 90;
+
+const getCandidatePlacementScore = (
+  roomData: RoomData,
+  draftObjects: RoomObject[],
+  candidate: RoomObject,
+  sourceObject: RoomObject,
+) => {
+  const orientedDraft = orientSocialObjects(roomData, [
+    ...draftObjects,
+    candidate,
+  ]);
+  const warnings = validateRoomLayout({
+    ...roomData,
+    objects: orientedDraft,
+  });
+  const candidateWarnings = warnings.filter(
+    (warning) =>
+      warning.objectId === candidate.id || warning.relatedObjectId === candidate.id,
+  );
+
+  if (
+    candidateWarnings.some(
+      (warning) => warning.level === "error" || warning.code === "collision",
+    )
+  ) {
+    return null;
+  }
+
+  const warningPenalty = candidateWarnings.reduce(
+    (total, warning) => total + (warning.level === "error" ? 1000 : 120),
+    0,
+  );
+  const movement = getCandidateMovement(sourceObject, candidate);
+
+  return (
+    getDesignPenalty(roomData, orientedDraft) +
+    getLayoutBalancePenalty(roomData, orientedDraft) * 0.45 +
+    getAwkwardGapPenalty(orientedDraft) +
+    warningPenalty -
+    Math.min(movement, 4) * 0.55
+  );
+};
+
+const pickPlacementCandidate = (
+  roomData: RoomData,
+  draftObjects: RoomObject[],
+  pool: PlacementPool,
+  passIndex: number,
+  seedSignature: string,
+  forcedIndex?: number,
+) => {
+  let bestObject: RoomObject | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  let bestMovement = Number.NEGATIVE_INFINITY;
+  const indexes = getCandidateIndexOrder(
+    pool.candidates.length,
+    passIndex,
+    pool.sourceObject.id,
+    seedSignature,
+    forcedIndex,
+  );
+
+  indexes.forEach((candidateIndex, orderIndex) => {
+    const candidate = cloneRoomObject(pool.candidates[candidateIndex].object);
+    const intersects = draftObjects.some((existing) =>
+      objectsHavePlacementCollision(existing, candidate, 0.06),
+    );
+
+    if (intersects) {
+      return;
+    }
+
+    const score = getCandidatePlacementScore(
+      roomData,
+      draftObjects,
+      candidate,
+      pool.sourceObject,
+    );
+
+    if (score === null) {
+      return;
+    }
+
+    const movement = getCandidateMovement(pool.sourceObject, candidate);
+    const stableScore = score + orderIndex * 0.0001;
+
+    if (
+      stableScore < bestScore ||
+      (stableScore === bestScore && movement > bestMovement)
+    ) {
+      bestObject = candidate;
+      bestScore = stableScore;
+      bestMovement = movement;
+    }
+  });
+
+  return bestObject ?? cloneRoomObject(pool.candidates[indexes[0] ?? 0].object);
+};
+
+const getSystematicLayoutSearchPassCount = (pools: PlacementPool[]) => {
+  const candidateCounts = pools
+    .map((pool) => pool.candidates.length)
+    .filter((count) => count > 0);
+
+  if (!candidateCounts.length) {
+    return 1;
+  }
+
+  let exactProduct = 1;
+  let canExhaustProduct = true;
+
+  for (const count of candidateCounts) {
+    if (exactProduct > LAYOUT_SEARCH_SAFETY_LIMIT / count) {
+      canExhaustProduct = false;
+      break;
+    }
+
+    exactProduct *= count;
+  }
+
+  const anchorSweeps = candidateCounts.reduce((total, count) => total + count, 0);
+  const pairSweeps = Math.max(...candidateCounts) * Math.max(1, pools.length * 2);
+  const desiredPasses = canExhaustProduct
+    ? exactProduct
+    : Math.max(anchorSweeps, pairSweeps, LAYOUT_SEARCH_SAFETY_LIMIT);
+
+  return Math.max(1, Math.min(LAYOUT_SEARCH_SAFETY_LIMIT, desiredPasses));
+};
+
+const buildSystematicLayout = (
+  roomData: RoomData,
+  sourceLayoutObjects: RoomObject[],
+  pools: PlacementPool[],
+  passIndex: number,
+  seedSignature: string,
+) => {
+  const fixedObjects = sourceLayoutObjects
+    .filter((object) => isFixedDuringRandomize(object))
+    .map((object) => cloneRoomObject(object));
+  const movableObjects = pools
+    .map((pool) => pool.sourceObject)
+    .sort(
+      (left, right) =>
+        getLayoutObjectPriority(right) - getLayoutObjectPriority(left),
+    );
+  const poolByObjectId = new Map(pools.map((pool) => [pool.sourceObject.id, pool]));
+  const sourceMap = new Map(
+    sourceLayoutObjects.map((object) => [object.id, cloneRoomObject(object)]),
+  );
+
+  if (!movableObjects.length) {
+    return stabilizeRandomLayout(roomData, fixedObjects);
+  }
+
+  const anchorObject = movableObjects[passIndex % movableObjects.length];
+  const anchorPool = poolByObjectId.get(anchorObject.id);
+  const anchorCandidateIndex = anchorPool?.candidates.length
+    ? Math.floor(passIndex / movableObjects.length) % anchorPool.candidates.length
+    : undefined;
+  const orderedObjects = [
+    anchorObject,
+    ...movableObjects.filter((object) => object.id !== anchorObject.id),
+  ];
+  const draftObjects = fixedObjects.map((object) => cloneRoomObject(object));
+
+  orderedObjects.forEach((object) => {
+    const pool = poolByObjectId.get(object.id);
+
+    if (!pool) {
+      draftObjects.push(cloneRoomObject(object));
+      return;
+    }
+
+    draftObjects.push(
+      pickPlacementCandidate(
+        roomData,
+        draftObjects,
+        pool,
+        passIndex,
+        seedSignature,
+        object.id === anchorObject.id ? anchorCandidateIndex : undefined,
+      ),
+    );
+  });
+
+  return stabilizeRandomLayout(roomData, draftObjects).map((object) => {
+    const sourceObject = sourceMap.get(object.id);
+
+    return sourceObject
+      ? {
+          ...object,
+          dimensions: { ...sourceObject.dimensions },
+        }
+      : object;
+  });
 };
 
 const createRandomLayoutOptions = (
@@ -1216,19 +1928,31 @@ const createRandomLayoutOptions = (
   sourceLayoutObjects: RoomObject[],
   seedSignature: string,
 ): RandomLayoutOption[] => {
-  const optionCount = getRandomLayoutOptionCount(sourceLayoutObjects.length);
-  const options: RandomLayoutOption[] = [];
+  const movableSourceObjects = sourceLayoutObjects.filter(
+    (object) => !isFixedDuringRandomize(object),
+  );
+  const placementPools = movableSourceObjects
+    .map((sourceObject) => ({
+      sourceObject: cloneRoomObject(sourceObject),
+      candidates: getPlacementCandidates(roomData, sourceObject),
+    }))
+    .filter((pool) => pool.candidates.length);
+  const searchPassCount = getSystematicLayoutSearchPassCount(placementPools);
+  const candidates: Array<RandomLayoutOption & { score: number }> = [];
   const seenSignatures = new Set<string>();
-  const maxAttempts = optionCount * 10;
-  const random = createSeededRandom(`random-layout-v2:${seedSignature}`);
 
-  for (
-    let attempt = 0;
-    attempt < maxAttempts && options.length < optionCount;
-    attempt += 1
-  ) {
-    const objects = tryRandomLayout(roomData, sourceLayoutObjects, random);
-    const signature = getLayoutSignature(objects);
+  for (let passIndex = 0; passIndex < searchPassCount; passIndex += 1) {
+    const objects = buildSystematicLayout(
+      roomData,
+      sourceLayoutObjects,
+      placementPools,
+      passIndex,
+      seedSignature,
+    );
+    const signature = `${getLayoutSignature(objects)}|${getDiversitySignature(
+      roomData,
+      objects,
+    )}`;
 
     if (seenSignatures.has(signature)) {
       continue;
@@ -1244,17 +1968,36 @@ const createRandomLayoutOptions = (
       continue;
     }
 
-    const option = {
-      id: `random_${options.length + 1}`,
-      label: `random_${options.length + 1}`,
+    candidates.push({
+      id: `random_candidate_${candidates.length + 1}`,
+      label: `random_candidate_${candidates.length + 1}`,
       objects,
       warnings,
-    };
-
-    options.push(option);
+      score: getRandomLayoutQualityScore(roomData, objects, warnings),
+    });
   }
 
-  if (!options.length) {
+  const selectedOptions = candidates
+    .sort((left, right) => left.score - right.score)
+    .reduce<RandomLayoutOption[]>((selected, candidate) => {
+      if (
+        selected.some((option) =>
+          areRandomLayoutsTooSimilar(roomData, option.objects, candidate.objects),
+        )
+      ) {
+        return selected;
+      }
+
+      selected.push({
+        id: candidate.id,
+        label: candidate.label,
+        objects: candidate.objects,
+        warnings: candidate.warnings,
+      });
+      return selected;
+    }, []);
+
+  if (!selectedOptions.length) {
     const fallbackObjects = stabilizeRandomLayout(
       roomData,
       sourceLayoutObjects,
@@ -1265,7 +2008,7 @@ const createRandomLayoutOptions = (
     });
 
     if (!fallbackWarnings.length) {
-      options.push({
+      selectedOptions.push({
         id: "random_1",
         label: "random_1",
         objects: fallbackObjects,
@@ -1274,13 +2017,15 @@ const createRandomLayoutOptions = (
     }
   }
 
-  return options
+  return selectedOptions
     .sort(
       (left, right) =>
-        getDesignPenalty(roomData, left.objects) - getDesignPenalty(roomData, right.objects),
+        getRandomLayoutQualityScore(roomData, left.objects, left.warnings) -
+        getRandomLayoutQualityScore(roomData, right.objects, right.warnings),
     )
     .map((option, index) => ({
       ...option,
+      id: `random_${index + 1}`,
       label: `random_${index + 1}`,
     }));
 };
@@ -1342,6 +2087,7 @@ interface RoomStore {
       to: [number, number];
     }>,
   ) => void;
+  addDividerWall: () => string | null;
   splitWall: (wallId: string) => void;
   updateObjectTransform: (
     objectId: string,
@@ -1636,6 +2382,34 @@ export const useRoomStore = create<RoomStore>((set) => ({
         ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
       };
     }),
+  addDividerWall: () => {
+    let addedWallId: string | null = null;
+
+    set((state) => {
+      const roomData = cloneRoomData(state.roomData);
+      const walls = roomData.room.walls.map((wall) => ({ ...wall }));
+      const dividerWall = createDividerWallSegment(roomData.room, walls);
+
+      addedWallId = dividerWall.id;
+      walls.push(dividerWall);
+      roomData.room = normalizeCustomRoom(roomData.room, walls);
+      roomData.objects = normalizeRoomObjects(roomData, roomData.objects);
+
+      return {
+        roomData,
+        validationWarnings: validateRoomLayout(roomData),
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
+        historyPast: limitHistory([
+          ...state.historyPast,
+          cloneRoomData(state.roomData),
+        ]),
+        historyFuture: [],
+        lastEditorStatus: { key: "wallUpdated" },
+      };
+    });
+
+    return addedWallId;
+  },
   updateWallSegment: (wallId, payload) =>
     set((state) => {
       const roomData = cloneRoomData(state.roomData);
@@ -1648,6 +2422,8 @@ export const useRoomStore = create<RoomStore>((set) => ({
       const walls = roomData.room.walls.map((wall) => ({ ...wall }));
       const previousIndex = wallIndex === 0 ? walls.length - 1 : wallIndex - 1;
       const nextIndex = wallIndex === walls.length - 1 ? 0 : wallIndex + 1;
+      const connectsPrevious = wallPointsEqual(walls[previousIndex].to, walls[wallIndex].from);
+      const connectsNext = wallPointsEqual(walls[nextIndex].from, walls[wallIndex].to);
       const sanitizePoint = ([x, z]: [number, number]) =>
         [
           Number(Math.max(0, Number.isFinite(x) ? x : 0).toFixed(2)),
@@ -1657,13 +2433,19 @@ export const useRoomStore = create<RoomStore>((set) => ({
       if (payload.from) {
         const nextFrom = sanitizePoint(payload.from);
         walls[wallIndex].from = nextFrom;
-        walls[previousIndex].to = nextFrom;
+
+        if (connectsPrevious) {
+          walls[previousIndex].to = nextFrom;
+        }
       }
 
       if (payload.to) {
         const nextTo = sanitizePoint(payload.to);
         walls[wallIndex].to = nextTo;
-        walls[nextIndex].from = nextTo;
+
+        if (connectsNext) {
+          walls[nextIndex].from = nextTo;
+        }
       }
 
       roomData.room = normalizeCustomRoom(roomData.room, walls);

@@ -310,7 +310,7 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
       </group>
 
       <CameraControls enabled={!isTransforming} mode={cameraMode} room={roomData.room} />
-      <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
+      <GizmoHelper alignment="bottom-left" margin={[72, 72]}>
         <GizmoViewport
           axisColors={["#ef4444", "#22c55e", "#3b82f6"]}
           labelColor="#f8fafc"

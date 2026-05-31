@@ -13,6 +13,7 @@ import {
   Move3d,
   Package2,
   PanelRight,
+  Plus,
   Ruler,
   Save,
   Scissors,
@@ -411,6 +412,7 @@ export function Sidebar() {
 function RoomSettingsEditor({ locale }: { locale: Locale }) {
   const roomData = useRoomStore((state) => state.roomData);
   const updateRoomProperties = useRoomStore((state) => state.updateRoomProperties);
+  const addDividerWall = useRoomStore((state) => state.addDividerWall);
   const selectedStructure = useUIStore((state) => state.selectedStructure);
   const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
   const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
@@ -576,6 +578,30 @@ function RoomSettingsEditor({ locale }: { locale: Locale }) {
             </label>
           </>
         ) : null}
+      </div>
+
+      <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-3">
+        <div className="text-xs leading-5 text-slate-400">
+          {t(locale, "dividerWallHint")}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            const wallId = addDividerWall();
+
+            if (!wallId) {
+              return;
+            }
+
+            setSelectedObjectId(null);
+            setSelectedStructure({ type: "wall", id: wallId });
+            setActiveSidebarTab("details");
+          }}
+          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#24405a] bg-[#102234] px-3 py-2.5 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white"
+        >
+          <Plus className="h-4 w-4" />
+          {t(locale, "addDividerWall")}
+        </button>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-3 text-sm text-slate-300">
@@ -1656,8 +1682,8 @@ function RandomLayoutsPanel({ locale }: { locale: Locale }) {
   const cleanCount = visibleOptions.filter((option) => option.warnings.length === 0).length;
   const helperText =
     locale === "en"
-      ? "Randomize calculates the option set once for the same items and room structure. Closing only hides the list; adding, deleting, resizing, locking, or changing the room recalculates it."
-      : "Rastgele Diz aynı eşyalar ve oda yapısı için seçenekleri bir kez hesaplar. Kapatmak listeyi sadece gizler; ekleme, silme, boyut, kilit veya oda değişirse yeniden hesaplanır.";
+      ? "Randomize now systematically sweeps wall anchors and floor zones, keeps the cached result stable, and filters slightly shifted copies."
+      : "Rastgele Diz artik duvar dayanaklarini ve zemin bolgelerini sistematik tarar, kayitli sonucu stabil tutar ve hafif kaydirilmis kopyalari eler.";
 
   return (
     <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">

@@ -97,9 +97,30 @@ export const getWallMetrics = (wall: WallSegment) => {
   };
 };
 
+const pointsEqual = (left: [number, number], right: [number, number]) =>
+  Math.abs(left[0] - right[0]) < 0.001 && Math.abs(left[1] - right[1]) < 0.001;
+
 export const getRoomOutlinePoints = (room: RoomDefinition): Array<[number, number]> => {
   const start = room.walls[0]?.from;
-  const points = room.walls.map((wall) => wall.from);
+  const outlineWalls: WallSegment[] = [];
+
+  for (const wall of room.walls) {
+    const previousWall = outlineWalls.at(-1);
+
+    if (previousWall && !pointsEqual(previousWall.to, wall.from)) {
+      break;
+    }
+
+    outlineWalls.push(wall);
+
+    if (start && outlineWalls.length > 1 && pointsEqual(wall.to, start)) {
+      break;
+    }
+  }
+
+  const points = (outlineWalls.length ? outlineWalls : room.walls).map(
+    (wall) => wall.from,
+  );
 
   if (start) {
     points.push(start);

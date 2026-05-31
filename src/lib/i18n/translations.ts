@@ -99,6 +99,8 @@ export type MessageKey =
   | "wallEndX"
   | "wallEndZ"
   | "splitWall"
+  | "addDividerWall"
+  | "dividerWallHint"
   | "linkedSetting"
   | "openingDetails"
   | "sceneMetrics"
@@ -225,6 +227,9 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     wallEndX: "End X",
     wallEndZ: "End Z",
     splitWall: "Split Wall",
+    addDividerWall: "Add Divider Wall",
+    dividerWallHint:
+      "Add an editable interior wall to divide the room, then move its start and end points from Wall Details.",
     linkedSetting: "Linked Setting",
     openingDetails: "Opening Details",
     sceneMetrics: "Scene Metrics",
@@ -352,6 +357,9 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     wallEndX: "Biti\u015f X",
     wallEndZ: "Biti\u015f Z",
     splitWall: "Duvar\u0131 B\u00f6l",
+    addDividerWall: "B\u00f6lme Duvar\u0131 Ekle",
+    dividerWallHint:
+      "Oday\u0131 b\u00f6lmek i\u00e7in d\u00fczenlenebilir bir i\u00e7 duvar ekle; sonra ba\u015flang\u0131\u00e7 ve biti\u015f noktalar\u0131n\u0131 Duvar Detaylar\u0131ndan ta\u015f\u0131.",
     linkedSetting: "Ba\u011fl\u0131 Ayar",
     openingDetails: "A\u00e7\u0131kl\u0131k Detaylar\u0131",
     sceneMetrics: "Sahne \u00d6l\u00e7\u00fcleri",
