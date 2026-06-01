@@ -1,11 +1,16 @@
-import { buildMockAnalysis, buildMockLayoutResponse } from "@/lib/ai/mockResponses";
+import {
+  buildLocalCommandModeLayoutResponse,
+  buildMockAnalysis,
+} from "@/lib/ai/mockResponses";
 import { sanitizeLayoutChatResult } from "@/lib/ai/layoutGuard";
 import {
   getAIChannelConfig,
   getGeminiFallbackConfig,
+  getGroqVisionFallbackConfig,
   assertProviderReady,
 } from "@/lib/ai/providerConfig";
 import { analyzeRoomWithGemini } from "@/lib/server/gemini";
+import { analyzeRoomWithGroq } from "@/lib/server/groq";
 import { planLayoutWithGemini } from "@/lib/server/geminiChat";
 import { planLayoutWithGroq } from "@/lib/server/groq";
 import type { LayoutChatResult } from "@/types/ai";
@@ -48,9 +53,21 @@ export async function analyzeRoomWithCurrentProvider(params: {
   }>;
 }) {
   const config = getAIChannelConfig("vision");
+  const locale = params.locale ?? "tr";
+  const groqVision = getGroqVisionFallbackConfig();
 
   if (config.provider === "mock") {
-    return buildMockAnalysis(params.locale ?? "tr");
+    if (groqVision) {
+      return await analyzeRoomWithGroq({
+        images: params.images,
+        inventory: params.inventory,
+        apiKey: groqVision.apiKey,
+        model: groqVision.model,
+        locale,
+      });
+    }
+
+    return buildMockAnalysis(locale);
   }
 
   assertProviderReady(config);
@@ -63,11 +80,38 @@ export async function analyzeRoomWithCurrentProvider(params: {
           inventory: params.inventory,
           apiKey: config.apiKey as string,
           model: config.model,
-          locale: params.locale ?? "tr",
+          locale,
         });
-      } catch {
-        return buildMockAnalysis(params.locale ?? "tr");
+      } catch (geminiError) {
+        if (groqVision) {
+          return await analyzeRoomWithGroq({
+            images: params.images,
+            inventory: params.inventory,
+            apiKey: groqVision.apiKey,
+            model: groqVision.model,
+            locale,
+          });
+        }
+
+        throw geminiError instanceof Error
+          ? geminiError
+          : new Error("Gemini vision analysis failed");
       }
+    case "groq": {
+      const apiKey = groqVision?.apiKey ?? config.apiKey;
+      const model = groqVision?.model ?? config.model;
+
+      if (!apiKey) {
+        throw new Error("Missing API key for vision provider groq");
+      }
+      return await analyzeRoomWithGroq({
+        images: params.images,
+        inventory: params.inventory,
+        apiKey,
+        model,
+        locale,
+      });
+    }
     default:
       throw new Error(`Unsupported vision provider: ${config.provider}`);
   }
@@ -94,7 +138,7 @@ export async function planLayoutWithCurrentProvider(params: {
   const locale = params.locale ?? "tr";
 
   if (config.provider === "mock") {
-    const result = buildMockLayoutResponse(params.message, params.roomData, locale);
+    const result = buildLocalCommandModeLayoutResponse(params.message, params.roomData, locale);
     return sanitizeLayoutChatResult({
       message: params.message,
       roomData: params.roomData,
@@ -126,7 +170,11 @@ export async function planLayoutWithCurrentProvider(params: {
           result,
         });
       } catch {
-        const fallback = buildMockLayoutResponse(params.message, params.roomData, locale);
+        const fallback = buildLocalCommandModeLayoutResponse(
+          params.message,
+          params.roomData,
+          locale,
+        );
         return sanitizeLayoutChatResult({
           message: params.message,
           roomData: params.roomData,
@@ -210,7 +258,11 @@ export async function planLayoutWithCurrentProvider(params: {
           }
         }
 
-        const fallback = buildMockLayoutResponse(params.message, params.roomData, locale);
+        const fallback = buildLocalCommandModeLayoutResponse(
+          params.message,
+          params.roomData,
+          locale,
+        );
         return sanitizeLayoutChatResult({
           message: params.message,
           roomData: params.roomData,

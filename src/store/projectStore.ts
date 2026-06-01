@@ -5,6 +5,7 @@ import type { ProjectMeta, ProjectState } from "@/types/project";
 import type { RoomData } from "@/types/room";
 
 const ACTIVE_PROJECT_KEY = "desain-active-project-id";
+let initPromise: Promise<void> | null = null;
 
 async function jsonFetch<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const res = await fetch(input, init);
@@ -71,44 +72,63 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
 
   init: async () => {
     if (get().initialized) return;
-
-    set({ loading: true, error: null });
-    try {
-      const data = await jsonFetch<{ projects: ProjectMeta[] }>("/api/projects");
-      let projects = data.projects;
-
-      if (projects.length === 0) {
-        const created = await jsonFetch<{ project: ProjectMeta }>("/api/projects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
-        projects = [created.project];
-      }
-
-      const stored = readStoredActiveProjectId();
-      const preferred =
-        (stored && projects.find((p) => p.id === stored)?.id) ?? projects[0]?.id ?? null;
-
-      set({ projects, activeProjectId: preferred });
-
-      if (preferred) {
-        const projectData = await jsonFetch<{ project: ProjectState }>(`/api/projects/${preferred}`);
-        set({ activeProject: projectData.project });
-      }
-
-      set({ initialized: true });
-    } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Failed to load projects" });
-    } finally {
-      set({ loading: false });
+    if (initPromise) {
+      await initPromise;
+      return;
     }
+
+    initPromise = (async () => {
+      set({ loading: true, error: null });
+      try {
+        const data = await jsonFetch<{ projects: ProjectMeta[] }>("/api/projects");
+        const projects = data.projects;
+        const stored = readStoredActiveProjectId();
+        const preferred =
+          (stored && projects.find((p) => p.id === stored)?.id) ?? projects[0]?.id ?? null;
+
+        set({
+          projects,
+          activeProjectId: preferred,
+          activeProject: null,
+        });
+
+        storeActiveProjectId(preferred);
+        if (preferred) {
+          const projectData = await jsonFetch<{ project: ProjectState }>(`/api/projects/${preferred}`);
+          set({ activeProject: projectData.project });
+        }
+
+        set({ initialized: true });
+      } catch (e) {
+        set({ error: e instanceof Error ? e.message : "Failed to load projects" });
+      } finally {
+        set({ loading: false });
+        initPromise = null;
+      }
+    })();
+
+    await initPromise;
   },
 
   refreshProjects: async () => {
     try {
       const data = await jsonFetch<{ projects: ProjectMeta[] }>("/api/projects");
-      set({ projects: data.projects });
+      const currentActiveId = get().activeProjectId;
+      const nextActiveId = data.projects.some((project) => project.id === currentActiveId)
+        ? currentActiveId
+        : data.projects[0]?.id ?? null;
+
+      if (!nextActiveId) {
+        storeActiveProjectId(null);
+        set({
+          projects: data.projects,
+          activeProjectId: null,
+          activeProject: null,
+        });
+        return;
+      }
+
+      set({ projects: data.projects, activeProjectId: nextActiveId });
     } catch {
       // ignore
     }
@@ -117,8 +137,8 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   loadProjectById: async (projectId) => {
     set({ busy: true, error: null });
     try {
-      storeActiveProjectId(projectId);
       const data = await jsonFetch<{ project: ProjectState }>(`/api/projects/${projectId}`);
+      storeActiveProjectId(projectId);
       set({ activeProjectId: projectId, activeProject: data.project });
       await get().refreshProjects();
     } catch (e) {
@@ -207,4 +227,3 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
     }
   },
 }));
-

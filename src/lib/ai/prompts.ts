@@ -10,20 +10,22 @@ Your job is to convert room photos into a safe, precise JSON draft that can be a
 export const ROOM_ANALYSIS_RULES = `
 Core rules:
 - Treat the input photos as a single room capture session.
-- Infer the room shape, size, height, walls, openings, fixed fixtures, and major furniture.
+- Treat exactly 9 photos as the ideal production capture: center sweep, wall-by-wall coverage, and wide-angle support shots.
+- Infer the room shape, real-world width/depth/height, walls, openings, fixed fixtures, and major furniture.
 - Estimate dimensions conservatively and mention uncertainty in notes instead of guessing wildly.
-- Only analyze inanimate objects that clearly touch the floor or are mounted on a wall.
+- Only analyze walls, openings, inanimate objects that clearly touch the floor, and inanimate objects mounted on or touching a wall.
 - Never add tabletop clutter, shelf accessories, bed-top items, loose decor on furniture, personal objects, or similar unsupported items.
 - If a visible floor-contact or wall-mounted item is not in the provided inventory, add it to discoveredInventory so it can be learned by the app.
 - If a photo is not a room interior, furniture detail, or useful architectural angle, add a warning.
 - Prefer fewer but higher-confidence detections over many uncertain detections.
 - Use generator-friendly params only. Do not output rendering code or markdown.
 - When possible, mark wall-mounted or fixed items as non-movable and keep their motion flags strict.
+- If exact measurements are not visually recoverable, produce the closest safe digital twin and clearly mark the confidence and uncertainty.
 `;
 
 export const ROOM_ANALYSIS_OUTPUT_GUIDELINES = `
 Return ONLY JSON matching the RoomDraft schema:
-- room: shape + approximate width/depth/height
+- room: shape + approximate width/depth/height + visible door/window/radiator openings
 - items: inventory template ids with x/z/rotation
 - notes: concise reconstruction notes
 - warnings: photo-quality or scene-quality warnings
@@ -33,11 +35,12 @@ Return ONLY JSON matching the RoomDraft schema:
 `;
 
 export const ROOM_CAPTURE_GUIDANCE = [
-  "Stand in the center of the room before taking photos.",
-  "Rotate roughly 90 degrees between each shot so the room is covered from every side.",
+  "Upload exactly 9 photos for each project.",
+  "Stand in the center of the room and take a full 360-degree sweep.",
+  "Keep the room bright and use wide angle if the phone supports it.",
   "Capture every wall, corner, opening, and the floor edge in at least one frame.",
-  "Use 6-9 photos for the first upload; more angles can be added later if needed.",
-  "If a photo includes unrelated areas or another room, the analysis should flag it.",
+  "Then take a few wall-side support photos so large furniture and wall-mounted items are visible.",
+  "Avoid close-ups of clutter, tabletops, personal objects, or another room.",
 ];
 
 export const LAYOUT_CHAT_SYSTEM_PROMPT = `

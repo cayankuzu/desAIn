@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import {
   AlertTriangle,
   BoxSelect,
@@ -54,13 +54,30 @@ export function Topbar({
   const historyFutureLength = useRoomStore((state) => state.historyFuture.length);
   const validationWarnings = useRoomStore((state) => state.validationWarnings);
   const [resetMenuOpen, setResetMenuOpen] = useState(false);
-  const [hasSavedLayout, setHasSavedLayout] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
+  const hasSavedLayout = useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof window === "undefined") {
+        return () => {};
+      }
 
-    return Boolean(window.localStorage.getItem("desain-saved-room-data"));
-  });
+      const handleStorage = (event: StorageEvent) => {
+        if (event.key === "desain-saved-room-data") {
+          onStoreChange();
+        }
+      };
+
+      window.addEventListener("storage", handleStorage);
+      return () => window.removeEventListener("storage", handleStorage);
+    },
+    () => {
+      if (typeof window === "undefined") {
+        return false;
+      }
+
+      return Boolean(window.localStorage.getItem("desain-saved-room-data"));
+    },
+    () => false,
+  );
 
   return (
     <header className="editor-panel relative z-50 overflow-visible px-3 py-2.5">
@@ -222,7 +239,6 @@ export function Topbar({
             type="button"
             onClick={() => {
               saveRoomSnapshot();
-              setHasSavedLayout(true);
             }}
             className={`${modeButtonBase} ${neutralButtonClass}`}
           >

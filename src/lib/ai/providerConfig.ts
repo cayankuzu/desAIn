@@ -28,11 +28,20 @@ const readProvider = (channel: AIChannelName, legacyProvider: AIProviderId): AIP
 
 export function getAIChannelConfig(channel: AIChannelName): AIChannelConfig {
   if (channel === "vision") {
-    const apiKey = readEnv("AI_VISION_API_KEY") ?? readEnv("GEMINI_API_KEY");
-    const model = readEnv("AI_VISION_MODEL") ?? readEnv("GEMINI_MODEL") ?? "gemini-2.5-flash";
+    const explicitProvider = readEnv("AI_VISION_PROVIDER");
+    const apiKey =
+      explicitProvider === "groq"
+        ? readEnv("GROQ_API_KEY") ?? readEnv("AI_VISION_API_KEY") ?? readEnv("AI_CHAT_API_KEY")
+        : readEnv("AI_VISION_API_KEY") ?? readEnv("GEMINI_API_KEY");
+    const model =
+      explicitProvider === "groq"
+        ? readEnv("GROQ_VISION_MODEL") ??
+          (readEnv("AI_VISION_MODEL")?.toLowerCase().includes("llama") ? readEnv("AI_VISION_MODEL") : null) ??
+          "meta-llama/llama-4-scout-17b-16e-instruct"
+        : readEnv("AI_VISION_MODEL") ?? readEnv("GEMINI_MODEL") ?? "gemini-2.5-flash";
     return {
       channel,
-      provider: readProvider(channel, apiKey ? "gemini" : "mock"),
+      provider: readProvider(channel, explicitProvider === "groq" ? "groq" : apiKey ? "gemini" : "mock"),
       apiKey,
       model,
     };
@@ -77,6 +86,23 @@ export function getAIChannelConfig(channel: AIChannelName): AIChannelConfig {
 export function getGeminiFallbackConfig() {
   const apiKey = readEnv("AI_VISION_API_KEY") ?? readEnv("GEMINI_API_KEY");
   const model = readEnv("AI_VISION_MODEL") ?? readEnv("GEMINI_MODEL") ?? "gemini-2.5-flash";
+
+  if (!apiKey) {
+    return null;
+  }
+
+  return {
+    apiKey,
+    model,
+  };
+}
+
+export function getGroqVisionFallbackConfig() {
+  const apiKey = readEnv("GROQ_API_KEY");
+  const model =
+    readEnv("GROQ_VISION_MODEL") ??
+    (readEnv("AI_VISION_MODEL")?.toLowerCase().includes("llama") ? readEnv("AI_VISION_MODEL") : null) ??
+    "meta-llama/llama-4-scout-17b-16e-instruct";
 
   if (!apiKey) {
     return null;

@@ -152,6 +152,85 @@ export const buildMockLayoutResponse = (
   };
 };
 
+export const buildLocalCommandModeLayoutResponse = (
+  message: string,
+  roomData: RoomData,
+  locale: "tr" | "en" = "tr",
+): LayoutChatResult => {
+  const normalized = message.toLocaleLowerCase(locale === "en" ? "en-US" : "tr-TR");
+  const isEnglish = locale === "en";
+  const normalizedAscii = normalized
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ı/g, "i")
+    .replace(/İ/g, "i")
+    .replace(/ğ/g, "g")
+    .replace(/Ğ/g, "g")
+    .replace(/ş/g, "s")
+    .replace(/Ş/g, "s")
+    .replace(/ç/g, "c")
+    .replace(/Ç/g, "c")
+    .replace(/ö/g, "o")
+    .replace(/Ö/g, "o")
+    .replace(/ü/g, "u")
+    .replace(/Ü/g, "u");
+  const wantsBroadPreset =
+    normalizedAscii.includes("ferah") ||
+    normalizedAscii.includes("minimal") ||
+    normalizedAscii.includes("spacious") ||
+    normalizedAscii.includes("tv-focused") ||
+    normalizedAscii.includes("tv focused") ||
+    normalizedAscii.includes("desk-focused") ||
+    normalizedAscii.includes("desk focused") ||
+    normalizedAscii.includes("window-side") ||
+    normalizedAscii.includes("window side");
+  const wantsDirectEdit =
+    /\b(move|shift|place|put|set|adjust|align|rotate|turn|resize|scale|x|y|z|width|depth|height|mount|taşı|tasi|yerleştir|yerlestir|koy|hizala|ortala|döndür|dondur|çevir|cevir|boyut|ölçü|olcu|genişlik|genislik|derinlik|yükseklik|yukseklik|duvar)\b/i.test(
+      normalized,
+    );
+
+  if (wantsBroadPreset && !wantsDirectEdit) {
+    const layout =
+      normalizedAscii.includes("tv")
+        ? buildTVLayout(roomData, locale)
+        : normalizedAscii.includes("masa") ||
+            normalizedAscii.includes("pencere") ||
+            normalizedAscii.includes("calisma") ||
+            normalizedAscii.includes("desk") ||
+            normalizedAscii.includes("window") ||
+            normalizedAscii.includes("work")
+          ? buildWindowDeskLayout(roomData, locale)
+          : buildSpaciousLayout(roomData, locale);
+
+    return {
+      reply: isEnglish
+        ? `${layout.summary} If you want another broad preset, ask for a more minimal, TV-focused, or desk-focused layout.`
+        : `${layout.summary} İstersen daha minimal, TV odaklı ya da çalışma odaklı başka bir geniş düzen alternatifi de hazırlayabilirim.`,
+      layout,
+    };
+  }
+
+  return {
+    reply: isEnglish
+      ? "I'm in local command mode right now. I can reliably move, align, rotate, resize, and describe existing items and room data. For broader design planning, configure a live chat model or give me an explicit item or room command."
+      : "Şu anda yerel komut modundayım. Mevcut öğeleri güvenilir şekilde taşıyabilir, hizalayabilir, döndürebilir, yeniden boyutlandırabilir ve oda bilgisini aktarabilirim. Daha geniş tasarım planları için canlı bir sohbet modeli yapılandır ya da bana açık bir öğe veya oda komutu ver.",
+    layout: {
+      layoutName: isEnglish ? "Local command mode" : "Yerel komut modu",
+      summary:
+        isEnglish
+          ? "No live chat model is configured, so deterministic local handling is active."
+          : "Canlı sohbet modeli yapılandırılmadığı için deterministik yerel işleme etkin.",
+      objects: [],
+      constraintsRespected: [],
+      warnings: [
+        isEnglish
+          ? "Using deterministic local planning because no live chat model is configured."
+          : "Canlı sohbet modeli yapılandırılmadığı için deterministik yerel planlama kullanılıyor.",
+      ],
+    },
+  };
+};
+
 export const buildMockAnalysis = (locale: "tr" | "en" = "tr") => {
   const isEnglish = locale === "en";
   return {
@@ -160,6 +239,7 @@ export const buildMockAnalysis = (locale: "tr" | "en" = "tr") => {
       width: 7.2,
       depth: 5.2,
       height: 2.8,
+      openings: [],
     },
     items: [
       { templateId: "template_media_console", x: 2.1, z: 0.42, rotation: 0 },
@@ -185,8 +265,8 @@ export const buildMockAnalysis = (locale: "tr" | "en" = "tr") => {
         ? "Stand near the center of the room."
         : "Odanın merkezine yakın dur.",
       isEnglish
-        ? "Take 6-9 photos with roughly 90 degrees between each shot."
-        : "Her kare arasında yaklaşık 90 derece olacak şekilde 6-9 fotoğraf çek.",
+        ? "Take exactly 9 photos with a full 360-degree room sweep."
+        : "Tam 9 fotoğrafla odayı 360 derece tarayacak şekilde çek.",
     ],
     confidence: "medium",
     discoveredInventory: [

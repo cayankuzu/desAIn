@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { layoutChatRequestSchema, layoutResponseSchema } from "@/lib/ai/schemas";
 import { planLayoutWithCurrentProvider } from "@/lib/ai/runtime";
+import { MAX_PROJECT_CHAT_TURNS } from "@/lib/project/workflowLimits";
 import { addProjectMessage, readProject } from "@/lib/server/projectsStore";
 import type { RoomData } from "@/types/room";
 
@@ -28,6 +29,21 @@ export async function POST(request: Request, ctx: RouteContext<"/api/projects/[p
   }
 
   const locale = parsed.data.locale;
+  const userTurnCount = project.messages.filter((message) => message.role === "user").length;
+
+  if (userTurnCount >= MAX_PROJECT_CHAT_TURNS) {
+    return NextResponse.json(
+      {
+        error:
+          locale === "en"
+            ? `This project reached the ${MAX_PROJECT_CHAT_TURNS} message limit. Create a new project for more chat.`
+            : `Bu proje ${MAX_PROJECT_CHAT_TURNS} sohbet hakkına ulaştı. Daha fazla sohbet için yeni proje oluştur.`,
+        max: MAX_PROJECT_CHAT_TURNS,
+        current: userTurnCount,
+      },
+      { status: 429 },
+    );
+  }
 
   await addProjectMessage(projectId, { role: "user", content: parsed.data.message });
 
@@ -42,7 +58,13 @@ export async function POST(request: Request, ctx: RouteContext<"/api/projects/[p
 
     const layoutValidation = layoutResponseSchema.safeParse(result.layout);
     if (!layoutValidation.success) {
-      return NextResponse.json({ error: "AI response invalid" }, { status: 500 });
+      const reply =
+        locale === "en"
+          ? "I could not safely apply that request because the AI response was incomplete. Please try again with a clearer object, wall, size, or rotation instruction."
+          : "Bu isteği güvenli şekilde uygulayamadım çünkü AI yanıtı eksik geldi. Lütfen öğe, duvar, boyut veya dönüş komutunu daha net yazarak tekrar dene.";
+
+      await addProjectMessage(projectId, { role: "assistant", content: reply });
+      return NextResponse.json({ error: reply }, { status: 500 });
     }
 
     await addProjectMessage(projectId, { role: "assistant", content: result.reply });
@@ -51,18 +73,13 @@ export async function POST(request: Request, ctx: RouteContext<"/api/projects/[p
       reply: result.reply,
       layout: layoutValidation.data,
     });
-  } catch (error) {
-    await addProjectMessage(projectId, {
-      role: "assistant",
-      content:
-        locale === "en"
-          ? "The AI could not generate a reply. Please try again. (If GROQ_API_KEY is missing, mock replies will be used.)"
-          : "AI yanıtı alınamadı. Lütfen tekrar dene. (GROQ_API_KEY yoksa mock yanıtlar çalışır.)",
-    });
+  } catch {
+    const reply =
+      locale === "en"
+        ? "I could not complete that request. Please try again with a more specific room or object instruction."
+        : "Bu isteği tamamlayamadım. Lütfen oda veya seçili öğe için daha net bir komutla tekrar dene.";
 
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 },
-    );
+    await addProjectMessage(projectId, { role: "assistant", content: reply });
+    return NextResponse.json({ error: reply }, { status: 500 });
   }
 }

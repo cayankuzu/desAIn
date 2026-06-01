@@ -16,6 +16,7 @@ export interface ProjectMeta {
   photoCount: number;
   lockReason?: string;
   lastError?: string;
+  analyzedAt?: string;
 }
 
 export interface ProjectUpload {

@@ -49,21 +49,11 @@ interface UIStore {
 }
 
 const getInitialLocale = (): Locale => {
-  if (typeof window === "undefined") {
-    return "tr";
-  }
-
-  const storedLocale = window.localStorage.getItem("desain-locale");
-  return storedLocale === "en" || storedLocale === "tr" ? storedLocale : "tr";
+  return "tr";
 };
 
 const getInitialWorkspaceMode = (): WorkspaceMode => {
-  if (typeof window === "undefined") {
-    return "kitchen";
-  }
-
-  const stored = window.localStorage.getItem("desain-workspace-mode");
-  return stored === "ai" || stored === "kitchen" ? stored : "kitchen";
+  return "kitchen";
 };
 
 export const useUIStore = create<UIStore>((set) => ({

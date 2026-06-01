@@ -144,6 +144,7 @@ export function AppShell() {
   const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
   const selectedObjectIds = useRoomStore((state) => state.selectedObjectIds);
   const selectedGroupId = useRoomStore((state) => state.selectedGroupId);
+  const setSelectedObjectId = useRoomStore((state) => state.setSelectedObjectId);
   const addObjectFromTemplate = useRoomStore((state) => state.addObjectFromTemplate);
   const lastEditorStatus = useRoomStore((state) => state.lastEditorStatus);
   const groupSelectedObjects = useRoomStore((state) => state.groupSelectedObjects);
@@ -230,13 +231,25 @@ export function AppShell() {
       return;
     }
 
-    if (lastLoadedProjectIdRef.current === activeProjectId) {
+    const loadKey = `${activeProjectId}:${activeProject.meta.analyzedAt ?? "initial"}`;
+    if (lastLoadedProjectIdRef.current === loadKey) {
       return;
     }
 
-    lastLoadedProjectIdRef.current = activeProjectId;
+    lastLoadedProjectIdRef.current = loadKey;
     loadRoomData(activeProject.roomData);
-  }, [activeProject?.roomData, activeProjectId, loadRoomData]);
+  }, [activeProject?.meta.analyzedAt, activeProject?.roomData, activeProjectId, loadRoomData]);
+
+  useEffect(() => {
+    if (activeProjectId) {
+      return;
+    }
+
+    lastLoadedProjectIdRef.current = null;
+    setSelectedObjectId(null);
+    setSelectedStructure(null);
+    setMultiSelectMenu(null);
+  }, [activeProjectId, setMultiSelectMenu, setSelectedObjectId, setSelectedStructure]);
 
   useEffect(() => {
     roomDataRef.current = roomData;

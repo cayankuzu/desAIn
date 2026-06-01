@@ -1,5 +1,17 @@
 import { z } from "zod";
 
+const openingSchema = z.object({
+  id: z.string().min(1).max(80).optional(),
+  type: z.enum(["door", "window", "balcony_door", "radiator"]),
+  wallId: z.string().min(1).max(80),
+  position: z.number().min(0),
+  width: z.number().min(0.2).max(8),
+  height: z.number().min(0.2).max(6).optional(),
+  sillHeight: z.number().min(0).max(4).optional(),
+  clearDepth: z.number().min(0).max(4).optional(),
+  locked: z.boolean().optional(),
+});
+
 const discoveredInventorySchema = z.object({
   id: z.string().min(1).max(80),
   label: z.string().min(1).max(80),
@@ -44,6 +56,7 @@ export const roomDraftSchema = z.object({
     width: z.number().min(0.5).max(50),
     depth: z.number().min(0.5).max(50),
     height: z.number().min(1.8).max(6).default(2.6),
+    openings: z.array(openingSchema).max(24).default([]),
   }),
   items: z
     .array(

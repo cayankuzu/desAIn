@@ -6,6 +6,7 @@ import {
   FolderPlus,
   ImagePlus,
   Loader2,
+  MessageSquare,
   MoreVertical,
   Pencil,
   Send,
@@ -25,6 +26,7 @@ import {
   getLocalizedOpeningType,
 } from "@/lib/i18n/translations";
 import { formatSemanticPosition, getSemanticObjectPosition } from "@/lib/scene/axes";
+import { MAX_PROJECT_CHAT_TURNS, PROJECT_PHOTO_COUNT } from "@/lib/project/workflowLimits";
 import { useRoomStore } from "@/store/roomStore";
 import { useProjectStore } from "@/store/projectStore";
 import { useUIStore } from "@/store/uiStore";
@@ -37,11 +39,16 @@ const panelClass =
 type ChatCopy = {
   loadingProject: string;
   noProject: string;
+  noProjectsYet: string;
   photo: string;
   analyze: string;
   projects: string;
   close: string;
   newProject: string;
+  createFirstProject: string;
+  projectRequiredTitle: string;
+  projectRequiredBody: string;
+  selectExistingProject: string;
   photoGuide: string;
   photoGuideIntro: string;
   selectionContext: string;
@@ -77,6 +84,10 @@ type ChatCopy = {
   uploadFailed: string;
   analyzeFailed: string;
   chatFailed: string;
+  uploadLocked: string;
+  exactBatchError: string;
+  chatLimitReached: string;
+  chatTurnStatus: string;
   statusAnalyzing: string;
   statusUploading: string;
   statusError: string;
@@ -94,17 +105,23 @@ function getChatCopy(locale: "tr" | "en"): ChatCopy {
     return {
       loadingProject: "Loading...",
       noProject: "No project",
+      noProjectsYet: "No projects yet.",
       photo: "Photo",
       analyze: "Analyze",
       projects: "Projects",
       close: "Close",
       newProject: "New project",
+      createFirstProject: "Create first project",
+      projectRequiredTitle: "Create or select a project first",
+      projectRequiredBody:
+        "The chat, analysis, and photo tools stay hidden until a project exists. Create a project to start the AI workflow.",
+      selectExistingProject: "Select an existing project from the menu if you already created one.",
       photoGuide: "Photo guide",
       photoGuideIntro:
         "Scan from the center of the room. Cover every wall, corner, opening, and floor edge in a single 360-degree pass.",
       selectionContext: "Selection context",
       projectEmpty:
-        "You can create a project and chat. Upload 6-9 photos to capture the room and analyze it.",
+        `Create a project, upload exactly ${PROJECT_PHOTO_COUNT} photos once, then the digital twin is generated automatically.`,
       statusLabel: "Status",
       lastError: "Last error",
       analysisSummary: "Analysis summary",
@@ -117,8 +134,8 @@ function getChatCopy(locale: "tr" | "en"): ChatCopy {
       captureAdvice: "Capture advice",
       inventoryAdded: "New inventory items added from analysis",
       applyToEditor: "Apply to editor",
-      mobileMode: "Mobile mode: create a project, upload 6-9 photos, and analyze. Continue editing on desktop.",
-      firstBatchHint: "6-9 photos are enough for the first pass; you can upload more angles later if some sides are missing.",
+      mobileMode: `Mobile mode: create a project, upload exactly ${PROJECT_PHOTO_COUNT} photos, and watch analysis status. Continue editing and chatting on desktop.`,
+      firstBatchHint: `Each project accepts one capture set: exactly ${PROJECT_PHOTO_COUNT} well-lit, wide-angle room photos.`,
       preUploadTitle: "Before upload",
       preUploadBody:
         "Analysis starts after the photos are uploaded, and this project will be locked until it finishes.",
@@ -138,13 +155,17 @@ function getChatCopy(locale: "tr" | "en"): ChatCopy {
       uploadFailed: "Upload/analyze failed",
       analyzeFailed: "Analyze failed",
       chatFailed: "Chat failed",
+      uploadLocked: `Photos are already uploaded. Each project accepts exactly ${PROJECT_PHOTO_COUNT} photos once.`,
+      exactBatchError: `Select exactly ${PROJECT_PHOTO_COUNT} photos for this project.`,
+      chatLimitReached: `This project reached the ${MAX_PROJECT_CHAT_TURNS} message limit. Create a new project for more chat.`,
+      chatTurnStatus: "Chat usage",
       statusAnalyzing: "Analyzing...",
       statusUploading: "Uploading...",
       statusError: "Error",
       statusAnalyzeReady: "Ready to analyze",
       statusDraft: "Draft",
-      fileLimitError: "You can select at most 9 photos at once.",
-      firstBatchError: "For the first upload, select 6-9 photos.",
+      fileLimitError: `Select exactly ${PROJECT_PHOTO_COUNT} photos.`,
+      firstBatchError: `For this project, select exactly ${PROJECT_PHOTO_COUNT} photos.`,
       emptyState: "Project not found",
       projectOptions: "Project options",
       sendAriaLabel: "Send",
@@ -154,16 +175,22 @@ function getChatCopy(locale: "tr" | "en"): ChatCopy {
   return {
     loadingProject: "Yükleniyor...",
     noProject: "Proje yok",
+    noProjectsYet: "Henüz proje yok.",
     photo: "Fotoğraf",
     analyze: "Analiz",
     projects: "Projeler",
     close: "Kapat",
     newProject: "Yeni proje",
+    createFirstProject: "İlk projeyi oluştur",
+    projectRequiredTitle: "Önce bir proje oluştur veya seç",
+    projectRequiredBody:
+      "Bir proje oluşmadan sohbet, analiz ve fotoğraf araçları görünmez. AI akışını başlatmak için önce proje oluştur.",
+    selectExistingProject: "Daha önce oluşturduğun bir proje varsa menüden seçebilirsin.",
     photoGuide: "Fotoğraf rehberi",
     photoGuideIntro:
       "Odanın merkezinden tara. Her kare arasında yaklaşık 90 derece dön ve duvarları, açıklıkları, zemin kenarını tek turda kapat.",
     selectionContext: "Seçim bağlamı",
-    projectEmpty: "Proje oluşturup sohbet edebilirsin. Odayı yakalamak için 6-9 fotoğraf yükle ve analiz et.",
+    projectEmpty: `Proje oluştur, tam ${PROJECT_PHOTO_COUNT} fotoğrafı bir kez yükle; dijital ikiz otomatik oluşturulsun.`,
     statusLabel: "Durum",
     lastError: "Son hata",
     analysisSummary: "Analiz özeti",
@@ -176,8 +203,8 @@ function getChatCopy(locale: "tr" | "en"): ChatCopy {
     captureAdvice: "Çekim önerileri",
     inventoryAdded: "Envantere eklenen yeni öğeler",
     applyToEditor: "Editöre uygula",
-    mobileMode: "Mobil mod: proje oluştur, 6-9 fotoğraf yükle ve analiz et. Düzenlemeye masaüstünden devam et.",
-    firstBatchHint: "İlk turda 6-9 fotoğraf yeterli; sonradan eksik cepheler için ek açılar yükleyebilirsin.",
+    mobileMode: `Mobil mod: proje oluştur, tam ${PROJECT_PHOTO_COUNT} fotoğraf yükle ve analiz durumunu takip et. Düzenleme ve sohbet için masaüstünden devam et.`,
+    firstBatchHint: `Her proje tek çekim seti kabul eder: tam ${PROJECT_PHOTO_COUNT} aydınlık, geniş açılı oda fotoğrafı.`,
     preUploadTitle: "Yükleme öncesi",
     preUploadBody:
       "Fotoğraf yüklendikten sonra analiz başlar ve analiz bitene kadar bu projede işlem yapılamaz.",
@@ -197,13 +224,17 @@ function getChatCopy(locale: "tr" | "en"): ChatCopy {
     uploadFailed: "Yükleme/analiz başarısız",
     analyzeFailed: "Analiz başarısız",
     chatFailed: "Sohbet başarısız",
+    uploadLocked: `Fotoğraflar zaten yüklendi. Her proje yalnızca bir kez, tam ${PROJECT_PHOTO_COUNT} fotoğraf kabul eder.`,
+    exactBatchError: `Bu proje için tam ${PROJECT_PHOTO_COUNT} fotoğraf seçmelisin.`,
+    chatLimitReached: `Bu proje ${MAX_PROJECT_CHAT_TURNS} sohbet hakkına ulaştı. Daha fazla sohbet için yeni proje oluştur.`,
+    chatTurnStatus: "Sohbet kullanımı",
     statusAnalyzing: "Analiz...",
     statusUploading: "Yükleniyor...",
     statusError: "Hata",
     statusAnalyzeReady: "Analize hazır",
     statusDraft: "Taslak",
-    fileLimitError: "Bir seferde en fazla 9 fotoğraf seçebilirsin.",
-    firstBatchError: "İlk yüklemede 6-9 fotoğraf seçmelisin.",
+    fileLimitError: `Tam ${PROJECT_PHOTO_COUNT} fotoğraf seçmelisin.`,
+    firstBatchError: `Bu proje için tam ${PROJECT_PHOTO_COUNT} fotoğraf seçmelisin.`,
     emptyState: "Proje bulunamadı",
     projectOptions: "Proje seçenekleri",
     sendAriaLabel: "Gönder",
@@ -238,7 +269,7 @@ function formatStatus(meta: ProjectMeta, locale: "tr" | "en") {
   if (meta.status === "analyzing") return copy.statusAnalyzing;
   if (meta.status === "uploading") return copy.statusUploading;
   if (meta.status === "error") return copy.statusError;
-  if (meta.photoCount >= 6 && meta.status === "draft") return copy.statusAnalyzeReady;
+  if (meta.photoCount === PROJECT_PHOTO_COUNT && meta.status === "draft") return copy.statusAnalyzeReady;
   return copy.statusDraft;
 }
 
@@ -285,18 +316,18 @@ function Bubble({
 function getPhotoCaptureTips(locale: "tr" | "en") {
   return locale === "en"
     ? [
-        "Stand in the center of the room before taking photos.",
-        "Rotate roughly 90 degrees between each shot.",
-        "Capture every wall, corner, opening, and the floor edge.",
-        "Use 6-9 photos for the first upload; you can add more later.",
-        "Irrelevant or non-room frames will be flagged by the analysis.",
+        `Upload exactly ${PROJECT_PHOTO_COUNT} photos for this project.`,
+        "Start in the center and capture a full 360-degree sweep.",
+        "Use bright, even lighting and wide angle if available.",
+        "Capture every wall, corner, opening, and floor edge.",
+        "Add wall-side support shots for large furniture and wall-mounted items.",
       ]
     : [
-        "Fotoğrafları çekmeden önce odanın merkezinde dur.",
-        "Her çekim arasında yaklaşık 90 derece dön.",
-        "Tüm duvarları, köşe noktalarını, açıklıkları ve zemin kenarlarını görünür şekilde çek.",
-        "İlk yüklemede 6-9 fotoğraf kullan; sonra istersen yeni açılar ekleyebilirsin.",
-        "Odayla alakasız kareler analiz tarafında işaretlenecek.",
+        `Bu proje için tam ${PROJECT_PHOTO_COUNT} fotoğraf yükle.`,
+        "Odanın merkezinden başla ve 360 derece tam tur çek.",
+        "Ortamı iyi aydınlat; varsa geniş açı kullan.",
+        "Tüm duvarları, köşeleri, açıklıkları ve zemin kenarını görünür çek.",
+        "Büyük mobilyalar ve duvar öğeleri için duvar tarafından destek kareleri ekle.",
       ];
 }
 
@@ -373,6 +404,7 @@ export function AiChatPanel() {
   const addObjectFromTemplate = useRoomStore((s) => s.addObjectFromTemplate);
   const updateObjectProperties = useRoomStore((s) => s.updateObjectProperties);
   const applyLayoutResponse = useRoomStore((s) => s.applyLayoutResponse);
+  const loadRoomData = useRoomStore((s) => s.loadRoomData);
 
   const initProjects = useProjectStore((s) => s.init);
   const projects = useProjectStore((s) => s.projects);
@@ -402,11 +434,21 @@ export function AiChatPanel() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const meta = activeProject?.meta ?? null;
+  const hasActiveProject = Boolean(activeProjectId && meta);
   const locked = meta?.status === "uploading" || meta?.status === "analyzing";
-  const canAnalyze = Boolean(meta && meta.photoCount >= 6 && meta.status !== "analyzing");
+  const photosAlreadyUploaded = (meta?.photoCount ?? 0) > 0;
+  const canAnalyze = Boolean(
+    meta &&
+      meta.photoCount === PROJECT_PHOTO_COUNT &&
+      meta.status !== "uploading" &&
+      meta.status !== "analyzing",
+  );
+  const chatTurnCount = activeProject?.messages.filter((message) => message.role === "user").length ?? 0;
+  const chatLimitReached = chatTurnCount >= MAX_PROJECT_CHAT_TURNS;
   const loading = projectsLoading;
   const error = localError ?? storeError;
   const anyBusy = busy || projectsBusy;
+  const uploadDisabled = photosAlreadyUploaded || anyBusy || locked;
   const copy = useMemo(() => getChatCopy(locale), [locale]);
 
   const analysis = activeProject?.analysis;
@@ -476,6 +518,15 @@ export function AiChatPanel() {
   const uploadAndAnalyze = async () => {
     if (!activeProjectId) return;
     if (!pendingFiles.length) return;
+    if (photosAlreadyUploaded) {
+      setLocalError(copy.uploadLocked);
+      return;
+    }
+
+    if (pendingFiles.length !== PROJECT_PHOTO_COUNT) {
+      setLocalError(copy.exactBatchError);
+      return;
+    }
 
     setWarningOpen(false);
     setSystemNotice(null);
@@ -485,6 +536,7 @@ export function AiChatPanel() {
     try {
       const form = new FormData();
       for (const file of pendingFiles) form.append("files", file);
+      form.append("locale", locale);
 
       await jsonFetch(`/api/projects/${activeProjectId}/uploads`, {
         method: "POST",
@@ -528,6 +580,11 @@ export function AiChatPanel() {
   };
 
   const applyDraftToEditor = (draft: RoomDraft) => {
+    if (activeProject?.roomData) {
+      loadRoomData(activeProject.roomData);
+      return;
+    }
+
     updateRoomProperties({ shape: draft.room.shape, purpose: "empty" });
     updateRoomProperties({
       width: draft.room.width,
@@ -550,6 +607,10 @@ export function AiChatPanel() {
     const message = composerText.trim();
     if (!message) return;
     if (locked || anyBusy) return;
+    if (chatLimitReached) {
+      setLocalError(copy.chatLimitReached);
+      return;
+    }
 
     setComposerText("");
     setLocalError(null);
@@ -610,48 +671,67 @@ export function AiChatPanel() {
         <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
       </button>
 
-      <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-[#0d141d] px-3 text-sm font-semibold text-slate-200 transition hover:border-[#32516c] hover:text-white">
-        <ImagePlus className="h-4 w-4 text-[#8cb9ff]" />
-        <span className="hidden sm:inline">{copy.photo}</span>
-        <input
-          type="file"
-          multiple
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const list = Array.from(e.target.files ?? []);
-            if (!list.length) return;
+      {hasActiveProject ? (
+        <>
+          <label
+            className={`inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-[#0d141d] px-3 text-sm font-semibold text-slate-200 transition ${
+              uploadDisabled
+                ? "cursor-not-allowed opacity-55"
+                : "cursor-pointer hover:border-[#32516c] hover:text-white"
+            }`}
+          >
+            <ImagePlus className="h-4 w-4 text-[#8cb9ff]" />
+            <span className="hidden sm:inline">{copy.photo}</span>
+            <input
+              type="file"
+              multiple
+              accept="image/*"
+              disabled={uploadDisabled}
+              className="hidden"
+              onChange={(e) => {
+                const list = Array.from(e.target.files ?? []);
+                if (!list.length) return;
 
-            // First capture: require 6-9 photos. Later: allow adding more photos,
-            // but still keep the single-batch selection capped for performance.
-            if (list.length > 9) {
-              setLocalError(copy.fileLimitError);
-              e.currentTarget.value = "";
-              return;
-            }
+                if (uploadDisabled) {
+                  setLocalError(photosAlreadyUploaded ? copy.uploadLocked : copy.uploadFailed);
+                  e.currentTarget.value = "";
+                  return;
+                }
 
-            if ((meta?.photoCount ?? 0) === 0 && list.length < 6) {
-              setLocalError(copy.firstBatchError);
-              e.currentTarget.value = "";
-              return;
-            }
+                if (list.length !== PROJECT_PHOTO_COUNT) {
+                  setLocalError(copy.exactBatchError);
+                  e.currentTarget.value = "";
+                  return;
+                }
 
-            setPendingFiles(list);
-            setWarningOpen(true);
-            e.currentTarget.value = "";
-          }}
-        />
-      </label>
+                setPendingFiles(list);
+                setWarningOpen(true);
+                e.currentTarget.value = "";
+              }}
+            />
+          </label>
 
-      <button
-        type="button"
-        onClick={() => void analyzeOnly()}
-        disabled={!canAnalyze || anyBusy || locked}
-        className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#24405a] bg-[#102234] px-3 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
-      >
-        {anyBusy && locked ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-        {copy.analyze}
-      </button>
+          <button
+            type="button"
+            onClick={() => void analyzeOnly()}
+            disabled={!canAnalyze || anyBusy || locked}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#24405a] bg-[#102234] px-3 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            {anyBusy && locked ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {copy.analyze}
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => void createProject()}
+          disabled={anyBusy}
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#24405a] bg-[#102234] px-3 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
+        >
+          <FolderPlus className="h-4 w-4" />
+          <span className="hidden sm:inline">{copy.newProject}</span>
+        </button>
+      )}
 
       {menuOpen ? (
         <div className="absolute left-3 top-[calc(100%+0.5rem)] z-[80] w-[min(520px,calc(100vw-2rem))] rounded-2xl border border-white/10 bg-[#0d141d]/98 p-2 shadow-[0_20px_50px_rgba(0,0,0,0.42)] backdrop-blur">
@@ -670,56 +750,64 @@ export function AiChatPanel() {
           </div>
 
           <div className="scroll-area max-h-[45vh] overflow-y-auto p-1">
-            <div className="grid gap-2">
-              {projects.map((p) => {
-                const active = p.id === activeProjectId;
-                return (
-                  <div
-                    key={p.id}
-                    className={`relative w-full rounded-xl border transition ${
-                      active
-                        ? "border-[#4ea8ff] bg-[#102234] text-white"
-                        : "border-white/10 bg-[#111924] text-slate-200 hover:border-[#32516c] hover:text-white"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        void loadProjectById(p.id);
-                      }}
-                      className="w-full rounded-xl px-3 py-2 text-left"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="truncate pr-10 text-sm font-semibold">{p.title}</div>
-                        <div className="shrink-0 rounded-md border border-white/10 bg-[#0b1016] px-2 py-1 text-[10px] font-semibold text-slate-400">
-                          {p.photoCount}
-                        </div>
-                      </div>
-                      <div className="mt-1 text-xs text-slate-400">{formatStatus(p, locale)}</div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        setActionProjectId(p.id);
-                      }}
-                      title={copy.projectOptions}
-                      className={`absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-lg border transition ${
+            {projects.length ? (
+              <div className="grid gap-2">
+                {projects.map((p) => {
+                  const active = p.id === activeProjectId;
+                  return (
+                    <div
+                      key={p.id}
+                      className={`relative w-full rounded-xl border transition ${
                         active
-                          ? "border-white/15 bg-[#0b1016]/30 text-white hover:border-white/30"
-                          : "border-white/10 bg-[#0b1016] text-slate-200 hover:border-[#32516c] hover:text-white"
+                          ? "border-[#4ea8ff] bg-[#102234] text-white"
+                          : "border-white/10 bg-[#111924] text-slate-200 hover:border-[#32516c] hover:text-white"
                       }`}
-                      aria-label={copy.projectOptions}
                     >
-                      <MoreVertical className="h-4 w-4" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          void loadProjectById(p.id);
+                        }}
+                        className="w-full rounded-xl px-3 py-2 text-left"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="truncate pr-10 text-sm font-semibold">{p.title}</div>
+                          <div className="shrink-0 rounded-md border border-white/10 bg-[#0b1016] px-2 py-1 text-[10px] font-semibold text-slate-400">
+                            {p.photoCount}
+                          </div>
+                        </div>
+                        <div className="mt-1 text-xs text-slate-400">{formatStatus(p, locale)}</div>
+                      </button>
+
+                      {!isMobile ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setActionProjectId(p.id);
+                          }}
+                          title={copy.projectOptions}
+                          className={`absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-lg border transition ${
+                            active
+                              ? "border-white/15 bg-[#0b1016]/30 text-white hover:border-white/30"
+                              : "border-white/10 bg-[#0b1016] text-slate-200 hover:border-[#32516c] hover:text-white"
+                          }`}
+                          aria-label={copy.projectOptions}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-4 text-sm text-slate-300">
+                {copy.noProjectsYet}
+              </div>
+            )}
           </div>
 
           <div className="mt-2 flex items-center justify-between gap-2 border-t border-white/10 px-2 pt-2">
@@ -739,8 +827,8 @@ export function AiChatPanel() {
     </div>
   );
 
-  const selectionBanner = selectionSummary ? (
-    <section className="sticky top-0 z-30 shrink-0 border-b border-white/10 bg-[#25180f]/96 p-3 backdrop-blur">
+  const selectionBanner = hasActiveProject && selectionSummary ? (
+    <section className="rounded-xl border border-[#6d4a29] bg-[#25180f] p-3">
       <div className="flex items-center justify-between gap-3">
         <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#f5c28b]">
           {copy.selectionContext}
@@ -761,30 +849,75 @@ export function AiChatPanel() {
     <aside className={panelClass}>
       {header}
 
-      <div ref={scrollRef} className="scroll-area flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 pb-6">
-        {selectionBanner}
-        {loading ? (
-          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-[#111924] p-3 text-sm text-slate-300">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            {copy.loadingProject}
+      {!hasActiveProject ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+          <div className="flex w-full max-w-md flex-col gap-4 rounded-2xl border border-white/10 bg-[#111924] p-6 text-center">
+            {loading ? (
+              <div className="flex items-center justify-center gap-2 text-sm text-slate-300">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {copy.loadingProject}
+              </div>
+            ) : (
+              <>
+                {error ? (
+                  <div className="flex items-start gap-2 rounded-xl border border-[#6e2a2a] bg-[#2a1313] p-3 text-left text-sm text-[#ffb1b1]">
+                    <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>{error}</div>
+                  </div>
+                ) : null}
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-[#24405a] bg-[#102234] text-[#8cb9ff]">
+                  <MessageSquare className="h-6 w-6" />
+                </div>
+                <div className="space-y-2">
+                  <div className="text-base font-semibold text-white">{copy.projectRequiredTitle}</div>
+                  <div className="text-sm leading-6 text-slate-300">{copy.projectRequiredBody}</div>
+                  <div className="text-xs leading-5 text-slate-500">
+                    {projects.length ? copy.selectExistingProject : copy.noProjectsYet}
+                  </div>
+                </div>
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => void createProject()}
+                    disabled={anyBusy}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#24405a] bg-[#102234] px-4 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
+                  >
+                    <FolderPlus className="h-4 w-4" />
+                    {copy.createFirstProject}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-        ) : error ? (
-          <div className="flex items-start gap-2 rounded-xl border border-[#6e2a2a] bg-[#2a1313] p-3 text-sm text-[#ffb1b1]">
-            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-            <div>{error}</div>
+        </div>
+      ) : (
+        <>
+          <div className="shrink-0 border-b border-white/10 bg-[#0d141d]/96 p-3 backdrop-blur">
+            <div className="flex flex-col gap-3">
+              {selectionBanner}
+              {loading ? (
+                <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-[#111924] p-3 text-sm text-slate-300">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {copy.loadingProject}
+                </div>
+              ) : error ? (
+                <div className="flex items-start gap-2 rounded-xl border border-[#6e2a2a] bg-[#2a1313] p-3 text-sm text-[#ffb1b1]">
+                  <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>{error}</div>
+                </div>
+              ) : null}
+              {meta ? (
+                <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-xs text-slate-400">
+                  {copy.statusLabel}: <span className="font-semibold text-slate-200">{formatStatus(meta, locale)}</span>
+                  {meta.lockReason ? <span className="text-slate-500">{` - ${meta.lockReason}`}</span> : null}
+                </div>
+              ) : null}
+              {systemNotice ? <Bubble role="system">{systemNotice}</Bubble> : null}
+            </div>
           </div>
-        ) : null}
 
-        {meta ? (
-          <div className="rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-xs text-slate-400">
-            {copy.statusLabel}: <span className="font-semibold text-slate-200">{formatStatus(meta, locale)}</span>
-            {meta.lockReason ? <span className="text-slate-500">{` - ${meta.lockReason}`}</span> : null}
-          </div>
-        ) : null}
-
-        {systemNotice ? <Bubble role="system">{systemNotice}</Bubble> : null}
-
-        {meta ? (
+          <div ref={scrollRef} className="scroll-area flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 pb-6">
+            {meta ? (
           <section className="rounded-xl border border-[#24405a] bg-[#102234] p-4">
             <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8cb9ff]">
               {copy.photoGuide}
@@ -963,8 +1096,22 @@ export function AiChatPanel() {
 
       <div className="shrink-0 border-t border-white/10 bg-[#0d141d]/96 p-3 backdrop-blur">
         {!isMobile ? (
-          <div className="mb-3 rounded-xl border border-[#24405a] bg-[#102234] px-3 py-2 text-[11px] leading-5 text-[#8cb9ff]">
-            {copy.firstBatchHint}
+          <div className="mb-3 grid gap-2">
+            <div className="rounded-xl border border-[#24405a] bg-[#102234] px-3 py-2 text-[11px] leading-5 text-[#8cb9ff]">
+              {copy.firstBatchHint}
+            </div>
+            <div
+              className={`rounded-xl border px-3 py-2 text-[11px] leading-5 ${
+                chatLimitReached
+                  ? "border-[#6e2a2a] bg-[#2a1313] text-[#ffb1b1]"
+                  : "border-white/10 bg-[#111924] text-slate-400"
+              }`}
+            >
+              {copy.chatTurnStatus}:{" "}
+              <span className="font-semibold text-slate-200">
+                {chatTurnCount}/{MAX_PROJECT_CHAT_TURNS}
+              </span>
+            </div>
           </div>
         ) : null}
         {!isMobile ? (
@@ -973,7 +1120,9 @@ export function AiChatPanel() {
               value={composerText}
               onChange={(e) => setComposerText(e.target.value)}
               placeholder={
-                locked
+                chatLimitReached
+                  ? copy.chatLimitReached
+                  : locked
                   ? locale === "en"
                     ? "Project is analyzing, chat is locked..."
                     : "Proje analizde, sohbet kilitli..."
@@ -981,7 +1130,7 @@ export function AiChatPanel() {
                     ? "Message..."
                     : "Mesaj..."
               }
-              disabled={anyBusy || locked}
+              disabled={anyBusy || locked || chatLimitReached}
               rows={2}
               className="min-h-[44px] w-full resize-none rounded-2xl border border-white/10 bg-[#0b1016] px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-[#32516c] disabled:cursor-not-allowed disabled:opacity-55"
               onKeyDown={(e) => {
@@ -994,7 +1143,7 @@ export function AiChatPanel() {
             <button
               type="button"
               onClick={() => void sendChat()}
-              disabled={!composerText.trim() || anyBusy || locked}
+              disabled={!composerText.trim() || anyBusy || locked || chatLimitReached}
               className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-[#24405a] bg-[#102234] text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
               aria-label={copy.sendAriaLabel}
             >
@@ -1007,6 +1156,8 @@ export function AiChatPanel() {
           </div>
         )}
       </div>
+        </>
+      )}
 
       {warningOpen ? (
         <div className="fixed inset-0 z-[99] flex items-center justify-center bg-black/65 p-4">
@@ -1044,7 +1195,8 @@ export function AiChatPanel() {
               <button
                 type="button"
                 onClick={() => void uploadAndAnalyze()}
-                className="inline-flex h-9 items-center justify-center rounded-xl border border-[#24405a] bg-[#102234] px-3 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white"
+                disabled={pendingFiles.length !== PROJECT_PHOTO_COUNT || uploadDisabled}
+                className="inline-flex h-9 items-center justify-center rounded-xl border border-[#24405a] bg-[#102234] px-3 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
               >
                 {copy.uploadAndAnalyze}
               </button>
@@ -1053,7 +1205,7 @@ export function AiChatPanel() {
         </div>
       ) : null}
 
-      {actionProjectId && actionProject && !renameOpen && !deleteOpen ? (
+      {!isMobile && actionProjectId && actionProject && !renameOpen && !deleteOpen ? (
         <div
           className="fixed inset-0 z-[99] flex items-center justify-center bg-black/65 p-4"
           onMouseDown={(e) => {
@@ -1101,7 +1253,7 @@ export function AiChatPanel() {
         </div>
       ) : null}
 
-      {renameOpen && actionProjectId && actionProject ? (
+      {!isMobile && renameOpen && actionProjectId && actionProject ? (
         <div
           className="fixed inset-0 z-[99] flex items-center justify-center bg-black/65 p-4"
           onMouseDown={(e) => {
@@ -1145,7 +1297,7 @@ export function AiChatPanel() {
         </div>
       ) : null}
 
-      {deleteOpen && actionProjectId && actionProject ? (
+      {!isMobile && deleteOpen && actionProjectId && actionProject ? (
         <div
           className="fixed inset-0 z-[99] flex items-center justify-center bg-black/65 p-4"
           onMouseDown={(e) => {

@@ -44,12 +44,13 @@ export const isWallAttachedObject = (object: Pick<RoomObject, "params">) => {
 export const getObjectMotionRules = (
   object: Pick<RoomObject, "movable" | "locked" | "params">,
 ) => {
-  const fixed = object.locked || !object.movable || isWallAttachedObject(object);
+  const fixed = object.locked || !object.movable;
+  const wallAttached = isWallAttachedObject(object);
 
   return {
-    translateX: !fixed && object.params.motionX !== false,
-    translateZ: !fixed && object.params.motionZ !== false,
-    rotate: !fixed && object.params.motionRotation !== false,
+    translateX: !fixed && (wallAttached || object.params.motionX !== false),
+    translateZ: !fixed && (wallAttached || object.params.motionZ !== false),
+    rotate: !fixed && !wallAttached && object.params.motionRotation !== false,
   };
 };
 
