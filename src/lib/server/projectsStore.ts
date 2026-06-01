@@ -1,11 +1,16 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import os from "node:os";
 import type { ProjectMessage, ProjectMeta, ProjectState, ProjectUpload } from "@/types/project";
 import type { RoomData } from "@/types/room";
 import { createRoomPreset } from "@/lib/room/roomPresets";
 
-const PROJECTS_ROOT = path.join(process.cwd(), "data", "projects");
+const PROJECTS_ROOT =
+  process.env.DESAIN_PROJECTS_ROOT?.trim() ||
+  (process.env.VERCEL
+    ? path.join(os.tmpdir(), "desain", "projects")
+    : path.join(process.cwd(), "data", "projects"));
 
 const projectDir = (projectId: string) => path.join(PROJECTS_ROOT, projectId);
 const metaPath = (projectId: string) => path.join(projectDir(projectId), "meta.json");
