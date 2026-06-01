@@ -30,6 +30,11 @@ import {
   INVENTORY_DRAG_MIME,
   type InventoryTemplate,
 } from "@/lib/room/inventoryCatalog";
+import { roomDraftSchema } from "@/lib/ai/roomDraft";
+import {
+  normalizeRuntimeInventoryTemplate,
+  type DiscoveredInventoryInput,
+} from "@/lib/room/runtimeInventoryCatalog";
 import { isOpeningLocked, isWallLocked } from "@/lib/room/roomGeometry";
 import { roomPurposeOptions } from "@/lib/room/roomPresets";
 import {
@@ -42,6 +47,7 @@ import {
   type MessageKey,
 } from "@/lib/i18n/translations";
 import { useRoomStore } from "@/store/roomStore";
+import { useProjectStore } from "@/store/projectStore";
 import { useUIStore } from "@/store/uiStore";
 import type { SidebarTab } from "@/store/uiStore";
 import type {
@@ -1626,6 +1632,22 @@ function InventoryPanel({ locale }: { locale: Locale }) {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] =
     useState<InventoryCategoryId>("all");
+  const activeProject = useProjectStore((state) => state.activeProject);
+  const runtimeInventory = useMemo(() => {
+    const parsed = roomDraftSchema.safeParse(activeProject?.analysis);
+
+    if (!parsed.success) {
+      return [];
+    }
+
+    return parsed.data.discoveredInventory.map((item) =>
+      normalizeRuntimeInventoryTemplate(item as DiscoveredInventoryInput),
+    );
+  }, [activeProject?.analysis]);
+  const inventoryCatalog = useMemo(
+    () => dedupeInventoryTemplates([...curatedInventoryCatalog, ...runtimeInventory]),
+    [runtimeInventory],
+  );
   const hasQuery = query.trim().length > 0;
   const categoryCounts = useMemo(
     () =>
@@ -1633,20 +1655,20 @@ function InventoryPanel({ locale }: { locale: Locale }) {
         ...category,
         count:
           category.id === "all"
-            ? uniqueInventoryCatalog.length
-            : uniqueInventoryCatalog.filter((item) =>
+            ? inventoryCatalog.length
+            : inventoryCatalog.filter((item) =>
                 getInventoryCategoryIds(item).includes(category.id),
               ).length,
       })),
-    [],
+    [inventoryCatalog],
   );
 
   const filteredInventory = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     const categoryFiltered =
       activeCategory === "all"
-        ? uniqueInventoryCatalog
-        : uniqueInventoryCatalog.filter((item) =>
+        ? inventoryCatalog
+        : inventoryCatalog.filter((item) =>
             getInventoryCategoryIds(item).includes(activeCategory),
           );
 
@@ -1671,7 +1693,7 @@ function InventoryPanel({ locale }: { locale: Locale }) {
         tagMatch
       );
     });
-  }, [activeCategory, locale, query]);
+  }, [activeCategory, inventoryCatalog, locale, query]);
   const visibleInventory = useMemo(
     () =>
       hasQuery || activeCategory !== "all"
@@ -1698,7 +1720,15 @@ function InventoryPanel({ locale }: { locale: Locale }) {
           placeholder={t(locale, "searchInventory")}
           className="w-full bg-transparent text-white outline-none placeholder:text-slate-500"
         />
-      </label>
+        </label>
+
+      {runtimeInventory.length ? (
+        <div className="mt-3 rounded-xl border border-[#24405a] bg-[#102234] px-3 py-2 text-xs leading-5 text-[#8cb9ff]">
+          {locale === "en"
+            ? `${runtimeInventory.length} new items were added to the inventory from analysis.`
+            : `${runtimeInventory.length} yeni öğe analizden envantere eklendi.`}
+        </div>
+      ) : null}
 
       <div className="-mx-1 mt-4 overflow-x-auto pb-2">
         <div className="flex min-w-max gap-2 px-1">

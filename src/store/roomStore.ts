@@ -10,6 +10,7 @@ import {
 import {
   clampObjectPositionToRoom,
   getActiveClearanceZones,
+  getObjectMotionRules,
   getWallAttachedObjectTransform,
   isWallAttachedObject,
   normalizeRotation,
@@ -32,6 +33,7 @@ import {
 } from "@/lib/room/roomGeometry";
 import type {
   CameraMode,
+  LayoutResponse,
   LayoutWarning,
   Opening,
   RoomData,
@@ -2178,6 +2180,8 @@ interface RoomStore {
   beginTransform: (objectId: string) => void;
   beginStructureTransform: (structureId: string) => void;
   endTransform: () => void;
+  loadRoomData: (roomData: RoomData) => void;
+  applyLayoutResponse: (layout: LayoutResponse) => void;
   updateRoomProperties: (payload: {
     shape?: RoomShape;
     purpose?: RoomPurpose;
@@ -2382,6 +2386,73 @@ export const useRoomStore = create<RoomStore>((set) => ({
           : { key: "objectUpdated", objectId: state.activeTransformObjectId }
         : state.lastEditorStatus,
     })),
+  loadRoomData: (nextRoomData) =>
+    set((state) => {
+      const roomData = cloneRoomData(nextRoomData);
+      const selectedObjectId = roomData.objects[0]?.id ?? null;
+
+      return {
+        roomData,
+        selectedObjectId,
+        selectedObjectIds: selectedObjectId ? [selectedObjectId] : [],
+        selectedGroupId: null,
+        validationWarnings: validateRoomLayout(roomData),
+        historyPast: [],
+        historyFuture: [],
+        lastEditorStatus: { key: "roomLoaded" },
+        activeTransformObjectId: null,
+        clipboardObject: null,
+        randomLayoutOptions: [],
+        activeRandomLayoutOptionId: null,
+        randomLayoutSourceSignature: null,
+        randomLayoutOptionSignatures: [],
+        randomLayoutOptionsVisible: false,
+        cameraMode: state.cameraMode,
+        transformMode: state.transformMode,
+      };
+    }),
+  applyLayoutResponse: (layout) =>
+    set((state) => {
+      if (!layout.objects.length && !layout.room) {
+        return state;
+      }
+
+      const previous = state.roomData;
+      const roomData = cloneRoomData(previous);
+
+      if (layout.room) {
+        roomData.room = resizeRoomDefinition(roomData.room, layout.room);
+        roomData.objects = normalizeRoomObjects(roomData, roomData.objects);
+      }
+
+      const byId = new Map(layout.objects.map((entry) => [entry.id, entry]));
+
+      for (const object of roomData.objects) {
+        const next = byId.get(object.id);
+        if (!next) continue;
+        if (object.locked || !object.movable) continue;
+
+        const rotation = normalizeRotation(next.rotation);
+        const position = clampObjectPositionToRoom(
+          roomData,
+          object,
+          { x: next.x, z: next.z },
+          rotation,
+        );
+
+        object.position = position;
+        object.rotation = rotation;
+      }
+
+      return {
+        roomData,
+        validationWarnings: validateRoomLayout(roomData),
+        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
+        historyPast: limitHistory([...state.historyPast, cloneRoomData(previous)]),
+        historyFuture: [],
+        lastEditorStatus: { key: "roomUpdated" },
+      };
+    }),
   updateRoomProperties: (payload) =>
     set((state) => {
       if (payload.shape !== undefined || payload.purpose !== undefined) {
@@ -2776,8 +2847,14 @@ export const useRoomStore = create<RoomStore>((set) => ({
           return;
         }
 
-        const nextRotation = normalizeRotation(payload.rotation ?? object.rotation);
-        const desiredPosition = payload.position ?? object.position;
+        const motion = getObjectMotionRules(object);
+        const nextRotation = motion.rotate
+          ? normalizeRotation(payload.rotation ?? object.rotation)
+          : object.rotation;
+        const desiredPosition = {
+          x: motion.translateX ? payload.position?.x ?? object.position.x : object.position.x,
+          z: motion.translateZ ? payload.position?.z ?? object.position.z : object.position.z,
+        };
 
         if (isWallAttachedObject(object)) {
           if (typeof payload.mountHeight === "number") {
@@ -2795,7 +2872,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
           );
 
           object.position = placement.position;
-          object.rotation = placement.rotation;
+          object.rotation = motion.rotate ? placement.rotation : object.rotation;
           return;
         }
 
@@ -2824,7 +2901,10 @@ export const useRoomStore = create<RoomStore>((set) => ({
         }
 
         const maxHeight = Math.max(0.05, roomData.room.height - getMountHeight(object));
-        const nextRotation = normalizeRotation(payload.rotation ?? object.rotation);
+        const motion = getObjectMotionRules(object);
+        const nextRotation = motion.rotate
+          ? normalizeRotation(payload.rotation ?? object.rotation)
+          : object.rotation;
         const nextDimensions = {
           width: clampDimension(
             payload.dimensions?.width ?? object.dimensions.width,
@@ -2841,8 +2921,8 @@ export const useRoomStore = create<RoomStore>((set) => ({
           ),
         };
         const desiredPosition = {
-          x: payload.position?.x ?? object.position.x,
-          z: payload.position?.z ?? object.position.z,
+          x: motion.translateX ? payload.position?.x ?? object.position.x : object.position.x,
+          z: motion.translateZ ? payload.position?.z ?? object.position.z : object.position.z,
         };
 
         object.dimensions = nextDimensions;
@@ -2855,7 +2935,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
           );
 
           object.position = placement.position;
-          object.rotation = placement.rotation;
+          object.rotation = motion.rotate ? placement.rotation : object.rotation;
         } else {
           object.rotation = nextRotation;
           object.position = clampObjectPositionToRoom(
@@ -3388,6 +3468,11 @@ export const useRoomStore = create<RoomStore>((set) => ({
 
       updateObjectInRoom(roomData, objectId, (object) => {
         if (object.locked || !object.movable) {
+          return;
+        }
+
+        const motion = getObjectMotionRules(object);
+        if (!motion.rotate) {
           return;
         }
 
