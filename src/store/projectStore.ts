@@ -5,10 +5,48 @@ import type { ProjectMeta, ProjectState } from "@/types/project";
 import type { RoomData } from "@/types/room";
 
 const ACTIVE_PROJECT_KEY = "desain-active-project-id";
+const PROJECT_CLIENT_ID_KEY = "desain-client-id";
+export const PROJECT_CLIENT_ID_HEADER = "x-desain-client-id";
 let initPromise: Promise<void> | null = null;
 
+const normalizeProjectClientId = (value: string | null) => {
+  const normalized = value?.trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+  return normalized || null;
+};
+
+const createProjectClientId = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `client_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+};
+
+export const getProjectClientId = () => {
+  if (typeof window === "undefined") return null;
+
+  const stored = normalizeProjectClientId(window.localStorage.getItem(PROJECT_CLIENT_ID_KEY));
+  if (stored) return stored;
+
+  const next = createProjectClientId();
+  window.localStorage.setItem(PROJECT_CLIENT_ID_KEY, next);
+  return next;
+};
+
+export const withProjectClientHeaders = (headers?: HeadersInit) => {
+  const next = new Headers(headers);
+  const clientId = getProjectClientId();
+  if (clientId) {
+    next.set(PROJECT_CLIENT_ID_HEADER, clientId);
+  }
+  return next;
+};
+
 async function jsonFetch<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, init);
+  const res = await fetch(input, {
+    ...init,
+    headers: withProjectClientHeaders(init?.headers),
+  });
   let data: unknown = null;
   try {
     data = (await res.json()) as unknown;

@@ -28,7 +28,7 @@ import {
 import { formatSemanticPosition, getSemanticObjectPosition } from "@/lib/scene/axes";
 import { MAX_PROJECT_CHAT_TURNS, PROJECT_PHOTO_COUNT } from "@/lib/project/workflowLimits";
 import { useRoomStore } from "@/store/roomStore";
-import { useProjectStore } from "@/store/projectStore";
+import { useProjectStore, withProjectClientHeaders } from "@/store/projectStore";
 import { useUIStore } from "@/store/uiStore";
 import type { ProjectMeta } from "@/types/project";
 import type { LayoutResponse, RoomData } from "@/types/room";
@@ -242,7 +242,10 @@ function getChatCopy(locale: "tr" | "en"): ChatCopy {
 }
 
 async function jsonFetch<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, init);
+  const res = await fetch(input, {
+    ...init,
+    headers: withProjectClientHeaders(init?.headers),
+  });
   let data: unknown = null;
   try {
     data = (await res.json()) as unknown;

@@ -1,19 +1,25 @@
 import { NextResponse } from "next/server";
 import { PROJECT_PHOTO_COUNT } from "@/lib/project/workflowLimits";
-import { readProject, saveProjectUpload, updateProjectMeta } from "@/lib/server/projectsStore";
+import {
+  getProjectScope,
+  readProject,
+  saveProjectUpload,
+  updateProjectMeta,
+} from "@/lib/server/projectsStore";
 
 export const runtime = "nodejs";
 
 export async function GET(_req: Request, ctx: RouteContext<"/api/projects/[projectId]/uploads">) {
   const { projectId } = await ctx.params;
-  const project = await readProject(projectId);
+  const project = await readProject(projectId, getProjectScope(_req));
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ uploads: project.uploads, meta: project.meta });
 }
 
 export async function POST(request: Request, ctx: RouteContext<"/api/projects/[projectId]/uploads">) {
   const { projectId } = await ctx.params;
-  const project = await readProject(projectId);
+  const scope = getProjectScope(request);
+  const project = await readProject(projectId, scope);
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const form = await request.formData();
   const locale: "tr" | "en" = form.get("locale") === "en" ? "en" : "tr";
@@ -74,32 +80,44 @@ export async function POST(request: Request, ctx: RouteContext<"/api/projects/[p
     );
   }
 
-  await updateProjectMeta(projectId, {
-    status: "uploading",
-    lockReason: locale === "en" ? "Uploading photos" : "Fotoğraflar yükleniyor",
-  });
+  await updateProjectMeta(
+    projectId,
+    {
+      status: "uploading",
+      lockReason: locale === "en" ? "Uploading photos" : "Fotoğraflar yükleniyor",
+    },
+    scope,
+  );
 
   try {
     const saved = [];
     for (const file of files) {
-      const upload = await saveProjectUpload(projectId, file);
+      const upload = await saveProjectUpload(projectId, file, scope);
       if (upload) saved.push(upload);
     }
 
-    const updated = await readProject(projectId);
+    const updated = await readProject(projectId, scope);
     if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const meta = await updateProjectMeta(projectId, { status: "draft", lockReason: undefined });
+    const meta = await updateProjectMeta(
+      projectId,
+      { status: "draft", lockReason: undefined },
+      scope,
+    );
     return NextResponse.json({ uploads: updated.uploads, meta: meta ?? updated.meta });
   } catch {
-    await updateProjectMeta(projectId, {
-      status: "error",
-      lockReason: undefined,
-      lastError:
-        locale === "en"
-          ? "An error occurred while uploading photos. Try again."
-          : "Fotoğraf yükleme sırasında bir hata oluştu. Tekrar dene.",
-    });
+    await updateProjectMeta(
+      projectId,
+      {
+        status: "error",
+        lockReason: undefined,
+        lastError:
+          locale === "en"
+            ? "An error occurred while uploading photos. Try again."
+            : "Fotoğraf yükleme sırasında bir hata oluştu. Tekrar dene.",
+      },
+      scope,
+    );
     return NextResponse.json(
       {
         error:

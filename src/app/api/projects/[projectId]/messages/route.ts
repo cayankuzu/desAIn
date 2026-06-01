@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { addProjectMessage, readProject } from "@/lib/server/projectsStore";
+import { addProjectMessage, getProjectScope, readProject } from "@/lib/server/projectsStore";
 
 export const runtime = "nodejs";
 
@@ -9,9 +9,9 @@ const postSchema = z.object({
   content: z.string().trim().min(1).max(6000),
 });
 
-export async function GET(_req: Request, ctx: RouteContext<"/api/projects/[projectId]/messages">) {
+export async function GET(request: Request, ctx: RouteContext<"/api/projects/[projectId]/messages">) {
   const { projectId } = await ctx.params;
-  const project = await readProject(projectId);
+  const project = await readProject(projectId, getProjectScope(request));
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return NextResponse.json({ messages: project.messages });
@@ -19,6 +19,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/projects/[proje
 
 export async function POST(request: Request, ctx: RouteContext<"/api/projects/[projectId]/messages">) {
   const { projectId } = await ctx.params;
+  const scope = getProjectScope(request);
   const json = await request.json();
   const parsed = postSchema.safeParse(json);
   if (!parsed.success) {
@@ -28,8 +29,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/projects/[p
     );
   }
 
-  const message = await addProjectMessage(projectId, parsed.data);
+  const message = await addProjectMessage(projectId, parsed.data, scope);
   if (!message) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ message }, { status: 201 });
 }
-

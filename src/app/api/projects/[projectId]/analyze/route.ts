@@ -5,6 +5,7 @@ import { analyzeRoomWithCurrentProvider } from "@/lib/ai/runtime";
 import { ANALYSIS_TIMEOUT_MS, PROJECT_PHOTO_COUNT } from "@/lib/project/workflowLimits";
 import { curatedInventoryCatalog } from "@/lib/room/inventoryCatalog";
 import {
+  getProjectScope,
   readProject,
   readProjectUploadBytes,
   updateProjectMeta,
@@ -60,7 +61,8 @@ function getAnalysisErrorMessage(error: unknown, locale: "tr" | "en") {
 
 export async function POST(request: Request, ctx: RouteContext<"/api/projects/[projectId]/analyze">) {
   const { projectId } = await ctx.params;
-  const project = await readProject(projectId);
+  const scope = getProjectScope(request);
+  const project = await readProject(projectId, scope);
 
   let locale: "tr" | "en" = "tr";
   try {
@@ -105,11 +107,15 @@ export async function POST(request: Request, ctx: RouteContext<"/api/projects/[p
     );
   }
 
-  await updateProjectMeta(projectId, {
-    status: "analyzing",
-    lockReason: locale === "en" ? "Analyzing photos" : "Fotoğraflar analiz ediliyor",
-    lastError: undefined,
-  });
+  await updateProjectMeta(
+    projectId,
+    {
+      status: "analyzing",
+      lockReason: locale === "en" ? "Analyzing photos" : "Fotoğraflar analiz ediliyor",
+      lastError: undefined,
+    },
+    scope,
+  );
 
   try {
     const inventory = curatedInventoryCatalog.map((item) => ({
@@ -124,7 +130,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/projects/[p
 
     const images = [];
     for (const upload of project.uploads) {
-      const bytes = await readProjectUploadBytes(projectId, upload.storedName);
+      const bytes = await readProjectUploadBytes(projectId, upload.storedName, scope);
       images.push({
         mimeType: upload.mimeType,
         base64: bytes.toString("base64"),
@@ -138,19 +144,23 @@ export async function POST(request: Request, ctx: RouteContext<"/api/projects/[p
     const roomDraft = roomDraftSchema.parse(analysis);
     const roomData = createRoomDataFromDraft(roomDraft);
 
-    await writeProjectAnalysis(projectId, roomDraft);
-    await writeProjectRoomData(projectId, roomData);
-    await updateProjectMeta(projectId, { analyzedAt: new Date().toISOString() });
-    const updated = await readProject(projectId);
+    await writeProjectAnalysis(projectId, roomDraft, scope);
+    await writeProjectRoomData(projectId, roomData, scope);
+    await updateProjectMeta(projectId, { analyzedAt: new Date().toISOString() }, scope);
+    const updated = await readProject(projectId, scope);
 
     return NextResponse.json({ analysis: roomDraft, roomData, meta: updated?.meta });
   } catch (error) {
     const message = getAnalysisErrorMessage(error, locale);
-    await updateProjectMeta(projectId, {
-      status: "error",
-      lockReason: undefined,
-      lastError: message,
-    });
+    await updateProjectMeta(
+      projectId,
+      {
+        status: "error",
+        lockReason: undefined,
+        lastError: message,
+      },
+      scope,
+    );
 
     return NextResponse.json({ error: message }, { status: 500 });
   }

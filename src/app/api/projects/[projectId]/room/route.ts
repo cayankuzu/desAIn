@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { RoomData } from "@/types/room";
-import { readProject, writeProjectRoomData } from "@/lib/server/projectsStore";
+import { getProjectScope, readProject, writeProjectRoomData } from "@/lib/server/projectsStore";
 
 export const runtime = "nodejs";
 
@@ -9,9 +9,9 @@ const putSchema = z.object({
   roomData: z.unknown(),
 });
 
-export async function GET(_req: Request, ctx: RouteContext<"/api/projects/[projectId]/room">) {
+export async function GET(request: Request, ctx: RouteContext<"/api/projects/[projectId]/room">) {
   const { projectId } = await ctx.params;
-  const project = await readProject(projectId);
+  const project = await readProject(projectId, getProjectScope(request));
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return NextResponse.json({ roomData: project.roomData });
@@ -19,6 +19,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/projects/[proje
 
 export async function PUT(request: Request, ctx: RouteContext<"/api/projects/[projectId]/room">) {
   const { projectId } = await ctx.params;
+  const scope = getProjectScope(request);
   const json = await request.json();
   const parsed = putSchema.safeParse(json);
   if (!parsed.success) {
@@ -32,9 +33,8 @@ export async function PUT(request: Request, ctx: RouteContext<"/api/projects/[pr
     return NextResponse.json({ error: "Invalid roomData" }, { status: 400 });
   }
 
-  const saved = await writeProjectRoomData(projectId, parsed.data.roomData as RoomData);
+  const saved = await writeProjectRoomData(projectId, parsed.data.roomData as RoomData, scope);
   if (!saved) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return NextResponse.json({ ok: true });
 }
-
