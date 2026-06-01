@@ -17,6 +17,7 @@ import {
   objectsHavePlacementCollision,
   objectIntersectsZone,
 } from "@/lib/room/constraints";
+import { applyObjectUpdate } from "@/lib/room/applyObjectUpdate";
 import { resizeRoomDefinition } from "@/lib/room/defaultRoom";
 import { getOpeningHeight } from "@/lib/room/openingPlacement";
 import { createRoomPreset } from "@/lib/room/roomPresets";
@@ -2230,6 +2231,7 @@ interface RoomStore {
       rotation?: number;
       dimensions?: Partial<RoomObject["dimensions"]>;
       color?: string;
+      mountHeight?: number;
     },
   ) => void;
   addObjectFromTemplate: (
@@ -2418,6 +2420,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       }
 
       const previous = state.roomData;
+      const previousSignature = getRoomDataSignature(previous);
       const roomData = cloneRoomData(previous);
 
       if (layout.room) {
@@ -2430,18 +2433,16 @@ export const useRoomStore = create<RoomStore>((set) => ({
       for (const object of roomData.objects) {
         const next = byId.get(object.id);
         if (!next) continue;
-        if (object.locked || !object.movable) continue;
+        applyObjectUpdate(roomData, object, {
+          position: { x: next.x, z: next.z },
+          rotation: next.rotation,
+          mountHeight: next.mountHeight,
+          dimensions: next.dimensions,
+        });
+      }
 
-        const rotation = normalizeRotation(next.rotation);
-        const position = clampObjectPositionToRoom(
-          roomData,
-          object,
-          { x: next.x, z: next.z },
-          rotation,
-        );
-
-        object.position = position;
-        object.rotation = rotation;
+      if (getRoomDataSignature(roomData) === previousSignature) {
+        return state;
       }
 
       return {
@@ -2896,59 +2897,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
       const roomData = cloneRoomData(state.roomData);
 
       updateObjectInRoom(roomData, objectId, (object) => {
-        if (object.locked || !object.movable) {
-          return;
-        }
-
-        const maxHeight = Math.max(0.05, roomData.room.height - getMountHeight(object));
-        const motion = getObjectMotionRules(object);
-        const nextRotation = motion.rotate
-          ? normalizeRotation(payload.rotation ?? object.rotation)
-          : object.rotation;
-        const nextDimensions = {
-          width: clampDimension(
-            payload.dimensions?.width ?? object.dimensions.width,
-            object.dimensions.width,
-          ),
-          depth: clampDimension(
-            payload.dimensions?.depth ?? object.dimensions.depth,
-            object.dimensions.depth,
-          ),
-          height: clampDimension(
-            payload.dimensions?.height ?? object.dimensions.height,
-            object.dimensions.height,
-            maxHeight,
-          ),
-        };
-        const desiredPosition = {
-          x: motion.translateX ? payload.position?.x ?? object.position.x : object.position.x,
-          z: motion.translateZ ? payload.position?.z ?? object.position.z : object.position.z,
-        };
-
-        object.dimensions = nextDimensions;
-
-        if (isWallAttachedObject(object)) {
-          const placement = getWallAttachedObjectTransform(
-            roomData,
-            object,
-            desiredPosition,
-          );
-
-          object.position = placement.position;
-          object.rotation = motion.rotate ? placement.rotation : object.rotation;
-        } else {
-          object.rotation = nextRotation;
-          object.position = clampObjectPositionToRoom(
-            roomData,
-            object,
-            desiredPosition,
-            nextRotation,
-          );
-        }
-
-        if (payload.color) {
-          object.color = payload.color;
-        }
+        applyObjectUpdate(roomData, object, payload);
       });
 
       return {

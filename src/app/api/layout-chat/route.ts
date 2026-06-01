@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { buildMockLayoutResponse } from "@/lib/ai/mockResponses";
+import { planLayoutWithCurrentProvider } from "@/lib/ai/runtime";
 import { layoutChatRequestSchema, layoutResponseSchema } from "@/lib/ai/schemas";
+
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
@@ -8,33 +10,34 @@ export async function POST(request: Request) {
     const parsed = layoutChatRequestSchema.safeParse(json);
 
     if (!parsed.success) {
+      const locale =
+        json && typeof json === "object" && (json as { locale?: "tr" | "en" }).locale === "en"
+          ? "en"
+          : "tr";
+
       return NextResponse.json(
         {
-          error: "Gecersiz istek govdesi.",
+          error: locale === "en" ? "Invalid request body." : "Geçersiz istek gövdesi.",
           issues: parsed.error.flatten(),
         },
         { status: 400 },
       );
     }
 
-    const result = buildMockLayoutResponse(
-      parsed.data.message,
-      parsed.data.roomData,
-    );
+    const result = await planLayoutWithCurrentProvider({
+      message: parsed.data.message,
+      roomData: parsed.data.roomData,
+      locale: parsed.data.locale,
+      selection: parsed.data.selection ?? null,
+    });
     const layoutValidation = layoutResponseSchema.safeParse(result.layout);
 
     if (!layoutValidation.success) {
-      return NextResponse.json(
-        { error: "Mock layout JSON dogrulanamadi." },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: "Layout JSON doğrulanamadı." }, { status: 500 });
     }
 
     return NextResponse.json(result);
   } catch {
-    return NextResponse.json(
-      { error: "Mock AI route calismadi." },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Layout chat route çalışmadı." }, { status: 500 });
   }
 }

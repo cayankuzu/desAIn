@@ -11,6 +11,20 @@ export interface ChatMessage {
 export interface LayoutChatRequest {
   message: string;
   roomData: RoomData;
+  locale?: "tr" | "en";
+  selection?:
+    | {
+        objectId?: string | null;
+        objectIds?: string[];
+        groupId?: string | null;
+        structure?:
+          | {
+              type: "wall" | "opening";
+              id: string;
+            }
+          | null;
+      }
+    | null;
 }
 
 export interface LayoutChatResult {

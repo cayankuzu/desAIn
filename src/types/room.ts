@@ -127,11 +127,24 @@ export interface LayoutObjectUpdate {
   x: number;
   z: number;
   rotation: number;
+  mountHeight?: number;
+  dimensions?: Partial<RoomObjectDimensions>;
+}
+
+export interface LayoutRoomUpdate {
+  shape?: RoomShape;
+  purpose?: RoomPurpose;
+  width?: number;
+  depth?: number;
+  height?: number;
+  cutoutWidth?: number;
+  cutoutDepth?: number;
 }
 
 export interface LayoutResponse {
   layoutName: string;
   summary: string;
+  room?: LayoutRoomUpdate;
   objects: LayoutObjectUpdate[];
   constraintsRespected: string[];
   warnings: string[];

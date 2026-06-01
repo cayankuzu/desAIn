@@ -41,6 +41,18 @@ export const isWallAttachedObject = (object: Pick<RoomObject, "params">) => {
   );
 };
 
+export const getObjectMotionRules = (
+  object: Pick<RoomObject, "movable" | "locked" | "params">,
+) => {
+  const fixed = object.locked || !object.movable || isWallAttachedObject(object);
+
+  return {
+    translateX: !fixed && object.params.motionX !== false,
+    translateZ: !fixed && object.params.motionZ !== false,
+    rotate: !fixed && object.params.motionRotation !== false,
+  };
+};
+
 export const isFloorCovering = (
   object: Pick<RoomObject, "category" | "dimensions">,
 ) => object.category === "carpet" || object.dimensions.height <= 0.06;
@@ -305,15 +317,22 @@ export const clampObjectPositionToRoom = (
   desiredPosition: RoomObject["position"],
   rotation = object.rotation,
 ) => {
+  const motion = getObjectMotionRules(object);
+  const nextRotation = motion.rotate ? rotation : object.rotation;
+  const nextPosition = {
+    x: motion.translateX ? desiredPosition.x : object.position.x,
+    z: motion.translateZ ? desiredPosition.z : object.position.z,
+  };
+
   if (isWallAttachedObject(object)) {
-    return getWallAttachedObjectTransform(roomData, object, desiredPosition).position;
+    return getWallAttachedObjectTransform(roomData, object, nextPosition).position;
   }
 
   return repelObjectFromWalls(
     roomData,
     object,
-    clampObjectPositionToRoomShell(roomData, object, desiredPosition, rotation),
-    rotation,
+    clampObjectPositionToRoomShell(roomData, object, nextPosition, nextRotation),
+    nextRotation,
   );
 };
 

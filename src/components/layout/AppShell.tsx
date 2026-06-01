@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Boxes, Camera, Eye, Lock, Shuffle, Trash2, Ungroup } from "lucide-react";
+import { AlertTriangle, Boxes, Lock, Shuffle, Trash2, Ungroup } from "lucide-react";
 import {
-  formatEditorStatus,
   t,
 } from "@/lib/i18n/translations";
 import {
@@ -16,13 +15,17 @@ import {
   getWallAttachedObjectTransform,
   isWallAttachedObject,
 } from "@/lib/room/constraints";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { useRoomStore } from "@/store/roomStore";
 import { useUIStore } from "@/store/uiStore";
+import { useProjectStore } from "@/store/projectStore";
 import { EditorHotkeys } from "@/components/layout/EditorHotkeys";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { ViewportHud } from "@/components/layout/ViewportHud";
 import { RoomScene } from "@/components/room/RoomScene";
+import { AiChatPanel } from "@/components/ai/AiChatPanel";
+import { buildEditorStatusToast, buildStructureToast, type EditorToast } from "@/lib/editor/toasts";
 import type { RoomData, RoomObject } from "@/types/room";
 
 type DragPreviewState = {
@@ -38,6 +41,22 @@ const emptyDragPreview: DragPreviewState = {
   y: 0,
   position: null,
 };
+
+function getMobileKitchenNoticeCopy(locale: "tr" | "en") {
+  return locale === "en"
+    ? {
+        badge: "Kitchen",
+        title: "Kitchen mode is only available on desktop",
+        body: "On mobile you can only access desAIn. Open the project on a computer to edit, move, and use the advanced tools.",
+        button: "OK",
+      }
+    : {
+        badge: "İşin Mutfağı",
+        title: "İşin Mutfağı sadece bilgisayarda açılabilir",
+        body: "Mobilde sadece desAIn ekranına erişebilirsin. Düzenleme, taşıma ve gelişmiş araçlar için bilgisayardan aç.",
+        button: "Tamam",
+      };
+}
 
 const getViewportRoomPosition = (
   roomData: RoomData,
@@ -111,29 +130,46 @@ const createPreviewObjectFromTemplate = (
 
 export function AppShell() {
   const locale = useUIStore((state) => state.locale);
+  const setLocale = useUIStore((state) => state.setLocale);
+  const workspaceMode = useUIStore((state) => state.workspaceMode);
+  const setWorkspaceMode = useUIStore((state) => state.setWorkspaceMode);
+  const selectedStructure = useUIStore((state) => state.selectedStructure);
+  const isMobile = useMediaQuery("(max-width: 767px)");
   const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
   const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
   const multiSelectMenu = useUIStore((state) => state.multiSelectMenu);
   const setMultiSelectMenu = useUIStore((state) => state.setMultiSelectMenu);
   const roomData = useRoomStore((state) => state.roomData);
-  const addObjectFromTemplate = useRoomStore((state) => state.addObjectFromTemplate);
-  const lastEditorStatus = useRoomStore((state) => state.lastEditorStatus);
+  const loadRoomData = useRoomStore((state) => state.loadRoomData);
+  const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
   const selectedObjectIds = useRoomStore((state) => state.selectedObjectIds);
   const selectedGroupId = useRoomStore((state) => state.selectedGroupId);
+  const addObjectFromTemplate = useRoomStore((state) => state.addObjectFromTemplate);
+  const lastEditorStatus = useRoomStore((state) => state.lastEditorStatus);
   const groupSelectedObjects = useRoomStore((state) => state.groupSelectedObjects);
   const ungroupSelectedObjects = useRoomStore((state) => state.ungroupSelectedObjects);
   const randomizeSelectedObjects = useRoomStore((state) => state.randomizeSelectedObjects);
   const deleteSelectedObjects = useRoomStore((state) => state.deleteSelectedObjects);
   const toggleSelectedObjectsLock = useRoomStore((state) => state.toggleSelectedObjectsLock);
+
+  const initProjects = useProjectStore((state) => state.init);
+  const activeProjectId = useProjectStore((state) => state.activeProjectId);
+  const activeProject = useProjectStore((state) => state.activeProject);
+  const saveRoomData = useProjectStore((state) => state.saveRoomData);
   const [panelsHidden, setPanelsHidden] = useState(false);
   const [toast, setToast] = useState<{
     id: number;
-    message: string;
+    title: string;
+    detail?: string;
+    tone?: EditorToast["tone"];
   } | null>(null);
   const roomDataRef = useRef(roomData);
+  const lastLoadedProjectIdRef = useRef<string | null>(null);
+  const autosaveTimeoutRef = useRef<number | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
   const activeInventoryDragTemplateIdRef = useRef<string | null>(null);
   const [dragPreview, setDragPreview] = useState<DragPreviewState>(emptyDragPreview);
+  const [mobileKitchenNoticeOpen, setMobileKitchenNoticeOpen] = useState(false);
   const selectedIdsSet = useMemo(
     () => new Set(selectedObjectIds),
     [selectedObjectIds],
@@ -170,14 +206,83 @@ export function AppShell() {
   }, [locale]);
 
   useEffect(() => {
+    void initProjects();
+  }, [initProjects]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const storedLocale = window.localStorage.getItem("desain-locale");
+    if (storedLocale === "tr" || storedLocale === "en") {
+      setLocale(storedLocale);
+    }
+
+    const storedWorkspaceMode = window.localStorage.getItem("desain-workspace-mode");
+    if (storedWorkspaceMode === "ai" || storedWorkspaceMode === "kitchen") {
+      setWorkspaceMode(storedWorkspaceMode);
+    }
+  }, [setLocale, setWorkspaceMode]);
+
+  useEffect(() => {
+    if (!activeProjectId || !activeProject?.roomData) {
+      return;
+    }
+
+    if (lastLoadedProjectIdRef.current === activeProjectId) {
+      return;
+    }
+
+    lastLoadedProjectIdRef.current = activeProjectId;
+    loadRoomData(activeProject.roomData);
+  }, [activeProject?.roomData, activeProjectId, loadRoomData]);
+
+  useEffect(() => {
     roomDataRef.current = roomData;
   }, [roomData]);
+
+  useEffect(() => {
+    if (!activeProjectId) return;
+
+    if (autosaveTimeoutRef.current) {
+      window.clearTimeout(autosaveTimeoutRef.current);
+    }
+
+    autosaveTimeoutRef.current = window.setTimeout(() => {
+      autosaveTimeoutRef.current = null;
+      void saveRoomData(activeProjectId, roomDataRef.current);
+    }, 650);
+
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        window.clearTimeout(autosaveTimeoutRef.current);
+        autosaveTimeoutRef.current = null;
+      }
+    };
+  }, [activeProjectId, roomData, saveRoomData]);
 
   useEffect(() => {
     if (selectedObjectIds.length < 2) {
       setMultiSelectMenu(null);
     }
   }, [selectedObjectIds.length, setMultiSelectMenu]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (!isMobile) {
+        setMobileKitchenNoticeOpen(false);
+        return;
+      }
+
+      if (workspaceMode === "kitchen") {
+        setWorkspaceMode("ai");
+        setMobileKitchenNoticeOpen(true);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [isMobile, setWorkspaceMode, workspaceMode]);
 
   useEffect(() => {
     const handleDragStart = (event: Event) => {
@@ -198,14 +303,18 @@ export function AppShell() {
     };
   }, []);
 
-  const showToast = useCallback((message: string) => {
+  const showToast = useCallback((nextToast: {
+    title: string;
+    detail?: string;
+    tone?: EditorToast["tone"];
+  }) => {
     const id = Date.now();
 
     if (toastTimeoutRef.current) {
       window.clearTimeout(toastTimeoutRef.current);
     }
 
-    setToast({ id, message });
+    setToast({ id, ...nextToast });
     toastTimeoutRef.current = window.setTimeout(() => {
       setToast((current) => (current?.id === id ? null : current));
       toastTimeoutRef.current = null;
@@ -213,14 +322,48 @@ export function AppShell() {
   }, []);
 
   useEffect(() => {
-    const message = formatEditorStatus(locale, lastEditorStatus, roomDataRef.current);
-
-    if (!message) {
+    if (lastEditorStatus.key === "selectionUpdated" && selectedStructure) {
       return;
     }
 
-    showToast(message);
-  }, [lastEditorStatus, locale, showToast]);
+    const nextToast = buildEditorStatusToast({
+      locale,
+      status: lastEditorStatus,
+      roomData: roomDataRef.current,
+      selectedObjectId,
+      selectedObjectIds,
+      selectedGroupId,
+      selectedStructure,
+    });
+
+    if (!nextToast) {
+      return;
+    }
+
+    showToast(nextToast);
+  }, [
+    lastEditorStatus,
+    locale,
+    selectedObjectId,
+    selectedObjectIds,
+    selectedGroupId,
+    selectedStructure,
+    showToast,
+  ]);
+
+  useEffect(() => {
+    const nextToast = buildStructureToast({
+      locale,
+      roomData: roomDataRef.current,
+      selectedStructure,
+    });
+
+    if (!nextToast) {
+      return;
+    }
+
+    showToast(nextToast);
+  }, [locale, selectedStructure, showToast]);
 
   const captureScreenshot = () => {
     const canvas = document.querySelector<HTMLCanvasElement>(".room-canvas canvas");
@@ -233,123 +376,142 @@ export function AppShell() {
     link.download = `desain-room-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
-    showToast(t(locale, "captureScreenshot"));
+    showToast({ title: t(locale, "captureScreenshot"), tone: "success" });
   };
 
   const togglePanels = () => {
     setPanelsHidden((current) => {
       const next = !current;
-      showToast(t(locale, next ? "hidePanels" : "showPanels"));
+      showToast({
+        title: t(locale, next ? "hidePanels" : "showPanels"),
+        tone: "info",
+      });
       return next;
     });
   };
+
+  if (isMobile) {
+    return (
+      <main className="h-dvh overflow-hidden px-3 py-3">
+        <div className="mx-auto flex h-full min-h-0 w-full max-w-[560px] flex-col">
+          <AiChatPanel />
+        </div>
+        {mobileKitchenNoticeOpen ? (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/72 p-4">
+            <div className="w-full max-w-sm rounded-2xl border border-[#6d4a29] bg-[#25180f] p-4 shadow-[0_26px_80px_rgba(0,0,0,0.4)]">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#f5c28b]">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {getMobileKitchenNoticeCopy(locale).badge}
+              </div>
+              <div className="mt-3 text-base font-semibold text-white">
+                {getMobileKitchenNoticeCopy(locale).title}
+              </div>
+              <div className="mt-2 text-sm leading-6 text-[#f8dec0]">
+                {getMobileKitchenNoticeCopy(locale).body}
+              </div>
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setMobileKitchenNoticeOpen(false)}
+                  className="inline-flex h-9 items-center justify-center rounded-xl border border-[#6d4a29] bg-[#102234] px-3 text-sm font-semibold text-[#f5c28b] transition hover:border-[#ffb16a] hover:text-white"
+                >
+                  {getMobileKitchenNoticeCopy(locale).button}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </main>
+    );
+  }
 
   return (
     <main className="h-dvh overflow-hidden px-3 py-3 md:px-4 md:py-4">
       <EditorHotkeys />
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[1820px] flex-col gap-3 md:gap-4">
-        {panelsHidden ? (
-          <div className="fixed right-4 top-4 z-50 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={captureScreenshot}
-              title={t(locale, "captureScreenshot")}
-              aria-label={t(locale, "captureScreenshot")}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-[#0d141d]/92 text-slate-200 shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-[#4ea8ff] hover:text-white"
-            >
-              <Camera className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={togglePanels}
-              title={t(locale, "showPanels")}
-              aria-label={t(locale, "showPanels")}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-[#0d141d]/92 text-slate-200 shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-[#4ea8ff] hover:text-white"
-            >
-              <Eye className="h-4 w-4" />
-            </button>
-          </div>
-        ) : (
-          <Topbar
-            panelsHidden={panelsHidden}
-            onTogglePanels={togglePanels}
-            onCaptureScreenshot={captureScreenshot}
-          />
-        )}
+        <Topbar
+          panelsHidden={panelsHidden}
+          onTogglePanels={togglePanels}
+          onCaptureScreenshot={captureScreenshot}
+        />
 
         <section
           className={`grid min-h-0 flex-1 gap-4 ${
-            panelsHidden
-              ? "grid-cols-1"
-              : "grid-rows-[minmax(320px,44vh)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_560px] xl:grid-rows-none"
+            workspaceMode === "ai"
+              ? panelsHidden
+                ? "grid-cols-1"
+                : "grid-cols-1 md:grid-cols-[minmax(0,1fr)_560px]"
+              : panelsHidden
+                ? "grid-cols-1"
+                : "grid-rows-[minmax(320px,44vh)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_560px] xl:grid-rows-none"
           }`}
         >
           <div
-            className="editor-panel room-canvas relative h-full min-h-0 overflow-hidden p-0"
-            onDragOver={(event) => {
-              const templateId =
-                activeInventoryDragTemplateIdRef.current ||
-                event.dataTransfer.getData(INVENTORY_DRAG_MIME) ||
-                event.dataTransfer.getData("text/plain");
+              className="editor-panel room-canvas relative h-full min-h-0 overflow-hidden p-0"
+              onDragOver={(event) => {
+                const templateId =
+                  activeInventoryDragTemplateIdRef.current ||
+                  event.dataTransfer.getData(INVENTORY_DRAG_MIME) ||
+                  event.dataTransfer.getData("text/plain");
 
-              if (!templateId) {
-                return;
-              }
+                if (!templateId) {
+                  return;
+                }
 
-              const bounds = event.currentTarget.getBoundingClientRect();
-              const pointerX = event.clientX - bounds.left;
-              const pointerY = event.clientY - bounds.top;
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "copy";
-              setDragPreview({
-                templateId,
-                x: pointerX,
-                y: pointerY,
-                position: getViewportRoomPosition(roomData, pointerX, pointerY, bounds),
-              });
-            }}
-            onDragLeave={(event) => {
-              const bounds = event.currentTarget.getBoundingClientRect();
-              const outside =
-                event.clientX <= bounds.left ||
-                event.clientX >= bounds.right ||
-                event.clientY <= bounds.top ||
-                event.clientY >= bounds.bottom;
+                const bounds = event.currentTarget.getBoundingClientRect();
+                const pointerX = event.clientX - bounds.left;
+                const pointerY = event.clientY - bounds.top;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+                setDragPreview({
+                  templateId,
+                  x: pointerX,
+                  y: pointerY,
+                  position: getViewportRoomPosition(roomData, pointerX, pointerY, bounds),
+                });
+              }}
+              onDragLeave={(event) => {
+                const bounds = event.currentTarget.getBoundingClientRect();
+                const outside =
+                  event.clientX <= bounds.left ||
+                  event.clientX >= bounds.right ||
+                  event.clientY <= bounds.top ||
+                  event.clientY >= bounds.bottom;
 
-              if (outside) {
+                if (outside) {
+                  setDragPreview(emptyDragPreview);
+                }
+              }}
+              onDrop={(event) => {
+                const templateId =
+                  activeInventoryDragTemplateIdRef.current ||
+                  event.dataTransfer.getData(INVENTORY_DRAG_MIME) ||
+                  event.dataTransfer.getData("text/plain");
+
+                if (!templateId) {
+                  return;
+                }
+
+                event.preventDefault();
+
+                const bounds = event.currentTarget.getBoundingClientRect();
+                const pointerX = event.clientX - bounds.left;
+                const pointerY = event.clientY - bounds.top;
+                const position = getViewportRoomPosition(roomData, pointerX, pointerY, bounds);
+                activeInventoryDragTemplateIdRef.current = null;
                 setDragPreview(emptyDragPreview);
-              }
-            }}
-            onDrop={(event) => {
-              const templateId =
-                activeInventoryDragTemplateIdRef.current ||
-                event.dataTransfer.getData(INVENTORY_DRAG_MIME) ||
-                event.dataTransfer.getData("text/plain");
 
-              if (!templateId) {
-                return;
-              }
+                const added = addObjectFromTemplate(templateId, position);
 
-              event.preventDefault();
+                if (added?.type === "wall") {
+                  setSelectedStructure({ type: "wall", id: added.id });
+                } else {
+                  setSelectedStructure(null);
+                }
 
-              const bounds = event.currentTarget.getBoundingClientRect();
-              const pointerX = event.clientX - bounds.left;
-              const pointerY = event.clientY - bounds.top;
-              const position = getViewportRoomPosition(roomData, pointerX, pointerY, bounds);
-              activeInventoryDragTemplateIdRef.current = null;
-              setDragPreview(emptyDragPreview);
-
-              const added = addObjectFromTemplate(templateId, position);
-
-              if (added?.type === "wall") {
-                setSelectedStructure({ type: "wall", id: added.id });
-              } else {
-                setSelectedStructure(null);
-              }
-
-              setActiveSidebarTab("details");
-            }}
-          >
+                setActiveSidebarTab("details");
+              }}
+            >
             <div className="viewport-grid absolute inset-0 opacity-55" />
             {multiSelectMenu && selectedObjectIds.length > 1 ? (
               <div
@@ -430,12 +592,26 @@ export function AppShell() {
             </div>
           </div>
 
-          {panelsHidden ? null : <Sidebar />}
+          {workspaceMode === "ai" ? (panelsHidden ? null : <AiChatPanel />) : panelsHidden ? null : <Sidebar />}
         </section>
       </div>
       {toast ? (
-        <div className="fixed bottom-4 left-4 right-4 z-50 rounded-xl border border-[#24405a] bg-[#102234]/95 px-3 py-2 text-sm font-semibold text-[#dbeafe] shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur sm:left-auto sm:max-w-sm">
-          {toast.message}
+        <div
+          className={`fixed bottom-4 right-4 z-50 w-[min(420px,calc(100vw-2rem))] rounded-2xl border px-4 py-3 shadow-[0_18px_45px_rgba(0,0,0,0.38)] backdrop-blur ${
+            toast.tone === "success"
+              ? "border-[#1f6b45] bg-[#102416]/96 text-[#d7f7e6]"
+              : toast.tone === "warning"
+                ? "border-[#6d4a29] bg-[#25180f]/96 text-[#f5c28b]"
+                : "border-[#24405a] bg-[#102234]/96 text-[#dbeafe]"
+          }`}
+        >
+          <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/60">
+            desAIn
+          </div>
+          <div className="mt-1 text-sm font-semibold text-white">{toast.title}</div>
+          {toast.detail ? (
+            <div className="mt-1 text-sm leading-6 text-white/80">{toast.detail}</div>
+          ) : null}
         </div>
       ) : null}
     </main>

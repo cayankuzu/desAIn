@@ -37,6 +37,7 @@ import {
 } from "@/lib/room/runtimeInventoryCatalog";
 import { isOpeningLocked, isWallLocked } from "@/lib/room/roomGeometry";
 import { roomPurposeOptions } from "@/lib/room/roomPresets";
+import { getMountHeight, isWallAttachedObject } from "@/lib/room/constraints";
 import {
   formatWarning,
   getLocalizedCategoryLabel,
@@ -726,7 +727,7 @@ function OpeningEditor({
         </label>
         <label className="space-y-1">
           <span className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-            {t(locale, "positionY")}
+            {t(locale, "positionZ")}
           </span>
           <input
             type="number"
@@ -1250,8 +1251,8 @@ function SelectedObjectEditor({
   const updateObjectProperties = useRoomStore((state) => state.updateObjectProperties);
   const deleteObject = useRoomStore((state) => state.deleteObject);
   const roomHeight = useRoomStore((state) => state.roomData.room.height);
-  const mountHeight =
-    typeof object.params.mountHeight === "number" ? object.params.mountHeight : 0;
+  const isWallObject = isWallAttachedObject(object);
+  const mountHeight = getMountHeight(object);
   const maxObjectHeight = Math.max(0.05, Number((roomHeight - mountHeight).toFixed(2)));
   const objectLockLabel = object.locked ? t(locale, "unlock") : t(locale, "lock");
 
@@ -1342,7 +1343,7 @@ function SelectedObjectEditor({
           </label>
           <label className="space-y-1">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
-              {t(locale, "positionZ")}
+              {t(locale, "positionY")}
             </span>
             <input
               type="number"
@@ -1352,6 +1353,25 @@ function SelectedObjectEditor({
               onChange={(event) =>
                 updateNumericProperty(event.currentTarget.valueAsNumber, {
                   position: { z: event.currentTarget.valueAsNumber },
+                })
+              }
+              className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              {t(locale, "positionZ")}
+            </span>
+            <input
+              type="number"
+              step="0.05"
+              min="0"
+              max={maxObjectHeight}
+              value={isWallObject ? mountHeight : 0}
+              disabled={object.locked || !isWallObject}
+              onChange={(event) =>
+                updateNumericProperty(event.currentTarget.valueAsNumber, {
+                  mountHeight: event.currentTarget.valueAsNumber,
                 })
               }
               className="w-full rounded-xl border border-white/10 bg-[#111924] px-3 py-2 text-white outline-none transition focus:border-[#4ea8ff] disabled:cursor-not-allowed disabled:opacity-45"

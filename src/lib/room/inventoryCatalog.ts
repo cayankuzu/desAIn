@@ -1,4 +1,5 @@
 import type { GeneratorName, ObjectCategory, RoomObject } from "@/types/room";
+import { getRuntimeInventoryTemplates } from "@/lib/room/runtimeInventoryCatalog";
 
 export const INVENTORY_DRAG_MIME = "application/x-desain-object-template";
 
@@ -1153,4 +1154,11 @@ export const featuredInventory = curatedInventoryCatalog.filter((item) =>
 );
 
 export const getInventoryTemplateById = (templateId: string) =>
-  inventoryCatalog.find((item) => item.id === templateId) ?? null;
+  inventoryCatalog.find((item) => item.id === templateId) ??
+  getRuntimeInventoryTemplates().find((item) => item.id === templateId) ??
+  null;
+
+export const getInventoryCatalogWithRuntime = () => [
+  ...inventoryCatalog,
+  ...getRuntimeInventoryTemplates(),
+];
