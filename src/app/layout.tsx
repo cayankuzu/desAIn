@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "desAIn",
-  description: "Professional 3D room planning and smart layout editor.",
+  title: "İşin Mutfağı | 3D Oda Editörü",
+  description: "Professional 3D room planning and layout editor.",
 };
 
 export default function RootLayout({

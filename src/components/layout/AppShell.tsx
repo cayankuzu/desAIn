@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Boxes, Lock, Shuffle, Trash2, Ungroup } from "lucide-react";
+import { Boxes, Lock, Monitor, Shuffle, Trash2, Ungroup } from "lucide-react";
 import {
   t,
 } from "@/lib/i18n/translations";
@@ -18,13 +18,12 @@ import {
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { useRoomStore } from "@/store/roomStore";
 import { useUIStore } from "@/store/uiStore";
-import { useProjectStore } from "@/store/projectStore";
 import { EditorHotkeys } from "@/components/layout/EditorHotkeys";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { ViewportHud } from "@/components/layout/ViewportHud";
+import { MobileRoomViewportPreview } from "@/components/layout/MobileRoomViewportPreview";
 import { RoomScene } from "@/components/room/RoomScene";
-import { AiChatPanel } from "@/components/ai/AiChatPanel";
 import { buildEditorStatusToast, buildStructureToast, type EditorToast } from "@/lib/editor/toasts";
 import type { RoomData, RoomObject } from "@/types/room";
 
@@ -42,20 +41,79 @@ const emptyDragPreview: DragPreviewState = {
   position: null,
 };
 
-function getMobileKitchenNoticeCopy(locale: "tr" | "en") {
+function getMobileDesktopNoticeCopy(locale: "tr" | "en") {
   return locale === "en"
     ? {
-        badge: "Kitchen",
-        title: "Kitchen mode is only available on desktop",
-        body: "On mobile you can only access desAIn. Open the project on a computer to edit, move, and use the advanced tools.",
-        button: "OK",
+        eyebrow: "Mobile preview",
+        title: "Please open on desktop",
+        body: "Editing and layout generation are available only on a computer. On mobile, you can only browse the room previews below.",
+        note: "This notice cannot be closed.",
       }
     : {
-        badge: "İşin Mutfağı",
-        title: "İşin Mutfağı sadece bilgisayarda açılabilir",
-        body: "Mobilde sadece desAIn ekranına erişebilirsin. Düzenleme, taşıma ve gelişmiş araçlar için bilgisayardan aç.",
-        button: "Tamam",
+        eyebrow: "Mobil \u00f6nizleme",
+        title: "L\u00fctfen bilgisayardan a\u00e7\u0131n\u0131z",
+        body: "D\u00fczenleme ve yerle\u015fim olu\u015fturma yaln\u0131zca bilgisayarda a\u00e7\u0131kt\u0131r. Telefondan sadece a\u015fa\u011f\u0131daki oda \u00f6nizlemeleri gezilebilir.",
+        note: "Bu uyar\u0131 kapat\u0131lamaz.",
       };
+}
+
+const mobilePreviewPurposes = [
+  "living",
+  "kitchen",
+  "bedroom",
+  "kids",
+  "study",
+  "bathroom",
+  "dining",
+  "laundry",
+  "entry",
+  "balcony",
+  "dressing",
+] as const;
+
+function MobileDesktopNotice({ locale }: { locale: "tr" | "en" }) {
+  const copy = getMobileDesktopNoticeCopy(locale);
+
+  return (
+    <main className="mobile-desktop-gate relative h-dvh overflow-y-auto bg-[#080d12] px-4 pb-8 pt-36 text-white">
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-40 h-40 bg-gradient-to-b from-[#080d12] via-[#080d12]/92 to-transparent" />
+      <section className="fixed left-3 right-3 top-3 z-50 mx-auto max-w-md rounded-[1.35rem] border border-white/14 bg-[#111922]/92 p-3.5 shadow-[0_18px_48px_rgba(0,0,0,0.5)] backdrop-blur-2xl">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#ffb36c]/35 bg-[#2a180c] text-[#ffd7a7]">
+            <Monitor className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[9px] font-semibold uppercase tracking-[0.24em] text-[#ffb36c]">
+              {copy.eyebrow}
+            </div>
+            <h1 className="mt-1 text-lg font-semibold leading-6 tracking-[-0.03em] text-white">
+              {copy.title}
+            </h1>
+            <p className="mt-1.5 text-xs leading-5 text-slate-300">{copy.body}</p>
+            <div className="mt-2 inline-flex rounded-full border border-[#ffb36c]/20 bg-[#2a180c]/80 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#ffd7a7]">
+              {copy.note}
+            </div>
+          </div>
+        </div>
+      </section>
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_8%,rgba(255,179,108,0.2),transparent_28%),radial-gradient(circle_at_84%_14%,rgba(114,177,255,0.18),transparent_30%),linear-gradient(180deg,rgba(8,13,18,0.2),rgba(8,13,18,0.95))]" />
+      <div className="relative z-10 space-y-4">
+        <div className="px-1">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+            {locale === "en" ? "View-only gallery" : "Sadece \u00f6nizleme galerisi"}
+          </div>
+          <p className="mt-2 max-w-sm text-sm leading-6 text-slate-300">
+            {locale === "en"
+              ? "Room scenes keep moving under the notice, but all editing tools are locked on phones."
+              : "Oda sahneleri uyar\u0131n\u0131n alt\u0131nda gezilebilir; telefonda d\u00fczenleme ara\u00e7lar\u0131 kapal\u0131d\u0131r."}
+          </p>
+        </div>
+        {mobilePreviewPurposes.map((purpose) => (
+          <MobileRoomViewportPreview key={purpose} locale={locale} purpose={purpose} />
+        ))}
+      </div>
+    </main>
+  );
 }
 
 const getViewportRoomPosition = (
@@ -131,8 +189,6 @@ const createPreviewObjectFromTemplate = (
 export function AppShell() {
   const locale = useUIStore((state) => state.locale);
   const setLocale = useUIStore((state) => state.setLocale);
-  const workspaceMode = useUIStore((state) => state.workspaceMode);
-  const setWorkspaceMode = useUIStore((state) => state.setWorkspaceMode);
   const selectedStructure = useUIStore((state) => state.selectedStructure);
   const isMobile = useMediaQuery("(max-width: 767px)");
   const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
@@ -140,11 +196,9 @@ export function AppShell() {
   const multiSelectMenu = useUIStore((state) => state.multiSelectMenu);
   const setMultiSelectMenu = useUIStore((state) => state.setMultiSelectMenu);
   const roomData = useRoomStore((state) => state.roomData);
-  const loadRoomData = useRoomStore((state) => state.loadRoomData);
   const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
   const selectedObjectIds = useRoomStore((state) => state.selectedObjectIds);
   const selectedGroupId = useRoomStore((state) => state.selectedGroupId);
-  const setSelectedObjectId = useRoomStore((state) => state.setSelectedObjectId);
   const addObjectFromTemplate = useRoomStore((state) => state.addObjectFromTemplate);
   const lastEditorStatus = useRoomStore((state) => state.lastEditorStatus);
   const groupSelectedObjects = useRoomStore((state) => state.groupSelectedObjects);
@@ -153,10 +207,6 @@ export function AppShell() {
   const deleteSelectedObjects = useRoomStore((state) => state.deleteSelectedObjects);
   const toggleSelectedObjectsLock = useRoomStore((state) => state.toggleSelectedObjectsLock);
 
-  const initProjects = useProjectStore((state) => state.init);
-  const activeProjectId = useProjectStore((state) => state.activeProjectId);
-  const activeProject = useProjectStore((state) => state.activeProject);
-  const saveRoomData = useProjectStore((state) => state.saveRoomData);
   const [panelsHidden, setPanelsHidden] = useState(false);
   const [toast, setToast] = useState<{
     id: number;
@@ -165,12 +215,9 @@ export function AppShell() {
     tone?: EditorToast["tone"];
   } | null>(null);
   const roomDataRef = useRef(roomData);
-  const lastLoadedProjectIdRef = useRef<string | null>(null);
-  const autosaveTimeoutRef = useRef<number | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
   const activeInventoryDragTemplateIdRef = useRef<string | null>(null);
   const [dragPreview, setDragPreview] = useState<DragPreviewState>(emptyDragPreview);
-  const [mobileKitchenNoticeOpen, setMobileKitchenNoticeOpen] = useState(false);
   const selectedIdsSet = useMemo(
     () => new Set(selectedObjectIds),
     [selectedObjectIds],
@@ -207,10 +254,6 @@ export function AppShell() {
   }, [locale]);
 
   useEffect(() => {
-    void initProjects();
-  }, [initProjects]);
-
-  useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
@@ -219,83 +262,17 @@ export function AppShell() {
     if (storedLocale === "tr" || storedLocale === "en") {
       setLocale(storedLocale);
     }
-
-    const storedWorkspaceMode = window.localStorage.getItem("desain-workspace-mode");
-    if (storedWorkspaceMode === "ai" || storedWorkspaceMode === "kitchen") {
-      setWorkspaceMode(storedWorkspaceMode);
-    }
-  }, [setLocale, setWorkspaceMode]);
-
-  useEffect(() => {
-    if (!activeProjectId || !activeProject?.roomData) {
-      return;
-    }
-
-    const loadKey = `${activeProjectId}:${activeProject.meta.analyzedAt ?? "initial"}`;
-    if (lastLoadedProjectIdRef.current === loadKey) {
-      return;
-    }
-
-    lastLoadedProjectIdRef.current = loadKey;
-    loadRoomData(activeProject.roomData);
-  }, [activeProject?.meta.analyzedAt, activeProject?.roomData, activeProjectId, loadRoomData]);
-
-  useEffect(() => {
-    if (activeProjectId) {
-      return;
-    }
-
-    lastLoadedProjectIdRef.current = null;
-    setSelectedObjectId(null);
-    setSelectedStructure(null);
-    setMultiSelectMenu(null);
-  }, [activeProjectId, setMultiSelectMenu, setSelectedObjectId, setSelectedStructure]);
+  }, [setLocale]);
 
   useEffect(() => {
     roomDataRef.current = roomData;
   }, [roomData]);
 
   useEffect(() => {
-    if (!activeProjectId) return;
-
-    if (autosaveTimeoutRef.current) {
-      window.clearTimeout(autosaveTimeoutRef.current);
-    }
-
-    autosaveTimeoutRef.current = window.setTimeout(() => {
-      autosaveTimeoutRef.current = null;
-      void saveRoomData(activeProjectId, roomDataRef.current);
-    }, 650);
-
-    return () => {
-      if (autosaveTimeoutRef.current) {
-        window.clearTimeout(autosaveTimeoutRef.current);
-        autosaveTimeoutRef.current = null;
-      }
-    };
-  }, [activeProjectId, roomData, saveRoomData]);
-
-  useEffect(() => {
     if (selectedObjectIds.length < 2) {
       setMultiSelectMenu(null);
     }
   }, [selectedObjectIds.length, setMultiSelectMenu]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (!isMobile) {
-        setMobileKitchenNoticeOpen(false);
-        return;
-      }
-
-      if (workspaceMode === "kitchen") {
-        setWorkspaceMode("ai");
-        setMobileKitchenNoticeOpen(true);
-      }
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, [isMobile, setWorkspaceMode, workspaceMode]);
 
   useEffect(() => {
     const handleDragStart = (event: Event) => {
@@ -386,7 +363,7 @@ export function AppShell() {
     }
 
     const link = document.createElement("a");
-    link.download = `desain-room-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png`;
+    link.download = `isin-mutfagi-room-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
     showToast({ title: t(locale, "captureScreenshot"), tone: "success" });
@@ -404,38 +381,7 @@ export function AppShell() {
   };
 
   if (isMobile) {
-    return (
-      <main className="h-dvh overflow-hidden px-3 py-3">
-        <div className="mx-auto flex h-full min-h-0 w-full max-w-[560px] flex-col">
-          <AiChatPanel />
-        </div>
-        {mobileKitchenNoticeOpen ? (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/72 p-4">
-            <div className="w-full max-w-sm rounded-2xl border border-[#6d4a29] bg-[#25180f] p-4 shadow-[0_26px_80px_rgba(0,0,0,0.4)]">
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#f5c28b]">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                {getMobileKitchenNoticeCopy(locale).badge}
-              </div>
-              <div className="mt-3 text-base font-semibold text-white">
-                {getMobileKitchenNoticeCopy(locale).title}
-              </div>
-              <div className="mt-2 text-sm leading-6 text-[#f8dec0]">
-                {getMobileKitchenNoticeCopy(locale).body}
-              </div>
-              <div className="mt-4 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setMobileKitchenNoticeOpen(false)}
-                  className="inline-flex h-9 items-center justify-center rounded-xl border border-[#6d4a29] bg-[#102234] px-3 text-sm font-semibold text-[#f5c28b] transition hover:border-[#ffb16a] hover:text-white"
-                >
-                  {getMobileKitchenNoticeCopy(locale).button}
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </main>
-    );
+    return <MobileDesktopNotice locale={locale} />;
   }
 
   return (
@@ -450,13 +396,9 @@ export function AppShell() {
 
         <section
           className={`grid min-h-0 flex-1 gap-4 ${
-            workspaceMode === "ai"
-              ? panelsHidden
-                ? "grid-cols-1"
-                : "grid-cols-1 md:grid-cols-[minmax(0,1fr)_560px]"
-              : panelsHidden
-                ? "grid-cols-1"
-                : "grid-rows-[minmax(320px,44vh)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_560px] xl:grid-rows-none"
+            panelsHidden
+              ? "grid-cols-1"
+              : "grid-rows-[minmax(320px,44vh)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_560px] xl:grid-rows-none"
           }`}
         >
           <div
@@ -605,7 +547,7 @@ export function AppShell() {
             </div>
           </div>
 
-          {workspaceMode === "ai" ? (panelsHidden ? null : <AiChatPanel />) : panelsHidden ? null : <Sidebar />}
+          {panelsHidden ? null : <Sidebar />}
         </section>
       </div>
       {toast ? (
@@ -619,7 +561,7 @@ export function AppShell() {
           }`}
         >
           <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/60">
-            desAIn
+            İşin Mutfağı
           </div>
           <div className="mt-1 text-sm font-semibold text-white">{toast.title}</div>
           {toast.detail ? (

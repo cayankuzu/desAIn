@@ -20,7 +20,6 @@ import {
 } from "@/lib/i18n/translations";
 import { useRoomStore } from "@/store/roomStore";
 import { useUIStore } from "@/store/uiStore";
-import { WorkspaceModeSwitch } from "@/components/layout/WorkspaceModeSwitch";
 
 const modeButtonBase =
   "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition";
@@ -42,7 +41,6 @@ export function Topbar({
 }: TopbarProps) {
   const locale = useUIStore((state) => state.locale);
   const setLocale = useUIStore((state) => state.setLocale);
-  const workspaceMode = useUIStore((state) => state.workspaceMode);
   const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
   const transformMode = useRoomStore((state) => state.transformMode);
   const setTransformMode = useRoomStore((state) => state.setTransformMode);
@@ -83,7 +81,9 @@ export function Topbar({
     <header className="editor-panel relative z-50 overflow-visible px-3 py-2.5">
       <div className="flex flex-col gap-2 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <div className="toolbar-scroll -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1">
-          <WorkspaceModeSwitch />
+          <div className="inline-flex h-8 shrink-0 items-center rounded-lg border border-white/10 bg-[#102234] px-3 text-xs font-semibold text-white">
+            {locale === "en" ? "Kitchen" : "İşin Mutfağı"}
+          </div>
           <div className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-[#0d141d] p-0.5">
             <div className="hidden px-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 sm:block">
               <span className="inline-flex items-center gap-1.5">
@@ -173,11 +173,6 @@ export function Topbar({
         </div>
 
         <div className="toolbar-scroll -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1">
-          {workspaceMode === "ai" ? (
-            <div className="inline-flex h-8 items-center rounded-lg border border-white/10 bg-[#0d141d] px-3 text-xs font-semibold text-slate-300">
-              desAIn
-            </div>
-          ) : null}
           <button
             type="button"
             onClick={undo}

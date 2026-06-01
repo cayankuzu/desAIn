@@ -34,7 +34,6 @@ import {
 } from "@/lib/room/roomGeometry";
 import type {
   CameraMode,
-  LayoutResponse,
   LayoutWarning,
   Opening,
   RoomData,
@@ -163,19 +162,125 @@ const getNextGroupLabel = (roomData: RoomData, objectIds: string[]) => {
 const getObjectBaseShape = (object: Pick<RoomObject, "params">) =>
   String(object.params.baseShape ?? "");
 
-const shouldPreferWallPlacement = (object: RoomObject) => {
+const serviceWallShapes = new Set([
+  "appliance_box",
+  "cooktop",
+  "washer",
+  "kitchen_sink",
+  "shower",
+  "toilet",
+  "bathtub",
+  "radiator",
+]);
+
+const kitchenRunLabels = new Set([
+  "object.counter",
+  "object.baseCabinet",
+  "object.upperCabinet",
+  "object.kitchenSink",
+  "object.cooktop",
+  "object.oven",
+  "object.dishwasher",
+  "object.fridge",
+  "object.pantryCabinet",
+  "object.tallOvenCabinet",
+  "object.cornerBaseCabinet",
+  "object.microwave",
+  "object.rangeHood",
+  "object.openKitchenShelf",
+  "object.trashPullout",
+]);
+
+const laundryRunLabels = new Set([
+  "object.washer",
+  "object.dryer",
+  "object.laundryCounter",
+  "object.linenCabinet",
+  "object.utilityCart",
+]);
+
+const bathRunLabels = new Set([
+  "object.vanity",
+  "object.roundSink",
+  "object.toilet",
+  "object.showerCabin",
+  "object.bathtub",
+  "object.towelRack",
+  "object.linenCabinet",
+  "object.bathStorageColumn",
+]);
+
+const nightstandLabels = new Set([
+  "object.nightstand",
+  "object.sideTable",
+  "object.tableLamp",
+]);
+
+const diningTableLabels = new Set([
+  "object.diningTable",
+  "object.roundTable",
+]);
+
+const deskLabels = new Set([
+  "object.desk",
+  "object.makeupVanity",
+]);
+
+const kitchenWorkSurfaceLabels = new Set([
+  "object.counter",
+  "object.kitchenIsland",
+  "object.laundryCounter",
+]);
+
+const bedroomStorageLabels = new Set([
+  "object.tallWardrobe",
+  "object.dresser",
+  "object.bedroomBench",
+  "object.clothesRack",
+  "object.fullHeightMirror",
+  "object.makeupVanity",
+]);
+
+const entryRunLabels = new Set([
+  "object.shoeRack",
+  "object.coatStand",
+  "object.wallHook",
+  "object.entryHangerPanel",
+  "object.keyTrayConsole",
+  "object.umbrellaStand",
+]);
+
+const isLowFloorObject = (object: Pick<RoomObject, "category" | "dimensions">) =>
+  object.category === "carpet" || object.dimensions.height <= 0.06;
+
+const isCeilingObject = (object: Pick<RoomObject, "params">) =>
+  getObjectBaseShape(object) === "ceiling_light";
+
+const isServiceWallObject = (object: RoomObject) =>
+  serviceWallShapes.has(getObjectBaseShape(object)) ||
+  kitchenRunLabels.has(object.labelKey) ||
+  laundryRunLabels.has(object.labelKey) ||
+  bathRunLabels.has(object.labelKey);
+
+const isWallBackedFurniture = (object: RoomObject) => {
   const baseShape = getObjectBaseShape(object);
 
   return (
-    object.category === "sofa" ||
-    object.category === "bed" ||
     object.category === "wardrobe" ||
+    object.category === "bed" ||
     object.category === "tv_unit" ||
-    baseShape === "appliance_box" ||
-    baseShape === "washer" ||
-    baseShape === "kitchen_sink" ||
     baseShape === "piano" ||
+    baseShape === "floor_mirror" ||
+    baseShape === "low_shelf" ||
     baseShape === "door_panel"
+  );
+};
+
+const shouldPreferWallPlacement = (object: RoomObject) => {
+  return (
+    object.category === "sofa" ||
+    isWallBackedFurniture(object) ||
+    isServiceWallObject(object)
   );
 };
 
@@ -262,6 +367,634 @@ const getFacingQuality = (
   const dot = forward.x * (dx / distance) + forward.z * (dz / distance);
 
   return Math.max(0, Math.min(1, (dot + 1) / 2));
+};
+
+const getNearestWallProjection = (roomData: RoomData, object: RoomObject) =>
+  projectPointToWall(roomData.room, object.position);
+
+const getWallBackGap = (roomData: RoomData, object: RoomObject) => {
+  const projection = getNearestWallProjection(roomData, object);
+
+  if (!projection) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Math.max(0, projection.distance - object.dimensions.depth / 2);
+};
+
+const getFunctionalRun = (object: RoomObject) => {
+  if (kitchenRunLabels.has(object.labelKey)) return "kitchen";
+  if (laundryRunLabels.has(object.labelKey)) return "laundry";
+  if (bathRunLabels.has(object.labelKey)) return "bath";
+  if (object.category === "wardrobe") return "storage";
+
+  return null;
+};
+
+const isConversationTable = (object: RoomObject) =>
+  object.labelKey === "object.coffeeTable" ||
+  object.labelKey === "object.sideTable" ||
+  object.labelKey === "object.pouf" ||
+  object.labelKey === "object.storageOttoman";
+
+const isSeatObject = (object: RoomObject) =>
+  object.category === "sofa" ||
+  object.category === "chair" ||
+  object.labelKey === "object.pouf" ||
+  object.labelKey === "object.beanBag" ||
+  object.labelKey === "object.storageOttoman";
+
+const isMediaObject = (object: RoomObject) =>
+  object.category === "tv_unit" || getObjectBaseShape(object) === "wall_tv";
+
+const isDiningTableObject = (object: RoomObject) =>
+  diningTableLabels.has(object.labelKey);
+
+const isDiningChairObject = (object: RoomObject) =>
+  object.labelKey === "object.diningChair";
+
+const isOfficeChairObject = (object: RoomObject) =>
+  object.labelKey === "object.officeChair";
+
+const isDeskObject = (object: RoomObject) => deskLabels.has(object.labelKey);
+
+const isBarStoolObject = (object: RoomObject) =>
+  object.labelKey === "object.barStool";
+
+const isKitchenWorkSurface = (object: RoomObject) =>
+  kitchenWorkSurfaceLabels.has(object.labelKey);
+
+const isNightstandObject = (object: RoomObject) =>
+  nightstandLabels.has(object.labelKey);
+
+const isWasherDryerObject = (object: RoomObject) =>
+  object.labelKey === "object.washer" || object.labelKey === "object.dryer";
+
+const isMirrorObject = (object: RoomObject) =>
+  object.labelKey === "object.mirrorPanel" ||
+  object.labelKey === "object.roundWallMirror" ||
+  object.labelKey === "object.floorMirror" ||
+  object.labelKey === "object.fullHeightMirror";
+
+const isCenterAllowedAnchor = (object: RoomObject) =>
+  object.labelKey === "object.diningTable" ||
+  object.labelKey === "object.roundTable" ||
+  object.labelKey === "object.kitchenIsland" ||
+  object.labelKey === "object.coffeeTable" ||
+  object.labelKey === "object.storageOttoman" ||
+  object.labelKey === "object.pouf" ||
+  object.labelKey === "object.beanBag" ||
+  object.category === "carpet";
+
+const isCornerAccentObject = (object: RoomObject) => {
+  const baseShape = getObjectBaseShape(object);
+
+  return (
+    baseShape === "lamp" ||
+    baseShape === "plant" ||
+    baseShape === "coat_stand" ||
+    baseShape === "laundry_basket" ||
+    baseShape === "umbrella_stand" ||
+    object.labelKey === "object.smallPlant" ||
+    object.labelKey === "object.largePlanter"
+  );
+};
+
+const getNearestMatchingObject = (
+  object: RoomObject,
+  objects: RoomObject[],
+  predicate: (candidate: RoomObject) => boolean,
+) =>
+  objects
+    .filter((candidate) => candidate.id !== object.id && predicate(candidate))
+    .sort(
+      (left, right) =>
+        Math.hypot(object.position.x - left.position.x, object.position.z - left.position.z) -
+        Math.hypot(object.position.x - right.position.x, object.position.z - right.position.z),
+    )[0] ?? null;
+
+const getObjectDistance = (left: RoomObject, right: RoomObject) =>
+  Math.hypot(left.position.x - right.position.x, left.position.z - right.position.z);
+
+const getDistanceRangePenalty = (
+  distance: number,
+  min: number,
+  max: number,
+  weight: number,
+) => {
+  if (distance < min) {
+    return (min - distance) * weight;
+  }
+
+  if (distance > max) {
+    return Math.min(distance - max, 3) * weight;
+  }
+
+  return 0;
+};
+
+const getSameWallPenalty = (
+  roomData: RoomData,
+  left: RoomObject,
+  right: RoomObject,
+  penalty: number,
+) => {
+  const leftWall = getNearestWallProjection(roomData, left)?.wall.id;
+  const rightWall = getNearestWallProjection(roomData, right)?.wall.id;
+
+  return leftWall && rightWall && leftWall !== rightWall ? penalty : 0;
+};
+
+const getRoomPurposeFitPenalty = (roomData: RoomData, object: RoomObject) => {
+  const purpose = roomData.room.purpose;
+  const isKitchenItem =
+    kitchenRunLabels.has(object.labelKey) ||
+    isKitchenWorkSurface(object) ||
+    object.labelKey === "object.barStool";
+  const isLaundryItem =
+    laundryRunLabels.has(object.labelKey) ||
+    object.labelKey === "object.ironingBoard" ||
+    object.labelKey === "object.dryingRack";
+  const isBathItem = bathRunLabels.has(object.labelKey);
+  const isBedroomItem =
+    object.category === "bed" ||
+    bedroomStorageLabels.has(object.labelKey) ||
+    isNightstandObject(object);
+  const isEntryItem = entryRunLabels.has(object.labelKey);
+
+  if (isKitchenItem && !["kitchen", "dining", "laundry"].includes(purpose)) {
+    return 28;
+  }
+
+  if (isLaundryItem && !["laundry", "bathroom", "kitchen"].includes(purpose)) {
+    return 42;
+  }
+
+  if (isBathItem && !["bathroom", "laundry"].includes(purpose)) {
+    return 52;
+  }
+
+  if (isBedroomItem && !["bedroom", "kids", "dressing"].includes(purpose)) {
+    return 18;
+  }
+
+  if (isEntryItem && purpose !== "entry") {
+    return 14;
+  }
+
+  return 0;
+};
+
+const getProfessionalObjectRelationshipPenalty = (
+  roomData: RoomData,
+  objects: RoomObject[],
+  object: RoomObject,
+) => {
+  const relatedObjects = objects.filter((candidate) => candidate.id !== object.id);
+  let penalty = 0;
+
+  if (isSeatObject(object)) {
+    const nearestMedia = getNearestMatchingObject(object, relatedObjects, isMediaObject);
+    const nearestTable = getNearestMatchingObject(
+      object,
+      relatedObjects,
+      (candidate) => isConversationTable(candidate) || isDiningTableObject(candidate),
+    );
+
+    if (nearestMedia) {
+      const distance = getObjectDistance(object, nearestMedia);
+      penalty += getDistanceRangePenalty(distance, 1.45, 4.6, object.category === "sofa" ? 18 : 12);
+      penalty += (1 - getFacingQuality(object, nearestMedia.position)) * 26;
+    } else if (nearestTable) {
+      const distance = getObjectDistance(object, nearestTable);
+      penalty += getDistanceRangePenalty(distance, 0.5, 1.55, 14);
+      penalty += (1 - getFacingQuality(object, nearestTable.position)) * 12;
+    }
+  }
+
+  if (isMediaObject(object)) {
+    const nearestSeat = getNearestMatchingObject(object, relatedObjects, isSeatObject);
+
+    if (nearestSeat) {
+      const distance = getObjectDistance(object, nearestSeat);
+      penalty += getDistanceRangePenalty(distance, 1.45, 4.8, 16);
+      penalty += (1 - getFacingQuality(object, nearestSeat.position)) * 30;
+      penalty += (1 - getFacingQuality(nearestSeat, object.position)) * 10;
+    }
+  }
+
+  if (isDiningChairObject(object)) {
+    const nearestDiningTable = getNearestMatchingObject(
+      object,
+      relatedObjects,
+      isDiningTableObject,
+    );
+
+    if (nearestDiningTable) {
+      const distance = getObjectDistance(object, nearestDiningTable);
+      penalty += getDistanceRangePenalty(distance, 0.54, 1.18, 34);
+      penalty += (1 - getFacingQuality(object, nearestDiningTable.position)) * 26;
+    }
+  }
+
+  if (isBarStoolObject(object)) {
+    const nearestWorkSurface = getNearestMatchingObject(
+      object,
+      relatedObjects,
+      (candidate) =>
+        candidate.labelKey === "object.kitchenIsland" ||
+        candidate.labelKey === "object.counter",
+    );
+
+    if (nearestWorkSurface) {
+      const distance = getObjectDistance(object, nearestWorkSurface);
+      penalty += getDistanceRangePenalty(distance, 0.48, 1.05, 30);
+      penalty += (1 - getFacingQuality(object, nearestWorkSurface.position)) * 20;
+    }
+  }
+
+  if (isOfficeChairObject(object)) {
+    const nearestDesk = getNearestMatchingObject(object, relatedObjects, isDeskObject);
+
+    if (nearestDesk) {
+      const distance = getObjectDistance(object, nearestDesk);
+      penalty += getDistanceRangePenalty(distance, 0.42, 0.96, 32);
+      penalty += (1 - getFacingQuality(object, nearestDesk.position)) * 24;
+    }
+  }
+
+  if (isDeskObject(object)) {
+    const nearestOfficeChair = getNearestMatchingObject(
+      object,
+      relatedObjects,
+      isOfficeChairObject,
+    );
+    const nearestMonitor = getNearestMatchingObject(
+      object,
+      relatedObjects,
+      (candidate) => candidate.labelKey === "object.monitor",
+    );
+
+    if (nearestOfficeChair) {
+      penalty += getDistanceRangePenalty(getObjectDistance(object, nearestOfficeChair), 0.42, 1, 22);
+    }
+
+    if (nearestMonitor) {
+      penalty += getDistanceRangePenalty(getObjectDistance(object, nearestMonitor), 0.08, 0.82, 18);
+    }
+  }
+
+  if (object.category === "bed") {
+    const nightstands = relatedObjects
+      .filter(isNightstandObject)
+      .map((candidate) => ({
+        object: candidate,
+        distance: getObjectDistance(object, candidate),
+      }))
+      .sort((left, right) => left.distance - right.distance);
+
+    nightstands.slice(0, 2).forEach(({ distance }) => {
+      penalty += getDistanceRangePenalty(distance, 0.58, 1.65, 24);
+    });
+
+    if (nightstands.length >= 2) {
+      const [first, second] = nightstands;
+      const angleA = Math.atan2(
+        first.object.position.z - object.position.z,
+        first.object.position.x - object.position.x,
+      );
+      const angleB = Math.atan2(
+        second.object.position.z - object.position.z,
+        second.object.position.x - object.position.x,
+      );
+      const angleDifference = Math.abs(Math.atan2(Math.sin(angleA - angleB), Math.cos(angleA - angleB)));
+
+      penalty += angleDifference < 0.78 ? 28 : 0;
+    }
+  }
+
+  if (isNightstandObject(object)) {
+    const nearestBed = getNearestMatchingObject(
+      object,
+      relatedObjects,
+      (candidate) => candidate.category === "bed",
+    );
+
+    if (nearestBed) {
+      penalty += getDistanceRangePenalty(getObjectDistance(object, nearestBed), 0.5, 1.7, 28);
+    }
+  }
+
+  if (isConversationTable(object)) {
+    const seatsInReach = relatedObjects.filter(
+      (candidate) => isSeatObject(candidate) && getObjectDistance(object, candidate) <= 1.8,
+    );
+
+    if (seatsInReach.length) {
+      const nearestDistance = Math.min(
+        ...seatsInReach.map((candidate) => getObjectDistance(object, candidate)),
+      );
+
+      penalty += getDistanceRangePenalty(nearestDistance, 0.48, 1.4, 20);
+    } else {
+      penalty += 18;
+    }
+  }
+
+  if (isWasherDryerObject(object)) {
+    const pairedMachine = getNearestMatchingObject(
+      object,
+      relatedObjects,
+      (candidate) => isWasherDryerObject(candidate) && candidate.labelKey !== object.labelKey,
+    );
+    const foldingCounter = getNearestMatchingObject(
+      object,
+      relatedObjects,
+      (candidate) => candidate.labelKey === "object.laundryCounter",
+    );
+
+    if (pairedMachine) {
+      penalty += getDistanceRangePenalty(getObjectDistance(object, pairedMachine), 0.55, 1.35, 36);
+      penalty += getSameWallPenalty(roomData, object, pairedMachine, 34);
+    }
+
+    if (foldingCounter) {
+      penalty += getDistanceRangePenalty(getObjectDistance(object, foldingCounter), 0.65, 2.15, 12);
+    }
+  }
+
+  if (object.labelKey === "object.vanity" || object.labelKey === "object.roundSink") {
+    const nearestMirror = getNearestMatchingObject(object, relatedObjects, isMirrorObject);
+
+    if (nearestMirror) {
+      penalty += getDistanceRangePenalty(getObjectDistance(object, nearestMirror), 0.05, 0.95, 24);
+      penalty += getSameWallPenalty(roomData, object, nearestMirror, 24);
+    }
+  }
+
+  if (object.category === "carpet") {
+    const nearestAnchor = getNearestMatchingObject(
+      object,
+      relatedObjects,
+      (candidate) =>
+        isSeatObject(candidate) ||
+        isConversationTable(candidate) ||
+        isDiningTableObject(candidate),
+    );
+
+    if (nearestAnchor) {
+      penalty += getDistanceRangePenalty(getObjectDistance(object, nearestAnchor), 0, 0.95, 18);
+    }
+  }
+
+  return penalty;
+};
+
+const getDoorCirculationZones = (roomData: RoomData) => {
+  const corridorWidth = Math.max(0.72, roomData.constraints.minWalkwayWidth);
+
+  return roomData.room.openings
+    .filter((opening) => opening.type === "door" || opening.type === "balcony_door")
+    .map((opening) => {
+      const wall = getWallSegment(roomData.room, opening.wallId);
+
+      if (!wall) {
+        return null;
+      }
+
+      const metrics = getWallMetrics(wall);
+      const start = {
+        x: wall.from[0] + metrics.directionX * opening.position,
+        z: wall.from[1] + metrics.directionZ * opening.position,
+      };
+      const depth = Math.min(
+        2.3,
+        Math.max(1.35, Math.max(roomData.room.width, roomData.room.depth) * 0.28),
+      );
+      const end = {
+        x: start.x + metrics.inwardNormalX * depth,
+        z: start.z + metrics.inwardNormalZ * depth,
+      };
+      const halfWidth = Math.max(corridorWidth, opening.width + 0.18) / 2;
+
+      return {
+        id: `circulation_${opening.id}`,
+        type: opening.type,
+        minX: Math.min(start.x, end.x) - halfWidth,
+        maxX: Math.max(start.x, end.x) + halfWidth,
+        minZ: Math.min(start.z, end.z) - halfWidth,
+        maxZ: Math.max(start.z, end.z) + halfWidth,
+      };
+    })
+    .filter((zone): zone is ReturnType<typeof getActiveClearanceZones>[number] =>
+      Boolean(zone),
+    );
+};
+
+const getFunctionalRunWallPenalty = (
+  roomData: RoomData,
+  objects: RoomObject[],
+  candidate: RoomObject,
+) => {
+  const run = getFunctionalRun(candidate);
+
+  if (!run) {
+    return 0;
+  }
+
+  const candidateWallId = getNearestWallProjection(roomData, candidate)?.wall.id;
+
+  if (!candidateWallId) {
+    return 0;
+  }
+
+  const relatedWalls = objects
+    .filter((object) => object.id !== candidate.id && getFunctionalRun(object) === run)
+    .map((object) => getNearestWallProjection(roomData, object)?.wall.id)
+    .filter((wallId): wallId is string => Boolean(wallId));
+
+  if (!relatedWalls.length || relatedWalls.includes(candidateWallId)) {
+    return 0;
+  }
+
+  return run === "storage" ? 10 : 24;
+};
+
+const getProfessionalObjectPlacementPenalty = (
+  roomData: RoomData,
+  objects: RoomObject[],
+  object: RoomObject,
+) => {
+  if (isFixedDuringRandomize(object) || isWallAttachedObject(object) || isCeilingObject(object)) {
+    return 0;
+  }
+
+  let penalty = 0;
+  const wallGap = getWallBackGap(roomData, object);
+  const roomCenter = {
+    x: roomData.room.width / 2,
+    z: roomData.room.depth / 2,
+  };
+  const centerDistanceRatio =
+    Math.hypot(object.position.x - roomCenter.x, object.position.z - roomCenter.z) /
+    Math.max(roomData.room.width, roomData.room.depth, 0.01);
+
+  if (isServiceWallObject(object)) {
+    penalty += wallGap > 0.18 ? 220 + wallGap * 120 : wallGap * 12;
+    penalty += centerDistanceRatio < 0.28 ? 120 : 0;
+  } else if (isWallBackedFurniture(object)) {
+    penalty += wallGap > 0.28 ? 95 + wallGap * 58 : wallGap * 8;
+  } else if (object.category === "sofa") {
+    penalty += wallGap > 0.42 ? 42 + wallGap * 22 : 0;
+  } else if (isCornerAccentObject(object)) {
+    penalty += wallGap > 0.7 ? 20 + wallGap * 16 : 0;
+    penalty += centerDistanceRatio < 0.24 ? 28 : 0;
+  } else if (isCenterAllowedAnchor(object)) {
+    penalty += wallGap < 0.28 && object.category !== "carpet" ? 22 : 0;
+  }
+
+  if (!isLowFloorObject(object)) {
+    penalty += getDoorCirculationZones(roomData).reduce(
+      (total, zone) => total + (objectIntersectsZone(object, zone) ? 95 : 0),
+      0,
+    );
+  }
+
+  penalty += getFunctionalRunWallPenalty(roomData, objects, object);
+
+  if (object.category === "chair") {
+    const nearestTable = getNearestMatchingObject(
+      object,
+      objects,
+      (candidate) => candidate.category === "table" || isCenterAllowedAnchor(candidate),
+    );
+
+    if (nearestTable) {
+      const tableDistance = Math.hypot(
+        object.position.x - nearestTable.position.x,
+        object.position.z - nearestTable.position.z,
+      );
+
+      penalty += tableDistance < 0.48 ? (0.48 - tableDistance) * 90 : 0;
+      penalty += tableDistance > 1.35 ? Math.min(tableDistance - 1.35, 2) * 22 : 0;
+      penalty += (1 - getFacingQuality(object, nearestTable.position)) * 16;
+    }
+  }
+
+  if (isConversationTable(object)) {
+    const nearestSeat = getNearestMatchingObject(
+      object,
+      objects,
+      (candidate) => candidate.category === "sofa" || candidate.category === "chair",
+    );
+
+    if (nearestSeat) {
+      const seatDistance = Math.hypot(
+        object.position.x - nearestSeat.position.x,
+        object.position.z - nearestSeat.position.z,
+      );
+
+      penalty += seatDistance < 0.45 ? (0.45 - seatDistance) * 70 : 0;
+      penalty += seatDistance > 1.65 ? Math.min(seatDistance - 1.65, 2) * 20 : 0;
+    }
+  }
+
+  return penalty;
+};
+
+const getNegativeSpacePenalty = (roomData: RoomData, objects: RoomObject[]) => {
+  const center = {
+    x: roomData.room.width / 2,
+    z: roomData.room.depth / 2,
+  };
+  const openCoreRadius = Math.min(roomData.room.width, roomData.room.depth) * 0.2;
+  const tallObjectsInCore = objects.filter((object) => {
+    if (
+      isFixedDuringRandomize(object) ||
+      isWallAttachedObject(object) ||
+      isLowFloorObject(object) ||
+      isCenterAllowedAnchor(object)
+    ) {
+      return false;
+    }
+
+    return getObjectDistance(object, {
+      ...object,
+      id: "room_center",
+      position: center,
+    }) < openCoreRadius;
+  });
+
+  return tallObjectsInCore.reduce(
+    (total, object) =>
+      total +
+      (isServiceWallObject(object) || isWallBackedFurniture(object) ? 46 : 16),
+    0,
+  );
+};
+
+const getDiningChairDistributionPenalty = (objects: RoomObject[]) =>
+  objects
+    .filter(isDiningTableObject)
+    .reduce((total, table) => {
+      const nearbyChairs = objects.filter(
+        (object) => isDiningChairObject(object) && getObjectDistance(object, table) <= 1.45,
+      );
+
+      if (nearbyChairs.length < 3) {
+        return total;
+      }
+
+      const quadrants = new Set(
+        nearbyChairs.map((chair) => {
+          const angle = Math.atan2(
+            chair.position.z - table.position.z,
+            chair.position.x - table.position.x,
+          );
+
+          return Math.floor(((angle + Math.PI) / (Math.PI * 2)) * 4);
+        }),
+      );
+
+      return total + (quadrants.size < Math.min(nearbyChairs.length, 4) ? 18 : 0);
+    }, 0);
+
+const getProfessionalLayoutPenalty = (roomData: RoomData, objects: RoomObject[]) =>
+  objects.reduce(
+    (total, object) =>
+      total +
+      getProfessionalObjectPlacementPenalty(roomData, objects, object) +
+      getProfessionalObjectRelationshipPenalty(roomData, objects, object) +
+      getRoomPurposeFitPenalty(roomData, object),
+    0,
+  ) +
+  getNegativeSpacePenalty(roomData, objects) +
+  getDiningChairDistributionPenalty(objects);
+
+const hasHardProfessionalPlacementViolation = (
+  roomData: RoomData,
+  draftObjects: RoomObject[],
+  object: RoomObject,
+) => {
+  if (isFixedDuringRandomize(object) || isWallAttachedObject(object) || isCeilingObject(object)) {
+    return false;
+  }
+
+  if (isServiceWallObject(object) && getWallBackGap(roomData, object) > 0.32) {
+    return true;
+  }
+
+  if (isWallBackedFurniture(object) && getWallBackGap(roomData, object) > 0.55) {
+    return true;
+  }
+
+  if (isLowFloorObject(object)) {
+    return false;
+  }
+
+  return getDoorCirculationZones(roomData).some((zone) =>
+    objectIntersectsZone(object, zone),
+  ) && !draftObjects.some((draftObject) => draftObject.id === object.id);
 };
 
 const getExplicitGroupObjects = (
@@ -928,7 +1661,7 @@ const getRoomDataSignature = (
 
 const getRandomLayoutInputSignature = (roomData: RoomData) =>
   JSON.stringify({
-    algorithm: "systematic-layout-v4-fast",
+    algorithm: "professional-layout-v5",
     room: {
       shape: roomData.room.shape,
       purpose: roomData.room.purpose,
@@ -1059,7 +1792,11 @@ const tryRandomLayout = (
         )
       : 0;
 
-    return validationPenalty + getDesignPenalty(roomData, orientedObjects);
+    return (
+      validationPenalty +
+      getDesignPenalty(roomData, orientedObjects) +
+      getProfessionalLayoutPenalty(roomData, orientedObjects)
+    );
   };
 
   const movementScore = (layoutObjects: RoomObject[]) =>
@@ -1497,6 +2234,7 @@ const getRandomLayoutQualityScore = (
   warnings: LayoutWarning[],
 ) =>
   getDesignPenalty(roomData, objects) +
+  getProfessionalLayoutPenalty(roomData, objects) +
   getLayoutBalancePenalty(roomData, objects) +
   getAwkwardGapPenalty(objects) +
   warnings.reduce(
@@ -1514,9 +2252,10 @@ type PlacementPool = {
   candidates: PlacementCandidate[];
 };
 
-const FLOOR_CANDIDATE_LIMIT = 84;
-const PLACEMENT_CANDIDATE_SCAN_LIMIT = 18;
-const LAYOUT_SEARCH_PASS_LIMIT = 260;
+const FLOOR_CANDIDATE_LIMIT = 120;
+const PLACEMENT_CANDIDATE_SCAN_LIMIT = 42;
+const LAYOUT_SEARCH_PASS_LIMIT = 360;
+const MAX_PROFESSIONAL_RANDOM_OPTIONS = 24;
 
 const getLayoutObjectPriority = (object: RoomObject) => {
   const wallPriority =
@@ -1847,6 +2586,21 @@ const getFastCandidatePlacementScore = (
     Math.hypot(candidate.position.x - roomCenter.x, candidate.position.z - roomCenter.z) /
     Math.max(roomData.room.width, roomData.room.depth, 0.01);
   let relationPenalty = 0;
+  const professionalPenalty = getProfessionalObjectPlacementPenalty(
+    roomData,
+    draftObjects,
+    candidate,
+  );
+  const draftWithCandidate = [
+    ...draftObjects.filter((object) => object.id !== candidate.id),
+    candidate,
+  ];
+  const professionalRelationshipPenalty =
+    getProfessionalObjectRelationshipPenalty(
+      roomData,
+      draftWithCandidate,
+      candidate,
+    ) + getRoomPurposeFitPenalty(roomData, candidate);
 
   if (candidate.category === "sofa" || candidate.category === "chair") {
     const target = nearestTv?.position ?? nearestTable?.position ?? roomCenter;
@@ -1878,6 +2632,8 @@ const getFastCandidatePlacementScore = (
   return (
     clearancePenalty +
     relationPenalty +
+    professionalPenalty +
+    professionalRelationshipPenalty +
     centerDistance * (isWallAttachedObject(candidate) ? 2 : 6) -
     Math.min(movement, 4) * 0.35
   );
@@ -1912,6 +2668,10 @@ const pickPlacementCandidate = (
 
   scanIndexes.forEach((candidateIndex, orderIndex) => {
     const candidate = cloneRoomObject(pool.candidates[candidateIndex].object);
+    if (hasHardProfessionalPlacementViolation(roomData, draftObjects, candidate)) {
+      return;
+    }
+
     const intersects = draftObjects.some((existing) =>
       objectsHavePlacementCollision(existing, candidate, 0.06),
     );
@@ -2147,6 +2907,7 @@ const createRandomLayoutOptions = (
         getRandomLayoutQualityScore(roomData, left.objects, left.warnings) -
         getRandomLayoutQualityScore(roomData, right.objects, right.warnings),
     )
+    .slice(0, MAX_PROFESSIONAL_RANDOM_OPTIONS)
     .map((option, index) => ({
       ...option,
       id: `random_${index + 1}`,
@@ -2182,7 +2943,6 @@ interface RoomStore {
   beginStructureTransform: (structureId: string) => void;
   endTransform: () => void;
   loadRoomData: (roomData: RoomData) => void;
-  applyLayoutResponse: (layout: LayoutResponse) => void;
   updateRoomProperties: (payload: {
     shape?: RoomShape;
     purpose?: RoomPurpose;
@@ -2411,47 +3171,6 @@ export const useRoomStore = create<RoomStore>((set) => ({
         randomLayoutOptionsVisible: false,
         cameraMode: state.cameraMode,
         transformMode: state.transformMode,
-      };
-    }),
-  applyLayoutResponse: (layout) =>
-    set((state) => {
-      if (!layout.objects.length && !layout.room) {
-        return state;
-      }
-
-      const previous = state.roomData;
-      const previousSignature = getRoomDataSignature(previous);
-      const roomData = cloneRoomData(previous);
-
-      if (layout.room) {
-        roomData.room = resizeRoomDefinition(roomData.room, layout.room);
-        roomData.objects = normalizeRoomObjects(roomData, roomData.objects);
-      }
-
-      const byId = new Map(layout.objects.map((entry) => [entry.id, entry]));
-
-      for (const object of roomData.objects) {
-        const next = byId.get(object.id);
-        if (!next) continue;
-        applyObjectUpdate(roomData, object, {
-          position: { x: next.x, z: next.z },
-          rotation: next.rotation,
-          mountHeight: next.mountHeight,
-          dimensions: next.dimensions,
-        });
-      }
-
-      if (getRoomDataSignature(roomData) === previousSignature) {
-        return state;
-      }
-
-      return {
-        roomData,
-        validationWarnings: validateRoomLayout(roomData),
-        ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
-        historyPast: limitHistory([...state.historyPast, cloneRoomData(previous)]),
-        historyFuture: [],
-        lastEditorStatus: { key: "roomUpdated" },
       };
     }),
   updateRoomProperties: (payload) =>

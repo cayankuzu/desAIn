@@ -19,6 +19,7 @@
 
 # local app data
 /data/
+/.codex-logs/
 
 # production
 /build

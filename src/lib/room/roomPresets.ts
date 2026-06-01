@@ -532,26 +532,35 @@ const getPresetItems = (purpose: RoomPurpose): PresetItem[] => {
       return [];
     case "kitchen":
       return [
-        { templateId: "template_base_cabinet", ...ratio(0.2, 0.1), ...wall("north", 0.2) },
-        { templateId: "template_kitchen_sink", ...ratio(0.36, 0.1), ...wall("north", 0.36) },
-        { templateId: "template_oven", ...ratio(0.54, 0.1), ...wall("north", 0.54) },
-        { templateId: "template_upper_cabinet", ...ratio(0.36, 0.04), ...wall("north", 0.36) },
-        { templateId: "template_fridge", ...ratio(0.88, 0.2), ...wall("east", 0.22) },
-        { templateId: "template_kitchen_island", ...ratio(0.49, 0.56), rotation: 0 },
-        { templateId: "template_bar_stool", ...ratio(0.41, 0.78), rotation: 180 },
-        { templateId: "template_bar_stool", ...ratio(0.59, 0.78), rotation: 180 },
-        { templateId: "template_ceiling_light", ...ratio(0.5, 0.5), rotation: 0 },
+        { templateId: "template_corner_base_cabinet", ...ratio(0.12, 0.12), ...wall("north", 0.12) },
+        { templateId: "template_base_cabinet", ...ratio(0.24, 0.1), ...wall("north", 0.24) },
+        { templateId: "template_kitchen_sink", ...ratio(0.4, 0.1), ...wall("north", 0.4) },
+        { templateId: "template_dishwasher", ...ratio(0.54, 0.1), ...wall("north", 0.54) },
+        { templateId: "template_cooktop", ...ratio(0.68, 0.1), ...wall("north", 0.68) },
+        { templateId: "template_range_hood", ...ratio(0.68, 0.04), ...wall("north", 0.68) },
+        { templateId: "template_upper_cabinet", ...ratio(0.35, 0.04), ...wall("north", 0.35) },
+        { templateId: "template_open_kitchen_shelf", ...ratio(0.53, 0.04), ...wall("north", 0.53) },
+        { templateId: "template_fridge", ...ratio(0.88, 0.22), ...wall("east", 0.22) },
+        { templateId: "template_tall_oven_cabinet", ...ratio(0.88, 0.46), ...wall("east", 0.46) },
+        { templateId: "template_trash_pullout", ...ratio(0.2, 0.32), ...wall("west", 0.32) },
+        { templateId: "template_kitchen_island", ...ratio(0.5, 0.58), rotation: 0 },
+        { templateId: "template_bar_stool", ...ratio(0.42, 0.8), rotation: 180 },
+        { templateId: "template_bar_stool", ...ratio(0.58, 0.8), rotation: 180 },
+        { templateId: "template_pendant_light", ...ratio(0.42, 0.48), rotation: 0 },
+        { templateId: "template_pendant_light", ...ratio(0.58, 0.48), rotation: 0 },
       ];
     case "bedroom":
       return [
-        { templateId: "template_bed_double", ...ratio(0.5, 0.42), ...wall("south", 0.5) },
-        { templateId: "template_nightstand", ...ratio(0.32, 0.44), rotation: 0 },
-        { templateId: "template_nightstand", ...ratio(0.64, 0.44), rotation: 0 },
-        { templateId: "template_wardrobe_tall", ...ratio(0.88, 0.18), ...wall("east", 0.2) },
-        { templateId: "template_dresser", ...ratio(0.18, 0.18), ...wall("north", 0.2) },
-        { templateId: "template_floor_mirror", ...ratio(0.1, 0.44), ...wall("west", 0.44) },
-        { templateId: "template_carpet_large", ...ratio(0.48, 0.4), rotation: 0 },
-        { templateId: "template_ceiling_light", ...ratio(0.5, 0.5), rotation: 0 },
+        { templateId: "template_bed_double", ...ratio(0.5, 0.78), ...wall("south", 0.5) },
+        { templateId: "template_nightstand", ...ratio(0.31, 0.92), ...wall("south", 0.31) },
+        { templateId: "template_nightstand", ...ratio(0.69, 0.92), ...wall("south", 0.69) },
+        { templateId: "template_wardrobe_tall", ...ratio(0.88, 0.23), ...wall("east", 0.23) },
+        { templateId: "template_makeup_vanity", ...ratio(0.2, 0.16), ...wall("north", 0.2) },
+        { templateId: "template_full_height_mirror", ...ratio(0.12, 0.42), ...wall("west", 0.42) },
+        { templateId: "template_bedroom_bench", ...ratio(0.5, 0.42), rotation: 0 },
+        { templateId: "template_carpet_large", ...ratio(0.5, 0.62), rotation: 0 },
+        { templateId: "template_large_art_panel", ...ratio(0.5, 0.98), rotation: 180 },
+        { templateId: "template_pendant_light", ...ratio(0.5, 0.5), rotation: 0 },
       ];
     case "kids":
       return [
@@ -580,10 +589,11 @@ const getPresetItems = (purpose: RoomPurpose): PresetItem[] => {
     case "bathroom":
       return [
         { templateId: "template_shower_cabin", ...ratio(0.8, 0.66), ...wall("east", 0.72) },
-        { templateId: "template_vanity", ...ratio(0.18, 0.18), ...wall("north", 0.2) },
+        { templateId: "template_round_sink", ...ratio(0.18, 0.18), ...wall("north", 0.2) },
         { templateId: "template_toilet", ...ratio(0.64, 0.78), ...wall("south", 0.64) },
-        { templateId: "template_mirror_panel", ...ratio(0.18, 0.04), ...wall("north", 0.2) },
+        { templateId: "template_round_wall_mirror", ...ratio(0.18, 0.04), ...wall("north", 0.2) },
         { templateId: "template_towel_rack", ...ratio(0.86, 0.22), ...wall("east", 0.26) },
+        { templateId: "template_bath_storage_column", ...ratio(0.12, 0.74), ...wall("west", 0.74) },
         { templateId: "template_ceiling_light", ...ratio(0.5, 0.5), rotation: 0 },
       ];
     case "dining":
@@ -599,21 +609,25 @@ const getPresetItems = (purpose: RoomPurpose): PresetItem[] => {
       ];
     case "laundry":
       return [
-        { templateId: "template_washer", ...ratio(0.18, 0.18), ...wall("north", 0.18) },
-        { templateId: "template_dryer", ...ratio(0.34, 0.18), ...wall("north", 0.34) },
-        { templateId: "template_base_cabinet", ...ratio(0.58, 0.18), ...wall("north", 0.58) },
-        { templateId: "template_kitchen_sink", ...ratio(0.76, 0.18), ...wall("north", 0.76) },
-        { templateId: "template_upper_cabinet", ...ratio(0.42, 0.04), ...wall("north", 0.42) },
-        { templateId: "template_storage_bench", ...ratio(0.3, 0.78), ...wall("south", 0.34) },
-        { templateId: "template_wall_shelf", ...ratio(0.82, 0.76), ...wall("south", 0.82) },
+        { templateId: "template_washer", ...ratio(0.17, 0.16), ...wall("north", 0.17) },
+        { templateId: "template_dryer", ...ratio(0.32, 0.16), ...wall("north", 0.32) },
+        { templateId: "template_laundry_counter", ...ratio(0.52, 0.16), ...wall("north", 0.52) },
+        { templateId: "template_round_sink", ...ratio(0.72, 0.16), ...wall("north", 0.72) },
+        { templateId: "template_upper_cabinet", ...ratio(0.35, 0.04), ...wall("north", 0.35) },
+        { templateId: "template_upper_cabinet", ...ratio(0.62, 0.04), ...wall("north", 0.62) },
+        { templateId: "template_linen_cabinet", ...ratio(0.88, 0.32), ...wall("east", 0.32) },
+        { templateId: "template_laundry_basket", ...ratio(0.22, 0.78), ...wall("south", 0.22) },
+        { templateId: "template_ironing_board", ...ratio(0.58, 0.82), ...wall("south", 0.58) },
+        { templateId: "template_utility_cart", ...ratio(0.82, 0.78), ...wall("south", 0.82) },
         { templateId: "template_ceiling_light", ...ratio(0.5, 0.5), rotation: 0 },
       ];
     case "entry":
       return [
         { templateId: "template_shoe_rack", ...ratio(0.22, 0.18), ...wall("north", 0.22) },
-        { templateId: "template_console_table", ...ratio(0.56, 0.18), ...wall("north", 0.56) },
-        { templateId: "template_mirror_panel", ...ratio(0.56, 0.04), ...wall("north", 0.56) },
-        { templateId: "template_coat_stand", ...ratio(0.86, 0.24), rotation: 0 },
+        { templateId: "template_key_tray_console", ...ratio(0.56, 0.18), ...wall("north", 0.56) },
+        { templateId: "template_round_wall_mirror", ...ratio(0.56, 0.04), ...wall("north", 0.56) },
+        { templateId: "template_entry_hanger_panel", ...ratio(0.82, 0.06), ...wall("north", 0.82) },
+        { templateId: "template_umbrella_stand", ...ratio(0.88, 0.28), rotation: 0 },
         { templateId: "template_storage_bench", ...ratio(0.56, 0.8), ...wall("south", 0.56) },
         { templateId: "template_carpet_runner", ...ratio(0.46, 0.6), rotation: 90 },
         { templateId: "template_wall_sconce", ...ratio(0.22, 0.05), ...wall("north", 0.22) },
@@ -631,24 +645,28 @@ const getPresetItems = (purpose: RoomPurpose): PresetItem[] => {
       return [
         { templateId: "template_wardrobe_tall", ...ratio(0.22, 0.18), ...wall("north", 0.22) },
         { templateId: "template_wardrobe_tall", ...ratio(0.52, 0.18), ...wall("north", 0.52) },
-        { templateId: "template_dresser", ...ratio(0.82, 0.26), ...wall("east", 0.26) },
-        { templateId: "template_floor_mirror", ...ratio(0.82, 0.76), ...wall("east", 0.76) },
-        { templateId: "template_storage_bench", ...ratio(0.48, 0.78), rotation: 0 },
+        { templateId: "template_clothes_rack", ...ratio(0.82, 0.24), ...wall("east", 0.24) },
+        { templateId: "template_full_height_mirror", ...ratio(0.82, 0.76), ...wall("east", 0.76) },
+        { templateId: "template_bedroom_bench", ...ratio(0.48, 0.78), rotation: 0 },
+        { templateId: "template_makeup_vanity", ...ratio(0.16, 0.72), ...wall("west", 0.72) },
         { templateId: "template_carpet_runner", ...ratio(0.46, 0.5), rotation: 90 },
-        { templateId: "template_ceiling_light", ...ratio(0.5, 0.5), rotation: 0 },
+        { templateId: "template_track_light", ...ratio(0.5, 0.5), rotation: 0 },
       ];
     case "living":
     default:
       return [
         { templateId: "template_media_console", ...ratio(0.5, 0.12), ...wall("north", 0.5) },
-        { templateId: "template_sofa_straight", ...ratio(0.5, 0.82), ...wall("south", 0.5) },
-        { templateId: "template_armchair", ...ratio(0.82, 0.58), rotation: 240 },
-        { templateId: "template_coffee_table", ...ratio(0.5, 0.52), rotation: 0 },
-        { templateId: "template_carpet_large", ...ratio(0.5, 0.54), rotation: 0 },
-        { templateId: "template_floor_lamp", ...ratio(0.12, 0.82), rotation: 0 },
-        { templateId: "template_tall_plant", ...ratio(0.9, 0.2), rotation: 0 },
-        { templateId: "template_framed_art", ...ratio(0.5, 0.04), rotation: 0 },
-        { templateId: "template_ceiling_light", ...ratio(0.5, 0.5), rotation: 0 },
+        { templateId: "template_l_sofa", ...ratio(0.44, 0.78), ...wall("south", 0.44) },
+        { templateId: "template_loveseat", ...ratio(0.2, 0.5), rotation: 65 },
+        { templateId: "template_armchair", ...ratio(0.78, 0.57), rotation: 235 },
+        { templateId: "template_storage_ottoman", ...ratio(0.32, 0.57), rotation: 0 },
+        { templateId: "template_coffee_table", ...ratio(0.5, 0.53), rotation: 0 },
+        { templateId: "template_carpet_large", ...ratio(0.5, 0.56), rotation: 0, dimensions: { width: 3.1, depth: 2.25 } },
+        { templateId: "template_floor_lamp", ...ratio(0.13, 0.8), ...wall("west", 0.8) },
+        { templateId: "template_large_planter", ...ratio(0.88, 0.2), ...wall("east", 0.2) },
+        { templateId: "template_accent_cabinet", ...ratio(0.84, 0.84), ...wall("south", 0.84) },
+        { templateId: "template_gallery_frame_set", ...ratio(0.22, 0.04), ...wall("north", 0.22) },
+        { templateId: "template_pendant_light", ...ratio(0.5, 0.5), rotation: 0 },
       ];
   }
 };
