@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { MAX_ACTIVE_PROJECTS } from "@/lib/project/workflowLimits";
 import type { ProjectMeta, ProjectState } from "@/types/project";
 import type { RoomData } from "@/types/room";
 
@@ -189,6 +190,12 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   createProject: async (title) => {
     set({ busy: true, error: null });
     try {
+      if (get().projects.length >= MAX_ACTIVE_PROJECTS) {
+        throw new Error(
+          `Aynı anda en fazla ${MAX_ACTIVE_PROJECTS} sohbet oluşturabilirsin. Yeni sohbet açmak için önce bir sohbet sil.`,
+        );
+      }
+
       const data = await jsonFetch<{ project: ProjectMeta }>("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

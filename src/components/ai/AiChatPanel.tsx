@@ -26,7 +26,7 @@ import {
   getLocalizedOpeningType,
 } from "@/lib/i18n/translations";
 import { formatSemanticPosition, getSemanticObjectPosition } from "@/lib/scene/axes";
-import { MAX_PROJECT_CHAT_TURNS, PROJECT_PHOTO_COUNT } from "@/lib/project/workflowLimits";
+import { MAX_ACTIVE_PROJECTS, PROJECT_PHOTO_COUNT } from "@/lib/project/workflowLimits";
 import { useRoomStore } from "@/store/roomStore";
 import { useProjectStore, withProjectClientHeaders } from "@/store/projectStore";
 import { useUIStore } from "@/store/uiStore";
@@ -86,8 +86,10 @@ type ChatCopy = {
   chatFailed: string;
   uploadLocked: string;
   exactBatchError: string;
-  chatLimitReached: string;
-  chatTurnStatus: string;
+  projectLimitReached: string;
+  chatCountStatus: string;
+  openingCount: string;
+  confidenceLabel: string;
   statusAnalyzing: string;
   statusUploading: string;
   statusError: string;
@@ -118,10 +120,10 @@ function getChatCopy(locale: "tr" | "en"): ChatCopy {
       selectExistingProject: "Select an existing project from the menu if you already created one.",
       photoGuide: "Photo guide",
       photoGuideIntro:
-        "Scan from the center of the room. Cover every wall, corner, opening, and floor edge in a single 360-degree pass.",
+        "Create one clean room scan from the center so the AI can read the walls, openings, floor edges, and main furniture with less guesswork.",
       selectionContext: "Selection context",
       projectEmpty:
-        `Create a project, upload exactly ${PROJECT_PHOTO_COUNT} photos once, then the digital twin is generated automatically.`,
+        `Upload exactly ${PROJECT_PHOTO_COUNT} room photos to generate the first digital twin; after analysis, the room summary, detected items, and chat history will appear here.`,
       statusLabel: "Status",
       lastError: "Last error",
       analysisSummary: "Analysis summary",
@@ -157,8 +159,10 @@ function getChatCopy(locale: "tr" | "en"): ChatCopy {
       chatFailed: "Chat failed",
       uploadLocked: `Photos are already uploaded. Each project accepts exactly ${PROJECT_PHOTO_COUNT} photos once.`,
       exactBatchError: `Select exactly ${PROJECT_PHOTO_COUNT} photos for this project.`,
-      chatLimitReached: `This project reached the ${MAX_PROJECT_CHAT_TURNS} message limit. Create a new project for more chat.`,
-      chatTurnStatus: "Chat usage",
+      projectLimitReached: `You can keep up to ${MAX_ACTIVE_PROJECTS} active chats at the same time. Delete one to create another.`,
+      chatCountStatus: "Active chats",
+      openingCount: "Openings",
+      confidenceLabel: "Confidence",
       statusAnalyzing: "Analyzing...",
       statusUploading: "Uploading...",
       statusError: "Error",
@@ -188,9 +192,9 @@ function getChatCopy(locale: "tr" | "en"): ChatCopy {
     selectExistingProject: "Daha önce oluşturduğun bir proje varsa menüden seçebilirsin.",
     photoGuide: "Fotoğraf rehberi",
     photoGuideIntro:
-      "Odanın merkezinden tara. Her kare arasında yaklaşık 90 derece dön ve duvarları, açıklıkları, zemin kenarını tek turda kapat.",
+      "Odanın merkezinden tek bir temiz tarama yap ki AI duvarları, açıklıkları, zemin kenarlarını ve ana mobilyaları daha az tahminle okuyabilsin.",
     selectionContext: "Seçim bağlamı",
-    projectEmpty: `Proje oluştur, tam ${PROJECT_PHOTO_COUNT} fotoğrafı bir kez yükle; dijital ikiz otomatik oluşturulsun.`,
+    projectEmpty: `İlk dijital ikizi üretmek için tam ${PROJECT_PHOTO_COUNT} oda fotoğrafı yükle; analiz tamamlanınca oda özeti, algılanan öğeler ve sohbet geçmişi burada görünür.`,
     statusLabel: "Durum",
     lastError: "Son hata",
     analysisSummary: "Analiz özeti",
@@ -226,8 +230,10 @@ function getChatCopy(locale: "tr" | "en"): ChatCopy {
     chatFailed: "Sohbet başarısız",
     uploadLocked: `Fotoğraflar zaten yüklendi. Her proje yalnızca bir kez, tam ${PROJECT_PHOTO_COUNT} fotoğraf kabul eder.`,
     exactBatchError: `Bu proje için tam ${PROJECT_PHOTO_COUNT} fotoğraf seçmelisin.`,
-    chatLimitReached: `Bu proje ${MAX_PROJECT_CHAT_TURNS} sohbet hakkına ulaştı. Daha fazla sohbet için yeni proje oluştur.`,
-    chatTurnStatus: "Sohbet kullanımı",
+    projectLimitReached: `Aynı anda en fazla ${MAX_ACTIVE_PROJECTS} aktif sohbet açık olabilir. Yeni bir sohbet oluşturmak için önce birini silmelisin.`,
+    chatCountStatus: "Açık sohbet sayısı",
+    openingCount: "Açıklık sayısı",
+    confidenceLabel: "Güven düzeyi",
     statusAnalyzing: "Analiz...",
     statusUploading: "Yükleniyor...",
     statusError: "Hata",
@@ -286,7 +292,61 @@ function summarizeSystemWarnings(warnings: string[]) {
     return null;
   }
 
-  return filtered.slice(0, 2).join(" | ").slice(0, 320);
+  return filtered.slice(0, 2).join(" ").slice(0, 320);
+}
+
+function normalizeInsightLine(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function uniqueInsightLines(values: string[]) {
+  const seen = new Set<string>();
+
+  return values
+    .map(normalizeInsightLine)
+    .filter(Boolean)
+    .filter((value) => {
+      const key = value.toLocaleLowerCase("tr-TR");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function formatRoomShape(shape: RoomDraft["room"]["shape"], locale: "tr" | "en") {
+  if (shape === "rectangle") {
+    return locale === "en" ? "Rectangle" : "Dikdörtgen";
+  }
+
+  if (shape === "square") {
+    return locale === "en" ? "Square" : "Kare";
+  }
+
+  return locale === "en" ? "L-shape" : "L şeklinde";
+}
+
+function formatConfidence(confidence: RoomDraft["confidence"], locale: "tr" | "en") {
+  if (confidence === "high") {
+    return locale === "en" ? "High" : "Yüksek";
+  }
+
+  if (confidence === "low") {
+    return locale === "en" ? "Low" : "Düşük";
+  }
+
+  return locale === "en" ? "Medium" : "Orta";
+}
+
+function buildAnalysisOverview(draft: RoomDraft, locale: "tr" | "en") {
+  const shape = formatRoomShape(draft.room.shape, locale);
+  const size = `${draft.room.width.toFixed(1)} x ${draft.room.depth.toFixed(1)} x ${draft.room.height.toFixed(1)} m`;
+  const openings = draft.room.openings.length;
+
+  if (locale === "en") {
+    return `${shape} room detected at about ${size}, with ${draft.items.length} placed items and ${openings} visible openings.`;
+  }
+
+  return `${shape} oda yaklaşık ${size} ölçülerinde algılandı; ${draft.items.length} yerleşmiş öğe ve ${openings} görünür açıklık içeriyor.`;
 }
 
 function Bubble({
@@ -319,18 +379,16 @@ function Bubble({
 function getPhotoCaptureTips(locale: "tr" | "en") {
   return locale === "en"
     ? [
-        `Upload exactly ${PROJECT_PHOTO_COUNT} photos for this project.`,
-        "Start in the center and capture a full 360-degree sweep.",
-        "Use bright, even lighting and wide angle if available.",
-        "Capture every wall, corner, opening, and floor edge.",
-        "Add wall-side support shots for large furniture and wall-mounted items.",
+        `Upload exactly ${PROJECT_PHOTO_COUNT} wide room photos for this project.`,
+        "Start near the center and complete one full 360-degree sweep.",
+        "Keep every wall, corner, opening, and floor edge visible.",
+        "Add a few closer support shots only for large furniture or wall-mounted items.",
       ]
     : [
-        `Bu proje için tam ${PROJECT_PHOTO_COUNT} fotoğraf yükle.`,
-        "Odanın merkezinden başla ve 360 derece tam tur çek.",
-        "Ortamı iyi aydınlat; varsa geniş açı kullan.",
-        "Tüm duvarları, köşeleri, açıklıkları ve zemin kenarını görünür çek.",
-        "Büyük mobilyalar ve duvar öğeleri için duvar tarafından destek kareleri ekle.",
+        `Bu proje için tam ${PROJECT_PHOTO_COUNT} geniş açı oda fotoğrafı yükle.`,
+        "Merkeze yakın başla ve odayı 360 derece tek turda tara.",
+        "Tüm duvarları, köşeleri, açıklıkları ve zemin kenarlarını görünür tut.",
+        "Yalnızca büyük mobilyalar ve duvar öğeleri için birkaç yakın destek karesi ekle.",
       ];
 }
 
@@ -446,8 +504,8 @@ export function AiChatPanel() {
       meta.status !== "uploading" &&
       meta.status !== "analyzing",
   );
-  const chatTurnCount = activeProject?.messages.filter((message) => message.role === "user").length ?? 0;
-  const chatLimitReached = chatTurnCount >= MAX_PROJECT_CHAT_TURNS;
+  const activeProjectCount = projects.length;
+  const projectLimitReached = activeProjectCount >= MAX_ACTIVE_PROJECTS;
   const loading = projectsLoading;
   const error = localError ?? storeError;
   const anyBusy = busy || projectsBusy;
@@ -460,6 +518,37 @@ export function AiChatPanel() {
     const parsed = roomDraftSchema.safeParse(analysis);
     return parsed.success ? parsed.data : null;
   }, [analysis]);
+  const draftNotes = useMemo(
+    () => uniqueInsightLines(parsedDraft?.notes ?? []).slice(0, 4),
+    [parsedDraft],
+  );
+  const draftWarnings = useMemo(
+    () => uniqueInsightLines(parsedDraft?.warnings ?? []).slice(0, 4),
+    [parsedDraft],
+  );
+  const draftCaptureAdvice = useMemo(
+    () => uniqueInsightLines(parsedDraft?.captureAdvice ?? []).slice(0, 4),
+    [parsedDraft],
+  );
+  const draftInventory = useMemo(() => {
+    const seen = new Set<string>();
+
+    return (parsedDraft?.discoveredInventory ?? [])
+      .filter((item) => {
+        const key = `${item.id}:${item.label}`.toLocaleLowerCase("tr-TR");
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 8);
+  }, [parsedDraft]);
+  const analysisOverview = useMemo(
+    () => (parsedDraft ? buildAnalysisOverview(parsedDraft, locale) : null),
+    [locale, parsedDraft],
+  );
+  const showPhotoGuide = Boolean(
+    meta && !photosAlreadyUploaded && !parsedDraft && !(activeProject?.messages.length ?? 0),
+  );
 
   const selectedObject = useMemo(
     () =>
@@ -610,10 +699,6 @@ export function AiChatPanel() {
     const message = composerText.trim();
     if (!message) return;
     if (locked || anyBusy) return;
-    if (chatLimitReached) {
-      setLocalError(copy.chatLimitReached);
-      return;
-    }
 
     setComposerText("");
     setLocalError(null);
@@ -817,13 +902,25 @@ export function AiChatPanel() {
             <button
               type="button"
               onClick={() => void createProject()}
-              disabled={anyBusy}
+              disabled={anyBusy || projectLimitReached}
               className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#24405a] bg-[#102234] px-3 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
             >
               <FolderPlus className="h-4 w-4" />
               {copy.newProject}
             </button>
-            {meta ? <div className="text-xs text-slate-500">{meta.photoCount} {locale === "en" ? "photos" : "foto"}</div> : null}
+            <div className="text-right">
+              <div className="text-[11px] text-slate-400">
+                {copy.chatCountStatus}:{" "}
+                <span className="font-semibold text-slate-200">
+                  {activeProjectCount}/{MAX_ACTIVE_PROJECTS}
+                </span>
+              </div>
+              {projectLimitReached ? (
+                <div className="mt-1 max-w-[220px] text-[11px] leading-5 text-[#ffb1b1]">
+                  {copy.projectLimitReached}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}
@@ -882,12 +979,18 @@ export function AiChatPanel() {
                   <button
                     type="button"
                     onClick={() => void createProject()}
-                    disabled={anyBusy}
+                    disabled={anyBusy || projectLimitReached}
                     className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#24405a] bg-[#102234] px-4 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
                   >
                     <FolderPlus className="h-4 w-4" />
                     {copy.createFirstProject}
                   </button>
+                </div>
+                <div className="text-[11px] leading-5 text-slate-500">
+                  {copy.chatCountStatus}:{" "}
+                  <span className="font-semibold text-slate-300">
+                    {activeProjectCount}/{MAX_ACTIVE_PROJECTS}
+                  </span>
                 </div>
               </>
             )}
@@ -920,201 +1023,199 @@ export function AiChatPanel() {
           </div>
 
           <div ref={scrollRef} className="scroll-area flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 pb-6">
-            {meta ? (
-          <section className="rounded-xl border border-[#24405a] bg-[#102234] p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8cb9ff]">
-              {copy.photoGuide}
-            </div>
-            <div className="mt-2 text-sm leading-6 text-slate-200">
-              {copy.photoGuideIntro}
-            </div>
-            <ul className="mt-3 grid gap-2 text-sm leading-6 text-slate-300">
-              {captureTips.map((tip) => (
-                <li key={tip} className="rounded-lg border border-white/10 bg-[#0d141d] px-3 py-2">
-                  {tip}
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        {activeProject?.messages?.length ? (
-          <div className="grid gap-3">
-            {activeProject.messages.map((m) => (
-              <Bubble key={m.id} role={m.role}>
-                {m.content}
-              </Bubble>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-white/10 bg-[#111924] p-4 text-sm text-slate-300">
-            {copy.projectEmpty}
-          </div>
-        )}
-
-        {meta?.status === "error" && meta.lastError ? (
-          <div className="rounded-xl border border-[#6e2a2a] bg-[#2a1313] p-3 text-sm text-[#ffb1b1]">
-            <div className="font-semibold">{copy.lastError}</div>
-            <div className="mt-1 whitespace-pre-wrap text-xs text-[#ffb1b1]/90">
-              {meta.lastError}
-            </div>
-          </div>
-        ) : null}
-
-        {parsedDraft ? (
-          <div className="rounded-xl border border-white/10 bg-[#111924] p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-                  {copy.analysisSummary}
+            {showPhotoGuide ? (
+              <section className="rounded-xl border border-[#24405a] bg-[#102234] p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8cb9ff]">
+                  {copy.photoGuide}
                 </div>
-                <div className="mt-1 text-sm text-slate-300">
-                  {copy.roomShape}:{" "}
-                  <span className="font-semibold text-white">
-                    {parsedDraft.room.shape === "rectangle"
-                      ? locale === "en"
-                        ? "Rectangle"
-                        : "Dikdörtgen"
-                      : parsedDraft.room.shape === "square"
-                        ? locale === "en"
-                          ? "Square"
-                          : "Kare"
-                        : locale === "en"
-                          ? "L-shape"
-                          : "L şeklinde"}
-                  </span>
+                <div className="mt-2 text-sm leading-6 text-slate-200">
+                  {copy.photoGuideIntro}
                 </div>
-              </div>
-              <div className="rounded-full border border-[#24405a] bg-[#102234] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8cb9ff]">
-                {parsedDraft.confidence}
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-2 sm:grid-cols-3">
-              <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                  {copy.dimensions}
-                </div>
-                <div className="mt-1 text-sm font-semibold text-white">
-                  {parsedDraft.room.width.toFixed(1)} x {parsedDraft.room.depth.toFixed(1)} x{" "}
-                  {parsedDraft.room.height.toFixed(1)} m
-                </div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                  {copy.itemCount}
-                </div>
-                <div className="mt-1 text-sm font-semibold text-white">{parsedDraft.items.length}</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                  {copy.discoveredItems}
-                </div>
-                <div className="mt-1 text-sm font-semibold text-white">
-                  {parsedDraft.discoveredInventory.length}
-                </div>
-              </div>
-            </div>
-
-            {parsedDraft.notes.length ? (
-              <div className="mt-4 rounded-xl border border-white/10 bg-[#0d141d] p-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  {copy.notes}
-                </div>
-                <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-300">
-                  {parsedDraft.notes.slice(0, 4).map((note) => (
-                    <li key={note} className="rounded-lg border border-white/8 bg-white/4 px-3 py-2">
-                      {note}
+                <ul className="mt-3 grid gap-2 text-sm leading-6 text-slate-300">
+                  {captureTips.map((tip) => (
+                    <li key={tip} className="rounded-lg border border-white/10 bg-[#0d141d] px-3 py-2">
+                      {tip}
                     </li>
                   ))}
                 </ul>
+              </section>
+            ) : null}
+
+            {activeProject?.messages?.length ? (
+              <div className="grid gap-3">
+                {activeProject.messages.map((m) => (
+                  <Bubble key={m.id} role={m.role}>
+                    {m.content}
+                  </Bubble>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-white/10 bg-[#111924] p-4 text-sm leading-6 text-slate-300">
+                {copy.projectEmpty}
+              </div>
+            )}
+
+            {meta?.status === "error" && meta.lastError ? (
+              <div className="rounded-xl border border-[#6e2a2a] bg-[#2a1313] p-3 text-sm text-[#ffb1b1]">
+                <div className="font-semibold">{copy.lastError}</div>
+                <div className="mt-1 whitespace-pre-wrap text-xs text-[#ffb1b1]/90">
+                  {meta.lastError}
+                </div>
               </div>
             ) : null}
 
-            {parsedDraft.warnings.length ? (
-              <div className="mt-4 rounded-xl border border-[#6d4a29] bg-[#25180f] p-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#f5c28b]">
-                  {copy.warnings}
+            {parsedDraft ? (
+              <div className="rounded-xl border border-white/10 bg-[#111924] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                      {copy.analysisSummary}
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-white">
+                      {copy.roomShape}: {formatRoomShape(parsedDraft.room.shape, locale)}
+                    </div>
+                    {analysisOverview ? (
+                      <div className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                        {analysisOverview}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="rounded-full border border-[#24405a] bg-[#102234] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8cb9ff]">
+                    {copy.confidenceLabel}: {formatConfidence(parsedDraft.confidence, locale)}
+                  </div>
                 </div>
-                <ul className="mt-2 space-y-2 text-sm leading-6 text-[#f8dec0]">
-                  {parsedDraft.warnings.slice(0, 4).map((warning) => (
-                    <li key={warning} className="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
-                      {warning}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
 
-            {parsedDraft.captureAdvice.length ? (
-              <div className="mt-4 rounded-xl border border-[#24405a] bg-[#102234] p-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8cb9ff]">
-                  {copy.captureAdvice}
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                      {copy.dimensions}
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-white">
+                      {parsedDraft.room.width.toFixed(1)} x {parsedDraft.room.depth.toFixed(1)} x{" "}
+                      {parsedDraft.room.height.toFixed(1)} m
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                      {copy.itemCount}
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-white">{parsedDraft.items.length}</div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#0d141d] px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                      {copy.openingCount}
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-white">
+                      {parsedDraft.room.openings.length}
+                    </div>
+                  </div>
                 </div>
-                <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-200">
-                  {parsedDraft.captureAdvice.slice(0, 4).map((advice) => (
-                    <li key={advice} className="rounded-lg border border-white/10 bg-[#0d141d] px-3 py-2">
-                      {advice}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
 
-            {parsedDraft.discoveredInventory.length ? (
-              <div className="mt-4 rounded-xl border border-white/10 bg-[#0d141d] p-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  {copy.inventoryAdded}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {parsedDraft.discoveredInventory.slice(0, 8).map((item) => (
-                    <span
-                      key={item.id}
-                      className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-slate-200"
+                {draftNotes.length || draftWarnings.length || draftCaptureAdvice.length ? (
+                  <div className="mt-4 grid gap-4 xl:grid-cols-3">
+                    {draftNotes.length ? (
+                      <div className="rounded-xl border border-white/10 bg-[#0d141d] p-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                          {copy.notes}
+                        </div>
+                        <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-300">
+                          {draftNotes.map((note) => (
+                            <li key={note} className="rounded-lg border border-white/8 bg-white/4 px-3 py-2">
+                              {note}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {draftWarnings.length ? (
+                      <div className="rounded-xl border border-[#6d4a29] bg-[#25180f] p-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#f5c28b]">
+                          {copy.warnings}
+                        </div>
+                        <ul className="mt-2 space-y-2 text-sm leading-6 text-[#f8dec0]">
+                          {draftWarnings.map((warning) => (
+                            <li key={warning} className="rounded-lg border border-white/10 bg-black/10 px-3 py-2">
+                              {warning}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {draftCaptureAdvice.length ? (
+                      <div className="rounded-xl border border-[#24405a] bg-[#102234] p-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8cb9ff]">
+                          {copy.captureAdvice}
+                        </div>
+                        <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-200">
+                          {draftCaptureAdvice.map((advice) => (
+                            <li key={advice} className="rounded-lg border border-white/10 bg-[#0d141d] px-3 py-2">
+                              {advice}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {draftInventory.length ? (
+                  <div className="mt-4 rounded-xl border border-white/10 bg-[#0d141d] p-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      {copy.inventoryAdded}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {draftInventory.map((item) => (
+                        <span
+                          key={item.id}
+                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-slate-200"
+                        >
+                          {item.label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {!isMobile ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        applyDraftToEditor(parsedDraft);
+                        setWorkspaceMode("kitchen");
+                      }}
+                      className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#24405a] bg-[#102234] px-3 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white"
                     >
-                      {item.label}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {!isMobile ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    applyDraftToEditor(parsedDraft);
-                    setWorkspaceMode("kitchen");
-                  }}
-                  className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#24405a] bg-[#102234] px-3 text-sm font-semibold text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white"
-                >
-                  {copy.applyToEditor}
-                </button>
+                      {copy.applyToEditor}
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
-        ) : null}
-      </div>
 
       <div className="shrink-0 border-t border-white/10 bg-[#0d141d]/96 p-3 backdrop-blur">
         {!isMobile ? (
           <div className="mb-3 grid gap-2">
-            <div className="rounded-xl border border-[#24405a] bg-[#102234] px-3 py-2 text-[11px] leading-5 text-[#8cb9ff]">
-              {copy.firstBatchHint}
-            </div>
             <div
               className={`rounded-xl border px-3 py-2 text-[11px] leading-5 ${
-                chatLimitReached
+                projectLimitReached
                   ? "border-[#6e2a2a] bg-[#2a1313] text-[#ffb1b1]"
                   : "border-white/10 bg-[#111924] text-slate-400"
               }`}
             >
-              {copy.chatTurnStatus}:{" "}
+              {copy.chatCountStatus}:{" "}
               <span className="font-semibold text-slate-200">
-                {chatTurnCount}/{MAX_PROJECT_CHAT_TURNS}
+                {activeProjectCount}/{MAX_ACTIVE_PROJECTS}
               </span>
             </div>
+            {projectLimitReached ? (
+              <div className="rounded-xl border border-[#6e2a2a] bg-[#2a1313] px-3 py-2 text-[11px] leading-5 text-[#ffb1b1]">
+                {copy.projectLimitReached}
+              </div>
+            ) : null}
           </div>
         ) : null}
         {!isMobile ? (
@@ -1123,9 +1224,7 @@ export function AiChatPanel() {
               value={composerText}
               onChange={(e) => setComposerText(e.target.value)}
               placeholder={
-                chatLimitReached
-                  ? copy.chatLimitReached
-                  : locked
+                locked
                   ? locale === "en"
                     ? "Project is analyzing, chat is locked..."
                     : "Proje analizde, sohbet kilitli..."
@@ -1133,7 +1232,7 @@ export function AiChatPanel() {
                     ? "Message..."
                     : "Mesaj..."
               }
-              disabled={anyBusy || locked || chatLimitReached}
+              disabled={anyBusy || locked}
               rows={2}
               className="min-h-[44px] w-full resize-none rounded-2xl border border-white/10 bg-[#0b1016] px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-[#32516c] disabled:cursor-not-allowed disabled:opacity-55"
               onKeyDown={(e) => {
@@ -1146,7 +1245,7 @@ export function AiChatPanel() {
             <button
               type="button"
               onClick={() => void sendChat()}
-              disabled={!composerText.trim() || anyBusy || locked || chatLimitReached}
+              disabled={!composerText.trim() || anyBusy || locked}
               className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-[#24405a] bg-[#102234] text-[#8cb9ff] transition hover:border-[#4ea8ff] hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
               aria-label={copy.sendAriaLabel}
             >

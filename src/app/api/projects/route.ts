@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { MAX_ACTIVE_PROJECTS } from "@/lib/project/workflowLimits";
 import { createProject, getProjectScope, listProjects } from "@/lib/server/projectsStore";
 
 export const runtime = "nodejs";
@@ -15,6 +16,18 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const scope = getProjectScope(request);
+  const projects = await listProjects(scope);
+  if (projects.length >= MAX_ACTIVE_PROJECTS) {
+    return NextResponse.json(
+      {
+        error: `Aynı anda en fazla ${MAX_ACTIVE_PROJECTS} sohbet oluşturabilirsin. Yeni sohbet açmak için önce bir sohbet sil.`,
+        max: MAX_ACTIVE_PROJECTS,
+        current: projects.length,
+      },
+      { status: 409 },
+    );
+  }
+
   try {
     const json = await request.json();
     const parsed = createSchema.safeParse(json ?? {});

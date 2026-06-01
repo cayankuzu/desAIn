@@ -212,20 +212,20 @@ export const buildLocalCommandModeLayoutResponse = (
 
   return {
     reply: isEnglish
-      ? "I'm in local command mode right now. I can reliably move, align, rotate, resize, and describe existing items and room data. For broader design planning, configure a live chat model or give me an explicit item or room command."
-      : "Şu anda yerel komut modundayım. Mevcut öğeleri güvenilir şekilde taşıyabilir, hizalayabilir, döndürebilir, yeniden boyutlandırabilir ve oda bilgisini aktarabilirim. Daha geniş tasarım planları için canlı bir sohbet modeli yapılandır ya da bana açık bir öğe veya oda komutu ver.",
+      ? "Live chat is not configured right now. I can still move, align, rotate, resize, and describe the existing room and items here."
+      : "Canlı sohbet şu anda bağlı değil. Yine de buradaki mevcut oda ve öğeleri taşıyabilir, hizalayabilir, döndürebilir, boyutlandırabilir ve açıklayabilirim.",
     layout: {
       layoutName: isEnglish ? "Local command mode" : "Yerel komut modu",
       summary:
         isEnglish
-          ? "No live chat model is configured, so deterministic local handling is active."
-          : "Canlı sohbet modeli yapılandırılmadığı için deterministik yerel işleme etkin.",
+          ? "Local command handling is active because no live chat model is configured."
+          : "Canlı sohbet modeli bağlı olmadığı için yerel komut işleme etkin.",
       objects: [],
       constraintsRespected: [],
       warnings: [
         isEnglish
-          ? "Using deterministic local planning because no live chat model is configured."
-          : "Canlı sohbet modeli yapılandırılmadığı için deterministik yerel planlama kullanılıyor.",
+          ? "Local command mode is active because no live chat model is configured."
+          : "Canlı sohbet modeli bağlı olmadığı için yerel komut modu aktif.",
       ],
     },
   };
@@ -249,16 +249,16 @@ export const buildMockAnalysis = (locale: "tr" | "en" = "tr") => {
     ],
     notes: [
       isEnglish
-        ? "Mock analysis rebuilt as a RoomDraft-compatible payload."
-        : "Sahte analiz, RoomDraft uyumlu bir çıktıya dönüştürüldü.",
+        ? "Room size and the core furniture layout were estimated for a quick preview."
+        : "Oda ölçüsü ve ana mobilya yerleşimi hızlı bir önizleme için tahmini çıkarıldı.",
       isEnglish
-        ? "Use the real vision provider to get a camera-accurate reconstruction."
-        : "Kamera doğruluğunda bir rekonstrüksiyon için gerçek görsel sağlayıcıyı kullan.",
+        ? "A live vision provider will produce a more camera-accurate reconstruction."
+        : "Canlı görsel sağlayıcı bağlandığında rekonstrüksiyon kamera verisine daha yakın olur.",
     ],
     warnings: [
       isEnglish
-        ? "Mock data only: replace this provider with Gemini for real photo analysis."
-        : "Yalnızca sahte veri: gerçek fotoğraf analizi için bu sağlayıcıyı Gemini ile değiştir.",
+        ? "This preview is approximate, so openings and small objects may still be incomplete."
+        : "Bu önizleme yaklaşık sonuç üretir; açıklıklar ve küçük objeler henüz eksik kalabilir.",
     ],
     captureAdvice: [
       isEnglish
@@ -267,6 +267,9 @@ export const buildMockAnalysis = (locale: "tr" | "en" = "tr") => {
       isEnglish
         ? "Take exactly 9 photos with a full 360-degree room sweep."
         : "Tam 9 fotoğrafla odayı 360 derece tarayacak şekilde çek.",
+      isEnglish
+        ? "Keep wall edges, floor lines, and large furniture visible in the same capture set."
+        : "Duvar kenarlarını, zemin çizgilerini ve büyük mobilyaları aynı çekim setinde görünür tut.",
     ],
     confidence: "medium",
     discoveredInventory: [

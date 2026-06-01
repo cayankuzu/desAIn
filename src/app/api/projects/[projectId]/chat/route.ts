@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { layoutChatRequestSchema, layoutResponseSchema } from "@/lib/ai/schemas";
 import { planLayoutWithCurrentProvider } from "@/lib/ai/runtime";
-import { MAX_PROJECT_CHAT_TURNS } from "@/lib/project/workflowLimits";
 import { addProjectMessage, getProjectScope, readProject } from "@/lib/server/projectsStore";
 import type { RoomData } from "@/types/room";
 
@@ -30,21 +29,6 @@ export async function POST(request: Request, ctx: RouteContext<"/api/projects/[p
   }
 
   const locale = parsed.data.locale;
-  const userTurnCount = project.messages.filter((message) => message.role === "user").length;
-
-  if (userTurnCount >= MAX_PROJECT_CHAT_TURNS) {
-    return NextResponse.json(
-      {
-        error:
-          locale === "en"
-            ? `This project reached the ${MAX_PROJECT_CHAT_TURNS} message limit. Create a new project for more chat.`
-            : `Bu proje ${MAX_PROJECT_CHAT_TURNS} sohbet hakkına ulaştı. Daha fazla sohbet için yeni proje oluştur.`,
-        max: MAX_PROJECT_CHAT_TURNS,
-        current: userTurnCount,
-      },
-      { status: 429 },
-    );
-  }
 
   await addProjectMessage(projectId, { role: "user", content: parsed.data.message }, scope);
 
