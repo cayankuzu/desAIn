@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useRef } from "react";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { RoomFloor } from "@/components/room/RoomFloor";
 import { generatorMap } from "@/lib/room/generatorMap";
 import {
@@ -14,6 +16,9 @@ import type { Opening, RoomData, RoomObject, RoomPurpose } from "@/types/room";
 
 function PreviewCamera({ room }: { room: RoomData["room"] }) {
   const { camera, invalidate } = useThree();
+  const controlsRef = useRef<OrbitControlsImpl | null>(null);
+  const focusY = room.height * 0.28;
+  const maxSpan = Math.max(room.width, room.depth);
 
   useEffect(() => {
     camera.position.set(
@@ -21,11 +26,31 @@ function PreviewCamera({ room }: { room: RoomData["room"] }) {
       Math.max(room.height * 1.18, 4.25),
       room.depth * 0.94,
     );
-    camera.lookAt(0, room.height * 0.28, 0);
+    controlsRef.current?.target.set(0, focusY, 0);
+    controlsRef.current?.update();
     invalidate();
-  }, [camera, invalidate, room.depth, room.height, room.width]);
+  }, [camera, focusY, invalidate, room.depth, room.height, room.width]);
 
-  return null;
+  return (
+    <OrbitControls
+      ref={controlsRef}
+      makeDefault
+      enablePan
+      enableRotate
+      enableZoom
+      enableDamping
+      dampingFactor={0.08}
+      onChange={() => invalidate()}
+      rotateSpeed={0.72}
+      zoomSpeed={0.8}
+      panSpeed={0.7}
+      minDistance={Math.max(2.6, maxSpan * 0.5)}
+      maxDistance={Math.max(7.2, maxSpan * 1.75)}
+      minPolarAngle={Math.PI / 4.2}
+      maxPolarAngle={Math.PI / 2.02}
+      target={[0, focusY, 0]}
+    />
+  );
 }
 
 function StaticRoomObject({ object }: { object: RoomObject }) {
@@ -178,9 +203,13 @@ export function MobileRoomViewportPreview({
     locale === "en"
       ? `${footprintLabel} · ${overheadObjects} wall/ceiling`
       : `${footprintLabel} · ${overheadObjects} duvar/tavan`;
+  const gestureHint =
+    locale === "en"
+      ? "Drag to orbit · pinch to zoom"
+      : "Surukle ve dondur · pinch ile zoom";
 
   return (
-    <article className="mobile-room-preview pointer-events-none">
+    <article className="mobile-room-preview">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#f1b375]">
@@ -229,6 +258,7 @@ export function MobileRoomViewportPreview({
         </Canvas>
 
         <div className="mobile-room-stage-footer">
+          <span>{gestureHint}</span>
           <span>{stageStats}</span>
           <span>{stageMeta}</span>
         </div>

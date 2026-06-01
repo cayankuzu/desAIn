@@ -155,6 +155,8 @@ textarea {
   min-height: 220px;
   overflow: hidden;
   border-radius: 1.35rem;
+  touch-action: none;
+  overscroll-behavior: contain;
   background:
     radial-gradient(circle at 20% 12%, rgba(255, 179, 108, 0.16), transparent 24%),
     radial-gradient(circle at 82% 18%, rgba(117, 176, 255, 0.18), transparent 26%),
@@ -192,6 +194,7 @@ textarea {
 .mobile-room-stage-canvas {
   height: 220px !important;
   width: 100% !important;
+  touch-action: none;
 }
 
 .mobile-room-stage-hud {
@@ -204,6 +207,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  pointer-events: none;
 }
 
 .mobile-room-stage-chip {
@@ -240,6 +244,7 @@ textarea {
   text-shadow: 0 4px 14px rgba(0, 0, 0, 0.38);
   font-size: 0.7rem;
   font-weight: 600;
+  pointer-events: none;
 }
 
 @keyframes mobile-room-preview-rise {

@@ -75,7 +75,7 @@ function MobileDesktopNotice({ locale }: { locale: "tr" | "en" }) {
   const copy = getMobileDesktopNoticeCopy(locale);
 
   return (
-    <main className="mobile-desktop-gate relative h-dvh overflow-y-auto bg-[#080d12] px-4 pb-8 pt-36 text-white">
+    <main className="mobile-desktop-gate relative h-dvh overflow-y-auto bg-[#080d12] px-4 pb-8 pt-48 text-white">
       <div className="pointer-events-none fixed inset-x-0 top-0 z-40 h-40 bg-gradient-to-b from-[#080d12] via-[#080d12]/92 to-transparent" />
       <section className="fixed left-3 right-3 top-3 z-50 mx-auto max-w-md rounded-[1.35rem] border border-white/14 bg-[#111922]/92 p-3.5 shadow-[0_18px_48px_rgba(0,0,0,0.5)] backdrop-blur-2xl">
         <div className="flex items-start gap-3">
@@ -98,16 +98,6 @@ function MobileDesktopNotice({ locale }: { locale: "tr" | "en" }) {
       </section>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_8%,rgba(255,179,108,0.2),transparent_28%),radial-gradient(circle_at_84%_14%,rgba(114,177,255,0.18),transparent_30%),linear-gradient(180deg,rgba(8,13,18,0.2),rgba(8,13,18,0.95))]" />
       <div className="relative z-10 space-y-4">
-        <div className="px-1">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
-            {locale === "en" ? "View-only gallery" : "Sadece \u00f6nizleme galerisi"}
-          </div>
-          <p className="mt-2 max-w-sm text-sm leading-6 text-slate-300">
-            {locale === "en"
-              ? "Room scenes keep moving under the notice, but all editing tools are locked on phones."
-              : "Oda sahneleri uyar\u0131n\u0131n alt\u0131nda gezilebilir; telefonda d\u00fczenleme ara\u00e7lar\u0131 kapal\u0131d\u0131r."}
-          </p>
-        </div>
         {mobilePreviewPurposes.map((purpose) => (
           <MobileRoomViewportPreview key={purpose} locale={locale} purpose={purpose} />
         ))}
