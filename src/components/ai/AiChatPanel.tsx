@@ -242,6 +242,19 @@ function formatStatus(meta: ProjectMeta, locale: "tr" | "en") {
   return copy.statusDraft;
 }
 
+function summarizeSystemWarnings(warnings: string[]) {
+  const filtered = warnings
+    .map((warning) => warning.trim())
+    .filter(Boolean)
+    .filter((warning) => !/^raw:/i.test(warning) && !/^ham:/i.test(warning));
+
+  if (!filtered.length) {
+    return null;
+  }
+
+  return filtered.slice(0, 2).join(" | ").slice(0, 320);
+}
+
 function Bubble({
   role,
   children,
@@ -255,7 +268,7 @@ function Bubble({
       <div
         className={`${
           role === "system" ? "max-w-full" : "max-w-[min(520px,92%)]"
-        } rounded-2xl px-3 py-2 text-sm leading-6 ${
+        } rounded-2xl px-3 py-2 text-sm leading-6 break-words whitespace-pre-wrap ${
           isUser
             ? "bg-[#102234] text-[#dbeafe] border border-[#24405a]"
             : role === "system"
@@ -561,7 +574,7 @@ export function AiChatPanel() {
         applyLayoutResponse(result.layout);
       }
       if (result?.layout?.warnings?.length) {
-        setSystemNotice(result.layout.warnings.slice(0, 2).join(" | "));
+        setSystemNotice(summarizeSystemWarnings(result.layout.warnings));
       }
       await loadProjectById(activeProjectId);
     } catch (e) {

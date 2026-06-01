@@ -1,5 +1,5 @@
 import { applyObjectUpdate } from "@/lib/room/applyObjectUpdate";
-import { getMountHeight, normalizeRotation } from "@/lib/room/constraints";
+import { getMountHeight, isWallAttachedObject, normalizeRotation } from "@/lib/room/constraints";
 import { getLocalizedObjectLabel } from "@/lib/i18n/translations";
 import type { LayoutChatResult } from "@/types/ai";
 import type { LayoutObjectUpdate, LayoutResponse, RoomData, RoomObject } from "@/types/room";
@@ -22,6 +22,10 @@ function unique(values: string[]) {
 
 function normalizeText(message: string) {
   return `${message.toLowerCase()} ${message.toLocaleLowerCase("tr-TR")}`;
+}
+
+function normalizedAscii(message: string) {
+  return asciiFold(normalizeText(message));
 }
 
 const includesAny = (text: string, keywords: string[]) =>
@@ -121,6 +125,38 @@ function getMentionedObjectIds(roomData: RoomData, message: string) {
 
 function hasAnyActionIntent(message: string) {
   return hasFurnitureAddIntent(message) || hasObjectEditIntent(message) || hasRoomEditIntent(message);
+}
+
+function isDirectManipulationRequest(message: string) {
+  const text = normalizedAscii(message);
+  return includesAny(text, [
+    "move",
+    "shift",
+    "place",
+    "put",
+    "set",
+    "adjust",
+    "rotate",
+    "turn",
+    "resize",
+    "scale",
+    "right",
+    "left",
+    "up",
+    "down",
+    "sag",
+    "sol",
+    "ileri",
+    "geri",
+    "yasla",
+    "kaydir",
+    "dondur",
+    "cevir",
+    "buyut",
+    "kucult",
+    "genislet",
+    "daralt",
+  ]);
 }
 
 function hasDimensionChange(
@@ -313,6 +349,213 @@ function buildOutcomeReply(params: {
   return `${appliedText} ${details.join(" ")}`.trim();
 }
 
+function buildDirectManipulationFallback(params: {
+  language: Language;
+  roomData: RoomData;
+  message: string;
+  targetIds: string[];
+}) {
+  const text = normalizedAscii(params.message);
+  const roomData = cloneRoomData(params.roomData);
+  const targetIds = params.targetIds.filter((id) => id.trim().length > 0);
+
+  if (!targetIds.length) {
+    return null;
+  }
+
+  const wantsRight = includesAny(text, ["right", "sag"]);
+  const wantsLeft = includesAny(text, ["left", "sol"]);
+  const wantsForward = includesAny(text, ["forward", "front", "ileri", "on", "one"]);
+  const wantsBackward = includesAny(text, ["back", "backward", "geri", "arka"]);
+  const wantsWall = includesAny(text, ["wall", "duvar", "yasla"]);
+  const wantsRotate = includesAny(text, ["rotate", "turn", "dondur", "cevir"]);
+  const wantsResize = includesAny(text, ["resize", "scale", "buyut", "kucult", "genislet", "daralt"]);
+  const wantsUp = includesAny(text, ["up", "yukari", "raise", "higher", "lift"]);
+  const wantsDown = includesAny(text, ["down", "asagi", "lower"]);
+  const moveStep = Math.max(0.3, Math.min(0.65, Math.min(roomData.room.width, roomData.room.depth) * 0.08));
+  const wallMargin = 0.18;
+  const resizeFactor = includesAny(text, ["buyut", "genislet", "increase", "bigger", "wider", "larger"])
+    ? 1.12
+    : 0.9;
+  const rotationDelta = includesAny(text, ["180"]) ? 180 : 90;
+  const safeObjects: LayoutResponse["objects"] = [];
+  let blockedCount = 0;
+  let hasClippedChanges = false;
+
+  for (const objectId of targetIds) {
+    const target = roomData.objects.find((object) => object.id === objectId);
+
+    if (!target) {
+      continue;
+    }
+
+    const before = cloneRoomObject(target);
+    const nextPosition = { x: before.position.x, z: before.position.z };
+    const nextDimensions = {
+      width: before.dimensions.width,
+      depth: before.dimensions.depth,
+      height: before.dimensions.height,
+    };
+    let nextRotation = before.rotation;
+    let nextMountHeight = getMountHeight(before);
+    let changed = false;
+
+    if (wantsWall) {
+      if (wantsLeft) {
+        nextPosition.x = wallMargin;
+        changed = true;
+      } else if (wantsRight) {
+        nextPosition.x = roomData.room.width - wallMargin;
+        changed = true;
+      } else if (wantsForward) {
+        nextPosition.z = wallMargin;
+        changed = true;
+      } else if (wantsBackward) {
+        nextPosition.z = roomData.room.depth - wallMargin;
+        changed = true;
+      }
+    } else {
+      if (wantsLeft) {
+        nextPosition.x -= moveStep;
+        changed = true;
+      }
+      if (wantsRight) {
+        nextPosition.x += moveStep;
+        changed = true;
+      }
+      if (wantsForward) {
+        nextPosition.z -= moveStep;
+        changed = true;
+      }
+      if (wantsBackward) {
+        nextPosition.z += moveStep;
+        changed = true;
+      }
+    }
+
+    if (wantsRotate) {
+      const rotateLeft = includesAny(text, ["rotate left", "turn left", "left turn", "sola dondur", "sola cevir"]);
+      nextRotation = normalizeRotation(before.rotation + (rotateLeft ? -rotationDelta : rotationDelta));
+      changed = true;
+    }
+
+    if (wantsResize) {
+      const widthRequested = includesAny(text, ["width", "genislik", "wide"]);
+      const depthRequested = includesAny(text, ["depth", "derinlik"]);
+      const heightRequested = includesAny(text, ["height", "yukseklik", "tall"]);
+
+      if (widthRequested || (!depthRequested && !heightRequested)) {
+        nextDimensions.width = before.dimensions.width * resizeFactor;
+      }
+      if (depthRequested || (!widthRequested && !heightRequested)) {
+        nextDimensions.depth = before.dimensions.depth * resizeFactor;
+      }
+      if (heightRequested) {
+        nextDimensions.height = before.dimensions.height * resizeFactor;
+      }
+
+      changed = true;
+    }
+
+    if (isWallAttachedObject(before) && (wantsUp || wantsDown)) {
+      nextMountHeight = Math.max(
+        0,
+        nextMountHeight + (wantsUp && !wantsDown ? moveStep / 2 : -moveStep / 2),
+      );
+      changed = true;
+    }
+
+    if (!changed) {
+      continue;
+    }
+
+    const applied = applyObjectUpdate(roomData, target, {
+      position: nextPosition,
+      rotation: nextRotation,
+      dimensions: nextDimensions,
+      mountHeight: nextMountHeight,
+    });
+
+    if (!applied) {
+      blockedCount += 1;
+      continue;
+    }
+
+    const after = roomData.objects.find((object) => object.id === objectId) ?? target;
+    const update: LayoutObjectUpdate = {
+      id: after.id,
+      x: after.position.x,
+      z: after.position.z,
+      rotation: after.rotation,
+    };
+
+    if (Math.abs(getMountHeight(after) - getMountHeight(before)) > EPSILON) {
+      update.mountHeight = getMountHeight(after);
+    }
+
+    if (
+      Math.abs(after.dimensions.width - before.dimensions.width) > EPSILON ||
+      Math.abs(after.dimensions.depth - before.dimensions.depth) > EPSILON ||
+      Math.abs(after.dimensions.height - before.dimensions.height) > EPSILON
+    ) {
+      update.dimensions = {
+        width: after.dimensions.width,
+        depth: after.dimensions.depth,
+        height: after.dimensions.height,
+      };
+      hasClippedChanges = true;
+    }
+
+    safeObjects.push(update);
+  }
+
+  if (!safeObjects.length) {
+    return null;
+  }
+
+  const warnings = unique([
+    params.language === "en"
+      ? "Used a local fallback to apply the direct manipulation request."
+      : "Doğrudan işlem isteği için yerel bir yedek uygulama kullanıldı.",
+    blockedCount > 0
+      ? params.language === "en"
+        ? "Some selected items could not be changed because they are locked or constrained."
+        : "Seçili öğelerin bazıları kilitli ya da kısıtlı olduğu için değiştirilemedi."
+      : "",
+    hasClippedChanges
+      ? params.language === "en"
+        ? "Some values were clipped to keep the scene valid."
+        : "Bazı değerler sahneyi geçerli tutmak için kırpıldı."
+      : "",
+  ]);
+
+  return {
+    reply: buildOutcomeReply({
+      language: params.language,
+      roomData: params.roomData,
+      safeObjects,
+      roomChanged: false,
+      objectChanged: true,
+      blockedCount,
+      addIntent: false,
+      roomMissing: false,
+      objectMissing: false,
+      selectedObjectMissing: false,
+      hasClippedChanges,
+    }),
+    layout: {
+      layoutName: params.language === "en" ? "Direct manipulation fallback" : "Doğrudan işlem yedeği",
+      summary:
+        params.language === "en"
+          ? "Applied a local fallback for the selected object(s)."
+          : "Seçili öğe(ler) için yerel bir yedek uygulandı.",
+      objects: safeObjects,
+      constraintsRespected: ["locked_objects"],
+      warnings,
+    },
+  } satisfies LayoutChatResult;
+}
+
 export function sanitizeLayoutChatResult(params: {
   message: string;
   roomData: RoomData;
@@ -375,6 +618,21 @@ export function sanitizeLayoutChatResult(params: {
   const canApplyObjectUpdates = explicitTargetIds.size > 0;
   let blockedCount = 0;
   let hasClippedChanges = false;
+
+  const directManipulationRequest = isDirectManipulationRequest(params.message);
+
+  if (directManipulationRequest && explicitTargetIds.size > 0 && !hasSafeRoomChange) {
+    const fallback = buildDirectManipulationFallback({
+      language,
+      roomData: params.roomData,
+      message: params.message,
+      targetIds: [...explicitTargetIds],
+    });
+
+    if (fallback) {
+      return fallback;
+    }
+  }
 
   if (addIntent) {
     const note = buildPartialNote(language, true, 0, false, false);

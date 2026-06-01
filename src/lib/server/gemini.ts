@@ -1,4 +1,5 @@
 import { roomDraftSchema, type RoomDraft } from "@/lib/ai/roomDraft";
+import { parseJsonObject } from "@/lib/ai/json";
 import {
   ROOM_ANALYSIS_OUTPUT_GUIDELINES,
   ROOM_ANALYSIS_RULES,
@@ -111,16 +112,12 @@ export async function analyzeRoomWithGemini(params: {
   const textParts = response.candidates?.[0]?.content?.parts ?? [];
   const text = textParts.map((p) => p.text).filter(Boolean).join("\n");
 
-  // Some models may wrap JSON in code fences. Strip defensively.
-  const cleaned = text
-    .trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/```$/, "")
-    .trim();
+  const parsedUnknown = parseJsonObject<unknown>(text);
+  if (!parsedUnknown || typeof parsedUnknown !== "object") {
+    throw new Error("Gemini response did not contain valid JSON");
+  }
 
-  const parsedJson = JSON.parse(cleaned);
-  const parsed = roomDraftSchema.safeParse(parsedJson);
+  const parsed = roomDraftSchema.safeParse(parsedUnknown);
   if (!parsed.success) {
     throw new Error("Gemini response did not match RoomDraft schema");
   }

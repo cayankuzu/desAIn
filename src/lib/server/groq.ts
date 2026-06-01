@@ -76,12 +76,10 @@ export async function planLayoutWithGroq(params: {
   });
 
   if (!res.ok) {
-    const text = await res.text();
-    const excerpt = text.trim().slice(0, 280);
     const message =
       params.locale === "en"
-        ? `Groq request failed (${res.status}). ${excerpt || "No response body."}`
-        : `Groq isteği başarısız oldu (${res.status}). ${excerpt || "Yanıt gövdesi yok."}`;
+        ? `Groq request failed (${res.status}).`
+        : `Groq isteği başarısız oldu (${res.status}).`;
     throw new Error(message);
   }
 

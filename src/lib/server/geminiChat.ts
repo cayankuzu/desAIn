@@ -75,12 +75,10 @@ export async function planLayoutWithGemini(params: {
   );
 
   if (!res.ok) {
-    const text = await res.text();
-    const excerpt = text.trim().slice(0, 280);
     const message =
       params.locale === "en"
-        ? `Gemini request failed (${res.status}). ${excerpt || "No response body."}`
-        : `Gemini isteği başarısız oldu (${res.status}). ${excerpt || "Yanıt gövdesi yok."}`;
+        ? `Gemini request failed (${res.status}).`
+        : `Gemini isteği başarısız oldu (${res.status}).`;
 
     return {
       reply: message,
@@ -98,10 +96,8 @@ export async function planLayoutWithGemini(params: {
   const response = json as GeminiChatCompletion;
   const textParts = response.candidates?.[0]?.content?.parts ?? [];
   const text = textParts.map((part) => part.text).filter(Boolean).join("\n");
-  const excerpt = text.trim().slice(0, 220);
 
   const parsedUnknown = parseJsonObject<unknown>(text);
-
   if (!parsedUnknown || typeof parsedUnknown !== "object") {
     return {
       reply:
@@ -116,8 +112,7 @@ export async function planLayoutWithGemini(params: {
         warnings: [
           params.locale === "en"
             ? "Gemini returned an invalid layout payload."
-            : "Gemini ge??ersiz bir layout ????kt??s?? d??nd??rd??.",
-          excerpt ? `${params.locale === "en" ? "Raw" : "Ham"}: ${excerpt}` : "",
+            : "Gemini geçersiz bir layout çıktısı döndürdü.",
         ],
       },
     };
@@ -142,8 +137,7 @@ export async function planLayoutWithGemini(params: {
         warnings: [
           params.locale === "en"
             ? "Gemini returned a layout payload that did not match the schema."
-            : "Gemini, ??ema ile e??le??meyen bir layout ????kt??s?? d??nd??rd??.",
-          excerpt ? `${params.locale === "en" ? "Raw" : "Ham"}: ${excerpt}` : "",
+            : "Gemini şemayla eşleşmeyen bir layout çıktısı döndürdü.",
         ],
       },
     };
