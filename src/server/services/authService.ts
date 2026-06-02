@@ -5,11 +5,11 @@ import {
   USERNAME_MIN_LENGTH,
 } from "@/lib/appLimits";
 import { hashPassword, hashToken, verifyPassword } from "@/server/auth/password";
+import { SESSION_DURATION_DAYS } from "@/server/auth/sessionPolicy";
 import { getDatabaseConfig } from "@/server/db/config";
 import { getPersistenceAdapter, rowToViewer } from "@/server/repositories/persistenceAdapter";
 import { projectService } from "@/server/services/projectService";
 
-const SESSION_DURATION_DAYS = 30;
 const RESET_TOKEN_DURATION_MINUTES = 30;
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
@@ -143,7 +143,6 @@ export const authService = {
       throw new Error("E-posta veya sifre hatali.");
     }
 
-    await adapter.sessions.deleteExpired();
     const session = await adapter.sessions.create(user.id, toSessionExpiry());
     const project = await saveDraftProjectForUser(user.id, input.initialProjectDraft);
 

@@ -1,23 +1,18 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { Viewer } from "@/types/project";
+import {
+  getExpiredSessionCookieOptions,
+  getSessionCookieOptions,
+  SESSION_COOKIE_NAME,
+} from "@/server/auth/sessionPolicy";
 import { authService } from "@/server/services/authService";
 
-export const SESSION_COOKIE_NAME =
-  process.env.DESAIN_SESSION_COOKIE_NAME ?? "desain_session";
-
-export const getSessionCookieOptions = () => ({
-  httpOnly: true,
-  sameSite: "lax" as const,
-  path: "/",
-  secure: process.env.NODE_ENV === "production",
-  maxAge: 60 * 60 * 24 * 30,
-});
-
-export const getExpiredSessionCookieOptions = () => ({
-  ...getSessionCookieOptions(),
-  maxAge: 0,
-});
+export {
+  getExpiredSessionCookieOptions,
+  getSessionCookieOptions,
+  SESSION_COOKIE_NAME,
+} from "@/server/auth/sessionPolicy";
 
 export const setSessionCookie = async (sessionId: string) => {
   const cookieStore = await cookies();

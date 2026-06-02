@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SessionKeepAlive } from "@/components/auth/SessionKeepAlive";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,10 +16,7 @@ export default function RootLayout({
     <html lang="tr" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
         {children}
-        <div className="global-brand-credit" aria-label="Copyright 2026, powered by MeMoDe">
-          <span>Copyright 2026</span>
-          <strong>Powered by MeMoDe</strong>
-        </div>
+        <SessionKeepAlive />
       </body>
     </html>
   );

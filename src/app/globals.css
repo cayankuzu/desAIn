@@ -68,48 +68,67 @@ textarea {
   background: rgba(255, 140, 66, 0.28);
 }
 
-.global-brand-credit {
-  position: fixed;
-  left: 50%;
-  bottom: max(0.75rem, env(safe-area-inset-bottom));
-  z-index: 80;
-  display: inline-flex;
-  min-width: 172px;
-  transform: translateX(-50%);
-  flex-direction: column;
+.brand-credit {
+  display: inline-grid;
+  grid-template-columns: max-content 1px max-content;
   align-items: center;
-  gap: 0.1rem;
-  border: 1px solid rgba(255, 179, 108, 0.28);
-  border-radius: 14px;
+  gap: 0.55rem;
+  min-height: 2rem;
+  width: max-content;
+  max-width: 100%;
+  border: 1px solid rgba(143, 168, 196, 0.16);
+  border-radius: 10px;
   background:
-    linear-gradient(135deg, rgba(255, 140, 66, 0.18), rgba(102, 177, 255, 0.12)),
-    rgba(8, 14, 21, 0.78);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.025)),
+    rgba(13, 20, 29, 0.88);
   box-shadow:
-    0 14px 40px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  padding: 0.48rem 0.88rem;
-  color: rgba(237, 243, 255, 0.9);
-  pointer-events: none;
-  text-align: center;
-  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(16px);
+    0 10px 28px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  padding: 0.34rem 0.62rem;
+  color: rgba(237, 243, 255, 0.78);
+  text-align: left;
+  text-transform: none;
+  white-space: nowrap;
 }
 
-.global-brand-credit span {
-  font-size: 0.62rem;
+.brand-credit__copyright,
+.brand-credit__powered {
   font-weight: 700;
-  letter-spacing: 0.16em;
-  line-height: 1.1;
-  text-transform: uppercase;
+  line-height: 1;
 }
 
-.global-brand-credit strong {
-  color: #ffd3a8;
-  font-size: 0.74rem;
+.brand-credit__copyright {
+  color: rgba(202, 213, 226, 0.72);
+  font-size: 0.64rem;
+  letter-spacing: 0.04em;
+}
+
+.brand-credit__divider {
+  height: 1rem;
+  background: rgba(143, 168, 196, 0.2);
+}
+
+.brand-credit__powered {
+  color: rgba(237, 243, 255, 0.86);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+}
+
+.brand-credit__powered strong {
+  color: #f5b87d;
   font-weight: 800;
-  letter-spacing: 0.08em;
-  line-height: 1.2;
-  text-transform: uppercase;
+}
+
+@media (max-width: 640px) {
+  .brand-credit {
+    grid-template-columns: 1fr;
+    justify-items: start;
+    gap: 0.22rem;
+  }
+
+  .brand-credit__divider {
+    display: none;
+  }
 }
 
 .editor-panel {

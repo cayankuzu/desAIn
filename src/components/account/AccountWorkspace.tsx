@@ -23,6 +23,7 @@ import {
   USERNAME_MIN_LENGTH,
 } from "@/lib/appLimits";
 import { AuthForms } from "@/components/auth/AuthForms";
+import { BrandCredit } from "@/components/layout/BrandCredit";
 import {
   getAccountCopy,
   localizeApiMessage,
@@ -852,7 +853,8 @@ export function AccountWorkspace({
       <div className={shellClassName}>
         <header className="sticky top-0 z-20 border-b border-white/10 bg-[#0c131b]/96 px-4 py-4 backdrop-blur-xl md:px-6">
           <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap items-start justify-end gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <BrandCredit className="shrink-0" />
               <div className="flex flex-wrap items-center gap-3">
                 <div className="inline-flex items-center gap-2 rounded-full border border-[#24405a] bg-[#102234] px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-[#8cb9ff]">
                   <Sparkles className="h-3.5 w-3.5" />

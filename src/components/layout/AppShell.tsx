@@ -123,6 +123,9 @@ function MobileDesktopNotice({ locale }: { locale: "tr" | "en" }) {
             <div className="mt-2 inline-flex rounded-full border border-[#ffb36c]/20 bg-[#2a180c]/80 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#ffd7a7]">
               {copy.note}
             </div>
+            <div className="mt-3">
+              <BrandCredit />
+            </div>
           </div>
         </div>
       </section>

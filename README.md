@@ -37,13 +37,16 @@ Environment variables:
 ```bash
 DESAIN_RUNTIME_ENV=local
 DESAIN_SESSION_COOKIE_NAME=desain_session
+BLOB_READ_WRITE_TOKEN=...
+DESAIN_DATABASE_BLOB_PATHNAME=databases/production/desain.production.sqlite
 ```
 
 Current behavior:
 
 - `local` runtime writes to `data/local/desain.local.sqlite`
-- `production` runtime writes to `data/production/desain.production.sqlite`
-- both currently use SQLite
+- Vercel runtime writes its working SQLite copy to `/tmp/desain/...` because the deployment bundle is read-only
+- production uses Vercel Blob for durable SQLite persistence when `BLOB_READ_WRITE_TOKEN` is configured
+- without Vercel Blob, Vercel can run from `/tmp`, but user accounts and projects are not durable across cold starts
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

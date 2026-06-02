@@ -1,7 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import initSqlJs from "sql.js";
+import {
+  readDatabaseBlob,
+  writeDatabaseBlob,
+} from "@/server/db/blobDatabaseStorage";
 import { getDatabaseConfig } from "@/server/db/config";
+import type { DatabaseConfig } from "@/server/types/database";
 
 type SqlBindParams = initSqlJs.BindParams;
 export interface SqliteExecutor {
@@ -11,6 +16,7 @@ export interface SqliteExecutor {
 }
 
 type SqliteRuntime = {
+  config: DatabaseConfig;
   db: initSqlJs.Database;
   filePath: string;
 };
@@ -60,6 +66,13 @@ const persistDatabase = async (db: initSqlJs.Database, filePath: string) => {
   } finally {
     await fs.rm(tempFilePath, { force: true }).catch(() => undefined);
   }
+
+  return binary;
+};
+
+const persistRuntimeDatabase = async (runtime: SqliteRuntime) => {
+  const binary = await persistDatabase(runtime.db, runtime.filePath);
+  await writeDatabaseBlob(runtime.config, binary);
 };
 
 const readDatabaseFile = async (filePath: string) => {
@@ -202,18 +215,32 @@ const createDatabaseFromDisk = async (filePath: string) => {
   };
 };
 
+const hydrateDatabaseFile = async (config: DatabaseConfig) => {
+  const databaseBytes = await readDatabaseBlob(config);
+
+  if (!databaseBytes) {
+    return;
+  }
+
+  await fs.mkdir(path.dirname(config.filePath), { recursive: true });
+  await fs.writeFile(config.filePath, databaseBytes);
+};
+
 const initializeRuntime = async (): Promise<SqliteRuntime> => {
   const config = getDatabaseConfig();
 
   await fs.mkdir(path.dirname(config.filePath), { recursive: true });
+  await hydrateDatabaseFile(config);
 
   const { db } = await createDatabaseFromDisk(config.filePath);
-  await persistDatabase(db, config.filePath);
-
-  return {
+  const runtime = {
+    config,
     db,
     filePath: config.filePath,
   };
+  await persistRuntimeDatabase(runtime);
+
+  return runtime;
 };
 
 const getRuntime = async () => {
@@ -225,12 +252,13 @@ const getRuntime = async () => {
 };
 
 const refreshRuntimeFromDisk = async (runtime: SqliteRuntime) => {
+  await hydrateDatabaseFile(runtime.config);
   const { db, migrated } = await createDatabaseFromDisk(runtime.filePath);
   runtime.db.close();
   runtime.db = db;
 
   if (migrated) {
-    await persistDatabase(runtime.db, runtime.filePath);
+    await persistRuntimeDatabase(runtime);
   }
 };
 
@@ -275,7 +303,7 @@ export const sqliteRun = async (sql: string, params?: SqlBindParams) => {
     await refreshRuntimeFromDisk(runtime);
     runtime.db.run(sql, params);
     const changes = runtime.db.getRowsModified();
-    await persistDatabase(runtime.db, runtime.filePath);
+    await persistRuntimeDatabase(runtime);
 
     return { changes };
   });
@@ -304,7 +332,7 @@ export const sqliteTransaction = async <T>(
     try {
       const result = await operation(tx);
       runtime.db.run("COMMIT");
-      await persistDatabase(runtime.db, runtime.filePath);
+      await persistRuntimeDatabase(runtime);
       return result;
     } catch (error) {
       runtime.db.run("ROLLBACK");

@@ -222,9 +222,8 @@ const createSqliteRepositories = (): PersistenceAdapter => {
               created_at AS createdAt
             FROM sessions
             WHERE id = ?
-              AND expires_at > ?
           `,
-          [sessionId, nowIso()],
+          [sessionId],
         )) ?? null
       );
     },

@@ -2,11 +2,14 @@ import type { RoomData } from "@/types/room";
 
 export type RuntimeEnvironment = "local" | "production";
 export type DatabaseDriver = "sqlite";
+export type DatabaseStorage = "file" | "vercel-blob";
 
 export interface DatabaseConfig {
   runtimeEnvironment: RuntimeEnvironment;
   driver: DatabaseDriver;
   filePath: string;
+  storage: DatabaseStorage;
+  blobPathname?: string;
 }
 
 export interface UserRecord {

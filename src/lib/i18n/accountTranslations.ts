@@ -471,6 +471,8 @@ const turkishServerMessages: Record<string, string> = {
     "Kaydedilecek proje sahnesi eksik.",
   "Proje bulunamadi.": "Proje bulunamad\u0131.",
   "Silinecek proje bulunamadi.": "Silinecek proje bulunamad\u0131.",
+  "Sunucu veri depolama alani hazir degil. Lutfen tekrar deneyin.":
+    "Sunucu veri depolama alan\u0131 haz\u0131r de\u011fil. L\u00fctfen tekrar deneyin.",
 };
 
 const englishServerMessages: Record<string, string> = {
@@ -504,6 +506,8 @@ const englishServerMessages: Record<string, string> = {
   "Kaydedilecek proje sahnesi eksik.": "The project scene to save is missing.",
   "Proje bulunamadi.": "Project not found.",
   "Silinecek proje bulunamadi.": "Project to delete was not found.",
+  "Sunucu veri depolama alani hazir degil. Lutfen tekrar deneyin.":
+    "Server data storage is not ready. Please try again.",
 };
 
 export const getAccountCopy = (locale: Locale) => accountCopy[locale];

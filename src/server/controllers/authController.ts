@@ -6,10 +6,8 @@ import {
   getSessionIdFromCookies,
   SESSION_COOKIE_NAME,
 } from "@/server/auth/session";
+import { getControllerErrorMessage } from "@/server/controllers/errorMessages";
 import { authService } from "@/server/services/authService";
-
-const getErrorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : "Beklenmeyen bir hata olustu.";
 
 const readJsonBody = async <T>(request: Request) => {
   return (await request.json()) as T;
@@ -60,7 +58,7 @@ export const authController = {
       return response;
     } catch (error) {
       return NextResponse.json(
-        { ok: false, message: getErrorMessage(error) },
+        { ok: false, message: getControllerErrorMessage(error) },
         { status: 400 },
       );
     }
@@ -89,7 +87,7 @@ export const authController = {
       return response;
     } catch (error) {
       return NextResponse.json(
-        { ok: false, message: getErrorMessage(error) },
+        { ok: false, message: getControllerErrorMessage(error) },
         { status: 400 },
       );
     }
@@ -120,7 +118,7 @@ export const authController = {
       });
     } catch (error) {
       return NextResponse.json(
-        { ok: false, message: getErrorMessage(error) },
+        { ok: false, message: getControllerErrorMessage(error) },
         { status: 400 },
       );
     }
@@ -137,7 +135,7 @@ export const authController = {
       });
     } catch (error) {
       return NextResponse.json(
-        { ok: false, message: getErrorMessage(error) },
+        { ok: false, message: getControllerErrorMessage(error) },
         { status: 400 },
       );
     }
@@ -153,7 +151,7 @@ export const authController = {
       });
     } catch (error) {
       return NextResponse.json(
-        { ok: false, message: getErrorMessage(error) },
+        { ok: false, message: getControllerErrorMessage(error) },
         { status: 400 },
       );
     }
@@ -167,18 +165,40 @@ export const authController = {
       return NextResponse.json({ ok: true });
     } catch (error) {
       return NextResponse.json(
-        { ok: false, message: getErrorMessage(error) },
+        { ok: false, message: getControllerErrorMessage(error) },
         { status: 400 },
       );
     }
   },
 
   async session() {
-    const user = await authService.getViewerBySessionId(await getSessionIdFromCookies());
-
-    return NextResponse.json({
+    const sessionId = await getSessionIdFromCookies();
+    const user = await authService.getViewerBySessionId(sessionId);
+    const response = NextResponse.json({
       ok: true,
       user,
     });
+
+    if (sessionId && user) {
+      response.cookies.set(
+        SESSION_COOKIE_NAME,
+        sessionId,
+        getSessionCookieOptions(),
+      );
+
+      return response;
+    }
+
+    if (sessionId && !user) {
+      response.cookies.set(
+        SESSION_COOKIE_NAME,
+        "",
+        getExpiredSessionCookieOptions(),
+      );
+
+      return response;
+    }
+
+    return response;
   },
 };
