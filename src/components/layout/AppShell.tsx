@@ -26,6 +26,7 @@ import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { useRoomStore } from "@/store/roomStore";
 import { useUIStore } from "@/store/uiStore";
 import { AccountWorkspace } from "@/components/account/AccountWorkspace";
+import { BrandCredit } from "@/components/layout/BrandCredit";
 import { EditorHotkeys } from "@/components/layout/EditorHotkeys";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
@@ -1154,7 +1155,7 @@ export function AppShell({
           }`}
         >
           <div
-              className="editor-panel room-canvas relative h-full min-h-0 overflow-hidden p-0"
+              className="editor-panel room-canvas relative flex h-full min-h-0 flex-col overflow-hidden p-0"
               onDragOver={(event) => {
                 const templateId =
                   activeInventoryDragTemplateIdRef.current ||
@@ -1300,7 +1301,7 @@ export function AppShell({
               </div>
             ) : null}
             {coverCaptureMode ? null : <ViewportHud />}
-            <div className="h-full">
+            <div className="relative min-h-0 flex-1">
               <RoomScene
                 previewObject={dragPreviewObject}
                 presentationMode={coverCaptureMode}
@@ -1308,6 +1309,11 @@ export function AppShell({
                 onViewportRoomPositionResolverChange={setViewportRoomPositionResolver}
               />
             </div>
+            {coverCaptureMode ? null : (
+              <div className="relative z-20 flex shrink-0 justify-center px-4 pb-3 pt-2">
+                <BrandCredit />
+              </div>
+            )}
           </div>
 
           {effectivePanelsHidden ? null : <Sidebar />}
