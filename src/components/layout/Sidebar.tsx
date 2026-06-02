@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type DragEvent, type KeyboardEvent } from "react";
 import {
   AlertTriangle,
   Boxes,
@@ -53,7 +53,7 @@ import type {
   RoomPurpose,
   RoomShape,
 } from "@/types/room";
-import { InventoryPreview } from "./InventoryPreview";
+import { InventoryPreview, InventoryPreviewCanvas } from "./InventoryPreview";
 
 const sidebarTabs: Array<{
   id: SidebarTab;
@@ -806,7 +806,6 @@ function SelectedOpeningEditor({
   const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
   const openingLocked = isOpeningLocked(opening);
   const openingLockLabel = openingLocked ? t(locale, "unlock") : t(locale, "lock");
-
   return (
     <div className="mt-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
@@ -1161,10 +1160,12 @@ function SelectedGroupEditor({
   objects: RoomObject[];
 }) {
   const randomizeSelectedObjects = useRoomStore((state) => state.randomizeSelectedObjects);
-  const groupSelectedObjects = useRoomStore((state) => state.groupSelectedObjects);
   const ungroupSelectedObjects = useRoomStore((state) => state.ungroupSelectedObjects);
   const toggleSelectedObjectsLock = useRoomStore((state) => state.toggleSelectedObjectsLock);
   const deleteSelectedObjects = useRoomStore((state) => state.deleteSelectedObjects);
+  const allObjectsLocked = objects.length > 0 && objects.every((object) => object.locked);
+  const lockLabel = allObjectsLocked ? t(locale, "unlockSelection") : t(locale, "lockSelection");
+  const LockIcon = allObjectsLocked ? Unlock : Lock;
 
   return (
     <div className="mt-4 space-y-4 text-sm text-slate-300">
@@ -1189,10 +1190,10 @@ function SelectedGroupEditor({
             onClick={randomizeSelectedObjects}
           />
           <ShortcutTile
-            icon={Lock}
-            label={t(locale, "lockSelection")}
+            icon={LockIcon}
+            label={lockLabel}
             keyLabel={null}
-            onClick={() => toggleSelectedObjectsLock(true)}
+            onClick={() => toggleSelectedObjectsLock()}
           />
           <ShortcutTile
             icon={Scissors}
@@ -1205,12 +1206,6 @@ function SelectedGroupEditor({
             label={t(locale, "deleteSelection")}
             keyLabel={null}
             onClick={deleteSelectedObjects}
-          />
-          <ShortcutTile
-            icon={Boxes}
-            label={t(locale, "groupSelection")}
-            keyLabel={null}
-            onClick={groupSelectedObjects}
           />
         </div>
       </div>
@@ -1701,9 +1696,9 @@ function InventoryPanel({ locale }: { locale: Locale }) {
     [activeCategory, filteredInventory, hasQuery],
   );
   const showRecommended = !hasQuery && activeCategory === "all";
-
   return (
     <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
+      <InventoryPreviewCanvas />
       <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8cb9ff]">
         <Package2 className="h-3.5 w-3.5" />
         {t(locale, "inventory")}
@@ -1754,8 +1749,13 @@ function InventoryPanel({ locale }: { locale: Locale }) {
             {t(locale, "recommended")}
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            {uniqueFeaturedInventory.map((item) => (
-              <InventoryCard key={item.id} item={item} locale={locale} />
+            {uniqueFeaturedInventory.map((item, index) => (
+              <InventoryCard
+                key={item.id}
+                item={item}
+                locale={locale}
+                previewIndex={index}
+              />
             ))}
           </div>
         </div>
@@ -1766,8 +1766,13 @@ function InventoryPanel({ locale }: { locale: Locale }) {
           {t(locale, "inventory")}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          {visibleInventory.map((item) => (
-            <InventoryCard key={item.id} item={item} locale={locale} />
+          {visibleInventory.map((item, index) => (
+            <InventoryCard
+              key={item.id}
+              item={item}
+              locale={locale}
+              previewIndex={uniqueFeaturedInventory.length + index}
+            />
           ))}
         </div>
       </div>
@@ -1778,38 +1783,56 @@ function InventoryPanel({ locale }: { locale: Locale }) {
 function InventoryCard({
   item,
   locale,
+  previewIndex,
 }: {
   item: InventoryTemplate;
   locale: Locale;
+  previewIndex: number;
 }) {
   const categoryLabel =
     item.previewType === "wall"
       ? inventoryCategoryLabels.get("structure")?.[locale] ?? getLocalizedCategoryLabel(locale, item.category)
       : getLocalizedCategoryLabel(locale, item.category);
+  const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
+    event.dataTransfer.effectAllowed = "copy";
+    const dragImage = document.createElement("canvas");
+    dragImage.width = 1;
+    dragImage.height = 1;
+    event.dataTransfer.setDragImage(dragImage, 0, 0);
+    event.dataTransfer.setData(INVENTORY_DRAG_MIME, item.id);
+    event.dataTransfer.setData("text/plain", item.id);
+    window.dispatchEvent(
+      new CustomEvent("desain:inventory-drag-start", { detail: item.id }),
+    );
+  };
+
+  const handleDragEnd = () => {
+    window.dispatchEvent(new CustomEvent("desain:inventory-drag-end"));
+  };
+
+  const handleInfoKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      event.currentTarget.focus();
+    }
+  };
 
   return (
-    <button
-      type="button"
-      draggable
-      onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = "copy";
-        const dragImage = document.createElement("canvas");
-        dragImage.width = 1;
-        dragImage.height = 1;
-        event.dataTransfer.setDragImage(dragImage, 0, 0);
-        event.dataTransfer.setData(INVENTORY_DRAG_MIME, item.id);
-        event.dataTransfer.setData("text/plain", item.id);
-        window.dispatchEvent(
-          new CustomEvent("desain:inventory-drag-start", { detail: item.id }),
-        );
-      }}
-      onDragEnd={() => {
-        window.dispatchEvent(new CustomEvent("desain:inventory-drag-end"));
-      }}
+    <div
       className="rounded-xl border border-white/10 bg-[#111924] p-3 text-left transition hover:border-[#4ea8ff] hover:bg-[#132030]"
     >
-      <InventoryPreview item={item} />
-      <div className="mt-3 flex items-start justify-between gap-2">
+      <InventoryPreview item={item} index={previewIndex} />
+      <div
+        draggable
+        role="button"
+        tabIndex={0}
+        title={t(locale, "dropToViewport")}
+        aria-label={`${getLocalizedObjectLabel(locale, item)} ${t(locale, "dropToViewport")}`}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onKeyDown={handleInfoKeyDown}
+        className="mt-3 flex cursor-grab items-start justify-between gap-2 rounded-lg border border-transparent p-1 transition active:cursor-grabbing hover:border-white/10 hover:bg-white/5 focus:border-[#4ea8ff] focus:outline-none"
+      >
         <div>
           <div className="font-medium text-white">{getLocalizedObjectLabel(locale, item)}</div>
           <div className="mt-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">
@@ -1820,7 +1843,7 @@ function InventoryCard({
           {`${item.dimensions.width.toFixed(1)} x ${item.dimensions.depth.toFixed(1)}m`}
         </span>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -1840,8 +1863,8 @@ function RandomLayoutsPanel({ locale }: { locale: Locale }) {
     validationWarnings.find((warning) => warning.code === "room_open_outline") ?? null;
   const helperText =
     locale === "en"
-      ? "Layout generation runs a fast wall/floor sweep, keeps the same cached list while the room stays unchanged, and skips tiny shifted copies."
-      : "Düzen oluşturma hızlı duvar/zemin taraması yapar; oda değişmediğinde aynı listeyi korur ve küçük kaydırılmış kopyaları atlar.";
+      ? "Layout generation preserves the current room as Layout 0, keeps explicit groups compact, and protects the original activity zone of grouped items in combined spaces such as open kitchens and studios."
+      : "\u0044\u00fczen olu\u015fturma mevcut sahneyi D\u00fczen 0 olarak korur, a\u00e7\u0131k gruplar\u0131 kompakt tutar ve a\u00e7\u0131k mutfak ile st\u00fcdyo gibi birle\u015fik alanlarda gruplanm\u0131\u015f \u00f6\u011felerin as\u0131l kullan\u0131m b\u00f6lgesini korur.";
 
   return (
     <section className="rounded-2xl border border-white/10 bg-[#0d141d] p-4">
@@ -1909,13 +1932,22 @@ function RandomLayoutsPanel({ locale }: { locale: Locale }) {
             ).length;
             const warningCount = option.warnings.length - errorCount;
             const active = option.id === activeOptionId;
-            const optionLabel =
+            let optionLabel =
               locale === "tr" ? `Düzen ${index + 1}` : `Layout ${index + 1}`;
             const statusText = errorCount
               ? `${errorCount} ${t(locale, "errorsShort")}`
               : warningCount
                 ? `${warningCount} ${t(locale, "warningsShort")}`
                 : t(locale, "noWarningsShort");
+
+            optionLabel =
+              option.id === "layout_0"
+                ? locale === "tr"
+                  ? "Düzen 0"
+                  : "Layout 0"
+                : locale === "tr"
+                  ? `Düzen ${index}`
+                  : `Layout ${index}`;
 
             return (
               <button
@@ -1933,11 +1965,16 @@ function RandomLayoutsPanel({ locale }: { locale: Locale }) {
                     <div className="flex items-center gap-2 font-semibold">
                       {active ? <Check className="h-4 w-4 text-[#8cb9ff]" /> : null}
                       {optionLabel}
+                      {option.id === "layout_0" ? (
+                        <span className="rounded-full border border-[#24405a] bg-[#102234] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8cb9ff]">
+                          {locale === "en" ? "Current" : "Mevcut"}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-slate-500">
                       {`${roomData.objects.length} ${
                         locale === "en" ? "items" : "öğe"
-                      } / #${index + 1}`}
+                      } / #${option.id === "layout_0" ? 0 : index}`}
                     </div>
                   </div>
                   <span

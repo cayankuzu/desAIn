@@ -1,6 +1,7 @@
 import {
   boundsIntersect,
   getObjectBounds,
+  getCollisionDimensions,
   getObjectFootprint,
   getPolygonIntersectionPush,
   getRotatedHalfExtents,
@@ -129,9 +130,10 @@ const clampObjectPositionToRoomShell = (
   desiredPosition: RoomObject["position"],
   rotation = object.rotation,
 ) => {
+  const collisionDimensions = getCollisionDimensions(object);
   const { halfWidth, halfDepth } = getRotatedHalfExtents(
-    object.dimensions.width,
-    object.dimensions.depth,
+    collisionDimensions.width,
+    collisionDimensions.depth,
     rotation,
   );
 

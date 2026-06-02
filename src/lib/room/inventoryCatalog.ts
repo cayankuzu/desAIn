@@ -1,4 +1,5 @@
 import type { GeneratorName, ObjectCategory, RoomObject } from "@/types/room";
+import { createInventoryDetailParams } from "@/lib/room/detailProfile";
 
 export const INVENTORY_DRAG_MIME = "application/x-desain-object-template";
 
@@ -41,7 +42,13 @@ export interface InventoryTemplate {
   tags: string[];
 }
 
-const makeTemplate = (template: InventoryTemplate) => template;
+const makeTemplate = (template: InventoryTemplate): InventoryTemplate => ({
+  ...template,
+  params: {
+    ...createInventoryDetailParams(template),
+    ...template.params,
+  },
+});
 
 export const inventoryCatalog: InventoryTemplate[] = [
   makeTemplate({
@@ -447,7 +454,7 @@ export const inventoryCatalog: InventoryTemplate[] = [
     category: "generic_box",
     generator: "GenericObjectGenerator",
     color: "#7a6f67",
-    dimensions: { width: 1.4, depth: 1.4, height: 2.8 },
+    dimensions: { width: 1.08, depth: 1.08, height: 2.8 },
     params: { baseShape: "spiral_stairs" },
     previewType: "stairs",
     tags: ["stairs", "spiral", "vertical"],
@@ -459,7 +466,7 @@ export const inventoryCatalog: InventoryTemplate[] = [
     category: "generic_box",
     generator: "GenericObjectGenerator",
     color: "#8b7e72",
-    dimensions: { width: 1.1, depth: 2.6, height: 2.8 },
+    dimensions: { width: 0.96, depth: 2.1, height: 2.8 },
     params: { baseShape: "stairs" },
     previewType: "stairs",
     tags: ["stairs", "straight", "ladder"],
@@ -735,7 +742,7 @@ export const inventoryCatalog: InventoryTemplate[] = [
     category: "generic_box",
     generator: "GenericObjectGenerator",
     color: "#89796b",
-    dimensions: { width: 0.72, depth: 1.65, height: 2.55 },
+    dimensions: { width: 0.58, depth: 1.18, height: 2.55 },
     params: { baseShape: "ladder_stairs" },
     previewType: "stairs",
     tags: ["ladder", "stairs", "vertical", "merdiven"],

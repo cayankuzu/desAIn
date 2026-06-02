@@ -8,6 +8,7 @@ import {
   Eye,
   EyeOff,
   Languages,
+  Lock,
   Move3d,
   Save,
   RefreshCw,
@@ -18,6 +19,7 @@ import {
 import {
   t,
 } from "@/lib/i18n/translations";
+import { getAccountCopy } from "@/lib/i18n/accountTranslations";
 import { useRoomStore } from "@/store/roomStore";
 import { useUIStore } from "@/store/uiStore";
 
@@ -27,23 +29,32 @@ const neutralButtonClass =
   "border-white/10 bg-[#0d141d] text-slate-300 hover:border-[#32516c] hover:text-white";
 const iconButtonClass =
   "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#0d141d] text-slate-300 transition hover:border-[#32516c] hover:text-white";
+const savedRoomKey = "desain-saved-room-data";
+const savedRoomEvent = "desain:saved-room-changed";
 
 interface TopbarProps {
   panelsHidden: boolean;
   onTogglePanels: () => void;
   onCaptureScreenshot: () => void;
+  onRequestSaveProject: () => void;
+  canSaveProject: boolean;
+  saveActionLabel: string;
 }
 
 export function Topbar({
   panelsHidden,
   onTogglePanels,
   onCaptureScreenshot,
+  onRequestSaveProject,
+  canSaveProject,
+  saveActionLabel,
 }: TopbarProps) {
   const locale = useUIStore((state) => state.locale);
+  const copy = getAccountCopy(locale);
   const setLocale = useUIStore((state) => state.setLocale);
   const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
   const transformMode = useRoomStore((state) => state.transformMode);
-  const setTransformMode = useRoomStore((state) => state.setTransformMode);
+  const requestTransformMode = useRoomStore((state) => state.requestTransformMode);
   const undo = useRoomStore((state) => state.undo);
   const redo = useRoomStore((state) => state.redo);
   const resetRoom = useRoomStore((state) => state.resetRoom);
@@ -59,20 +70,27 @@ export function Topbar({
       }
 
       const handleStorage = (event: StorageEvent) => {
-        if (event.key === "desain-saved-room-data") {
+        if (event.key === savedRoomKey) {
           onStoreChange();
         }
       };
+      const handleSavedRoomChange = () => {
+        onStoreChange();
+      };
 
       window.addEventListener("storage", handleStorage);
-      return () => window.removeEventListener("storage", handleStorage);
+      window.addEventListener(savedRoomEvent, handleSavedRoomChange);
+      return () => {
+        window.removeEventListener("storage", handleStorage);
+        window.removeEventListener(savedRoomEvent, handleSavedRoomChange);
+      };
     },
     () => {
       if (typeof window === "undefined") {
         return false;
       }
 
-      return Boolean(window.localStorage.getItem("desain-saved-room-data"));
+      return Boolean(window.localStorage.getItem(savedRoomKey));
     },
     () => false,
   );
@@ -82,7 +100,7 @@ export function Topbar({
       <div className="flex flex-col gap-2 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <div className="toolbar-scroll -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1">
           <div className="inline-flex h-8 shrink-0 items-center rounded-lg border border-white/10 bg-[#102234] px-3 text-xs font-semibold text-white">
-            {locale === "en" ? "Kitchen" : "İşin Mutfağı"}
+            {t(locale, "editorTitle")}
           </div>
           <div className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-[#0d141d] p-0.5">
             <div className="hidden px-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 sm:block">
@@ -117,11 +135,11 @@ export function Topbar({
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setTransformMode("select")}
-            aria-pressed={transformMode === "select"}
-            className={`${modeButtonBase} ${
+            <button
+              type="button"
+              onClick={() => requestTransformMode("select")}
+              aria-pressed={transformMode === "select"}
+              className={`${modeButtonBase} ${
               transformMode === "select"
                 ? "border-[#ff8c42] bg-[#2a1910] text-[#ffb16a]"
                 : neutralButtonClass
@@ -130,11 +148,11 @@ export function Topbar({
             <BoxSelect className="h-3.5 w-3.5" />
             Q {t(locale, "selectMode")}
           </button>
-          <button
-            type="button"
-            onClick={() => setTransformMode("translate")}
-            aria-pressed={transformMode === "translate"}
-            className={`${modeButtonBase} ${
+            <button
+              type="button"
+              onClick={() => requestTransformMode("translate")}
+              aria-pressed={transformMode === "translate"}
+              className={`${modeButtonBase} ${
               transformMode === "translate"
                 ? "border-[#ff8c42] bg-[#2a1910] text-[#ffb16a]"
                 : neutralButtonClass
@@ -143,11 +161,11 @@ export function Topbar({
             <Move3d className="h-3.5 w-3.5" />
             W {t(locale, "moveMode")}
           </button>
-          <button
-            type="button"
-            onClick={() => setTransformMode("rotate")}
-            aria-pressed={transformMode === "rotate"}
-            className={`${modeButtonBase} ${
+            <button
+              type="button"
+              onClick={() => requestTransformMode("rotate")}
+              aria-pressed={transformMode === "rotate"}
+              className={`${modeButtonBase} ${
               transformMode === "rotate"
                 ? "border-[#ff8c42] bg-[#2a1910] text-[#ffb16a]"
                 : neutralButtonClass
@@ -214,31 +232,44 @@ export function Topbar({
               >
                 {t(locale, "resetDefault")}
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  resetRoom("saved");
-                  setResetMenuOpen(false);
-                }}
-                disabled={!hasSavedLayout}
-                className="mt-2 flex h-8 w-full items-center justify-between rounded-lg border border-white/10 bg-[#111924] px-2.5 text-left text-xs font-semibold text-slate-200 transition hover:border-[#32516c] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                <span>{t(locale, "resetSaved")}</span>
-                <span className="text-[11px] text-slate-500">
-                  {hasSavedLayout ? t(locale, "savedLayout") : t(locale, "noSavedLayout")}
-                </span>
-              </button>
             </div>
           ) : null}
           <button
             type="button"
-            onClick={() => {
-              saveRoomSnapshot();
-            }}
-            className={`${modeButtonBase} ${neutralButtonClass}`}
+            onClick={saveRoomSnapshot}
+            className={`${modeButtonBase} border-[#24405a] bg-[#102234] text-[#8cb9ff] hover:border-[#4ea8ff] hover:text-white`}
           >
             <Save className="h-3.5 w-3.5" />
             {t(locale, "saveRoom")}
+          </button>
+          <button
+            type="button"
+            onClick={() => resetRoom("saved")}
+            disabled={!hasSavedLayout}
+            title={hasSavedLayout ? t(locale, "savedLayout") : t(locale, "noSavedLayout")}
+            className={`${modeButtonBase} ${neutralButtonClass} disabled:cursor-not-allowed disabled:opacity-45`}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            {t(locale, "resetSaved")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onRequestSaveProject();
+            }}
+            title={
+              canSaveProject
+                ? copy.saveTooltipSignedIn
+                : copy.saveTooltipSignedOut
+            }
+            className={`${modeButtonBase} ${
+              canSaveProject
+                ? "border-[#24405a] bg-[#102234] text-[#8cb9ff] hover:border-[#4ea8ff] hover:text-white"
+                : "border-[#6d4a29] bg-[#25180f] text-[#f5c28b] hover:border-[#ffb16a] hover:text-white"
+            }`}
+          >
+            {canSaveProject ? <Save className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+            {saveActionLabel}
           </button>
           <button
             type="button"

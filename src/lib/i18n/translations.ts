@@ -31,6 +31,7 @@ export type StatusKey =
   | "modeSelect"
   | "modeTranslate"
   | "modeRotate"
+  | "transformBlockedLocked"
   | "objectEditing"
   | "objectUpdated"
   | "objectPropertiesUpdated"
@@ -179,10 +180,10 @@ export type MessageKey =
 
 const translations: Record<Locale, Record<MessageKey, string>> = {
   en: {
-    appTitle: "İşin Mutfağı | 3D Room Editor",
+    appTitle: "desAIn",
     appDescription:
       "A polished 3D room editor with live measurements, draggable inventory, professional layout options, and bilingual UI.",
-    editorTitle: "İşin Mutfağı Editor",
+    editorTitle: "desAIn",
     language: "Language",
     english: "EN",
     turkish: "TR",
@@ -310,10 +311,10 @@ const translations: Record<Locale, Record<MessageKey, string>> = {
     removeAction: "Remove",
   },
   tr: {
-    appTitle: "\u0130\u015fin Mutfa\u011f\u0131 | 3D Oda Edit\u00f6r\u00fc",
+    appTitle: "desAIn",
     appDescription:
       "Canl\u0131 \u00f6l\u00e7\u00fcler, s\u00fcr\u00fcklenebilir envanter, profesyonel d\u00fczen se\u00e7enekleri ve iki dilli aray\u00fcz sunan 3D oda edit\u00f6r\u00fc.",
-    editorTitle: "\u0130\u015fin Mutfa\u011f\u0131 Edit\u00f6r",
+    editorTitle: "desAIn",
     language: "Dil",
     english: "EN",
     turkish: "TR",
@@ -708,6 +709,8 @@ export const formatEditorStatus = (
       return locale === "en" ? "Move gizmo enabled" : "Ta\u015f\u0131ma gizmosu etkin";
     case "modeRotate":
       return locale === "en" ? "Rotate gizmo enabled" : "D\u00f6nd\u00fcrme gizmosu etkin";
+    case "transformBlockedLocked":
+      return locale === "en" ? "Locked selection" : "Kilitli secim";
     case "objectEditing":
       return objectLabel
         ? locale === "en"

@@ -171,7 +171,23 @@ const room: RoomDefinition = {
 
 export const defaultRoom: RoomData = {
   room,
-  groups: [],
+  groups: [
+    {
+      id: "group_default_lounge",
+      label: "Lounge Zone",
+      objectIds: ["tv_unit_1", "sofa_1", "carpet_1"],
+    },
+    {
+      id: "group_default_sleep",
+      label: "Sleep Zone",
+      objectIds: ["bed_1", "wardrobe_1"],
+    },
+    {
+      id: "group_default_work",
+      label: "Work Zone",
+      objectIds: ["table_1", "chair_1"],
+    },
+  ],
   constraints: {
     keepWindowClear: true,
     keepDoorClear: true,

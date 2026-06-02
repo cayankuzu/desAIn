@@ -34,9 +34,15 @@ import type { RoomObject as RoomObjectType } from "@/types/room";
 
 interface RoomSceneProps {
   previewObject?: RoomObjectType | null;
+  presentationMode?: boolean;
+  cameraResetToken?: number;
 }
 
-export function RoomScene({ previewObject = null }: RoomSceneProps) {
+export function RoomScene({
+  previewObject = null,
+  presentationMode = false,
+  cameraResetToken = 0,
+}: RoomSceneProps) {
   const roomData = useRoomStore((state) => state.roomData);
   const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
   const selectedObjectIds = useRoomStore((state) => state.selectedObjectIds);
@@ -56,6 +62,8 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
   const [objectMap, setObjectMap] = useState<Record<string, Group | null>>({});
   const [wallMap, setWallMap] = useState<Record<string, Group | null>>({});
   const [openingMap, setOpeningMap] = useState<Record<string, Group | null>>({});
+  const selectionEnabled = !presentationMode;
+  const effectiveCameraMode = presentationMode ? "orbit" : cameraMode;
 
   const selectedObject =
     roomData.objects.find((object) => object.id === selectedObjectId) ?? null;
@@ -72,6 +80,7 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
   const selectedSceneWall = selectedWall ? wallMap[selectedWall.id] ?? null : null;
 
   const canTransform = Boolean(
+    selectionEnabled &&
     selectedObject &&
       selectedSceneObject &&
       selectedObject.movable &&
@@ -79,16 +88,23 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
       transformMode !== "select",
   );
   const canTransformOpening = Boolean(
+    selectionEnabled &&
     selectedOpening &&
       selectedSceneOpening &&
       !isOpeningLocked(selectedOpening) &&
       transformMode !== "select",
   );
   const canTransformWall = Boolean(
+    selectionEnabled &&
     selectedWall &&
       selectedSceneWall &&
       !isWallLocked(selectedWall) &&
       transformMode !== "select",
+  );
+  const cameraLockedForRotation = Boolean(
+    selectionEnabled &&
+    transformMode === "rotate" &&
+    (selectedObject || selectedOpening || selectedWall || selectedObjectIds.length > 0),
   );
 
   const roomOffset = useMemo(
@@ -131,6 +147,7 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
       return;
     }
 
+    const rotateOnly = transformMode === "rotate";
     const mountHeight =
       typeof selectedObject.params.mountHeight === "number"
         ? selectedObject.params.mountHeight
@@ -146,8 +163,8 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
       (selectedSceneObject.rotation.y * 180) / Math.PI,
     );
     const desiredPosition = {
-      x: selectedSceneObject.position.x,
-      z: selectedSceneObject.position.z,
+      x: rotateOnly ? selectedObject.position.x : selectedSceneObject.position.x,
+      z: rotateOnly ? selectedObject.position.z : selectedSceneObject.position.z,
     };
 
     if (isWallObject) {
@@ -199,6 +216,8 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
       return;
     }
 
+    const rotateOnly = transformMode === "rotate";
+    const currentOpeningTransform = getOpeningSceneTransform(roomData.room, selectedOpening);
     const openingHeight = getOpeningHeight(selectedOpening, roomData.room.height);
     const nextSillHeight = Math.min(
       Math.max(0, selectedSceneOpening.position.y - openingHeight / 2),
@@ -208,8 +227,8 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
     const projection = projectPointToWall(
       roomData.room,
       {
-        x: selectedSceneOpening.position.x,
-        z: selectedSceneOpening.position.z,
+        x: rotateOnly ? currentOpeningTransform.position.x : selectedSceneOpening.position.x,
+        z: rotateOnly ? currentOpeningTransform.position.z : selectedSceneOpening.position.z,
       },
       rotationWall?.id ?? selectedOpening.wallId,
     );
@@ -277,6 +296,10 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
       gl={{ preserveDrawingBuffer: true }}
       camera={{ position: [6.4, 5.8, 6.4], fov: 40 }}
       onPointerMissed={() => {
+        if (!selectionEnabled || transformMode !== "select") {
+          return;
+        }
+
         setSelectedStructure(null);
         setMultiSelectMenu(null);
         setSelectedObjectId(null);
@@ -359,13 +382,20 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
           room={roomData.room}
           onWallReady={handleWallReady}
           onOpeningReady={handleOpeningReady}
+          interactive={selectionEnabled}
+          showSelection={selectionEnabled}
         />
         {roomData.objects.map((object) => (
           <RoomObject
             key={object.id}
             object={object}
-            isSelected={selectedObjectId === object.id || selectedObjectIds.includes(object.id)}
+            isSelected={
+              selectionEnabled &&
+              (selectedObjectId === object.id || selectedObjectIds.includes(object.id))
+            }
             onObjectReady={handleObjectReady}
+            interactive={selectionEnabled}
+            showSelection={selectionEnabled}
           />
         ))}
         {previewObject ? (
@@ -375,6 +405,7 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
             isSelected={false}
             interactive={false}
             isGhost
+            showSelection={false}
           />
         ) : null}
         <ContactShadows
@@ -386,13 +417,20 @@ export function RoomScene({ previewObject = null }: RoomSceneProps) {
         />
       </group>
 
-      <CameraControls enabled={!isTransforming} mode={cameraMode} room={roomData.room} />
-      <GizmoHelper alignment="bottom-left" margin={[72, 72]}>
-        <GizmoViewport
-          axisColors={["#ef4444", "#22c55e", "#3b82f6"]}
-          labelColor="#f8fafc"
-        />
-      </GizmoHelper>
+      <CameraControls
+        enabled={!isTransforming && !cameraLockedForRotation}
+        mode={effectiveCameraMode}
+        room={roomData.room}
+        resetToken={cameraResetToken}
+      />
+      {presentationMode ? null : (
+        <GizmoHelper alignment="bottom-left" margin={[72, 72]}>
+          <GizmoViewport
+            axisColors={["#ef4444", "#22c55e", "#3b82f6"]}
+            labelColor="#f8fafc"
+          />
+        </GizmoHelper>
+      )}
     </Canvas>
   );
 }

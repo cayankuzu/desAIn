@@ -13,6 +13,7 @@ interface RoomObjectProps {
   onObjectReady?: (objectId: string, node: Group | null) => void;
   interactive?: boolean;
   isGhost?: boolean;
+  showSelection?: boolean;
 }
 
 export function RoomObject({
@@ -21,6 +22,7 @@ export function RoomObject({
   onObjectReady = () => {},
   interactive = true,
   isGhost = false,
+  showSelection = true,
 }: RoomObjectProps) {
   const Generator = generatorMap[object.generator];
   const setSelectedObjectId = useRoomStore((state) => state.setSelectedObjectId);
@@ -42,6 +44,9 @@ export function RoomObject({
       ? object.params.mountHeight
       : 0;
   const objectGroup = roomGroups.find((group) => group.objectIds.includes(object.id)) ?? null;
+  const showPrimarySelection = showSelection && isSelected && !isGhost;
+  const showSecondarySelection =
+    showSelection && !isSelected && selectedObjectIds.includes(object.id);
 
   return (
     <group
@@ -78,7 +83,7 @@ export function RoomObject({
           : undefined
       }
     >
-      <Generator object={object} selected={isSelected && !isGhost} />
+      <Generator object={object} selected={showPrimarySelection} />
       {isGhost ? (
         <>
           <mesh position={[0, 0.018, 0]} renderOrder={30}>
@@ -103,7 +108,7 @@ export function RoomObject({
           </mesh>
         </>
       ) : null}
-      {isSelected && !isGhost ? (
+      {showPrimarySelection ? (
         <mesh position={[0, object.dimensions.height / 2, 0]} renderOrder={20}>
           <boxGeometry
             args={[
@@ -120,7 +125,7 @@ export function RoomObject({
           />
         </mesh>
       ) : null}
-      {!isSelected && selectedObjectIds.includes(object.id) ? (
+      {showSecondarySelection ? (
         <mesh position={[0, object.dimensions.height / 2, 0]} renderOrder={19}>
           <boxGeometry
             args={[

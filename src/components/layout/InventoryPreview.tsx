@@ -1,417 +1,298 @@
 "use client";
 
+import { ContactShadows, PerspectiveCamera, View } from "@react-three/drei";
+import { Canvas, useThree } from "@react-three/fiber";
+import type {
+  ComponentProps,
+  ComponentType,
+  HTMLAttributes,
+  KeyboardEvent,
+  PointerEvent,
+  ReactNode,
+  WheelEvent,
+} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { InventoryTemplate } from "@/lib/room/inventoryCatalog";
-import type { ReactNode } from "react";
+import { getMountHeight, isWallAttachedObject } from "@/lib/room/constraints";
+import { generatorMap } from "@/lib/room/generatorMap";
+import type { RoomObject } from "@/types/room";
 
 const shellClass =
-  "relative h-24 w-full overflow-hidden rounded-xl border border-white/10 bg-[radial-gradient(circle_at_34%_18%,rgba(140,185,255,0.22),transparent_34%),linear-gradient(180deg,#162131_0%,#0d141d_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]";
+  "relative h-24 w-full touch-none overflow-hidden rounded-xl border border-white/10 bg-[radial-gradient(circle_at_34%_18%,rgba(140,185,255,0.22),transparent_34%),linear-gradient(180deg,#162131_0%,#0d141d_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]";
+const viewTrackClass = "absolute inset-0 touch-none cursor-grab active:cursor-grabbing";
 
-const stageClass =
-  "absolute inset-x-4 bottom-3 h-9 rounded-[50%] bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.12),rgba(255,255,255,0.02)_58%,transparent_70%)]";
+type InteractiveViewProps = ComponentProps<typeof View> &
+  HTMLAttributes<HTMLDivElement> & {
+    as: "div";
+    children: ReactNode;
+  };
 
-const getBaseShape = (item: InventoryTemplate) =>
-  String(item.params.baseShape ?? "");
+const InteractiveView = View as unknown as ComponentType<InteractiveViewProps>;
 
-const colorStyle = (color: string) => ({ backgroundColor: color });
+const buildPreviewObject = (item: InventoryTemplate): RoomObject => ({
+  id: `inventory_preview_${item.id}`,
+  label: item.label,
+  labelKey: item.labelKey,
+  category: item.category,
+  generator: item.generator,
+  position: { x: 0, z: 0 },
+  rotation: item.rotation ?? 0,
+  dimensions: { ...item.dimensions },
+  color: item.color,
+  movable: false,
+  locked: true,
+  params: { ...item.params },
+});
 
-function PreviewShell({ children }: { children: ReactNode }) {
-  return (
-    <div className={shellClass}>
-      <div className={stageClass} />
-      <div className="absolute left-4 top-4 h-2 w-2 rounded-full bg-white/25" />
-      {children}
-    </div>
-  );
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+function PreviewCameraRig({ targetY }: { targetY: number }) {
+  const { camera, invalidate } = useThree();
+
+  useEffect(() => {
+    camera.lookAt(0, targetY, 0);
+    camera.updateProjectionMatrix();
+    invalidate();
+  }, [camera, invalidate, targetY]);
+
+  return null;
 }
 
-function BoxBody({
-  color,
-  className,
+function InventoryPreviewScene({
+  item,
+  rotationY,
+  zoom,
 }: {
-  color: string;
-  className: string;
+  item: InventoryTemplate;
+  rotationY: number;
+  zoom: number;
 }) {
+  const previewObject = useMemo(() => buildPreviewObject(item), [item]);
+  const Generator = generatorMap[previewObject.generator];
+
+  if (!Generator) {
+    return null;
+  }
+
+  const mountHeight = getMountHeight(previewObject);
+  const baseShape = String(previewObject.params.baseShape ?? "");
+  const wallMounted =
+    isWallAttachedObject(previewObject) ||
+    item.previewType === "window" ||
+    item.previewType === "door" ||
+    item.previewType === "wall";
+  const ceilingMounted = baseShape === "ceiling_light";
+  const maxSpan = Math.max(
+    previewObject.dimensions.width,
+    previewObject.dimensions.depth,
+    previewObject.dimensions.height,
+  );
+  const floorSize = Math.max(2.2, maxSpan * 1.85);
+  const cameraDistance =
+    (wallMounted ? Math.max(2.2, maxSpan * 1.9) : Math.max(1.75, maxSpan * 1.45)) *
+    zoom;
+  const cameraHeight =
+    wallMounted || ceilingMounted
+      ? Math.max(1.38, mountHeight + previewObject.dimensions.height * 0.52)
+      : Math.max(0.95, previewObject.dimensions.height * 0.95);
+  const wallHeight = Math.max(
+    1.85,
+    mountHeight + previewObject.dimensions.height + 0.38,
+  );
+  const wallWidth = Math.max(1.9, previewObject.dimensions.width * 1.7);
+  const objectLift = wallMounted || ceilingMounted ? mountHeight : 0;
+  const cameraTargetY =
+    wallMounted || ceilingMounted
+      ? Math.max(0.72, objectLift + previewObject.dimensions.height * 0.48)
+      : Math.max(0.24, previewObject.dimensions.height * 0.38);
+
   return (
-    <div
-      className={`absolute rounded-lg border border-white/15 shadow-[0_16px_28px_rgba(0,0,0,0.34)] ${className}`}
-      style={colorStyle(color)}
-    >
-      <div className="absolute inset-x-1 top-1 h-1 rounded-full bg-white/18" />
-    </div>
+    <>
+      <PerspectiveCamera
+        makeDefault
+        position={[cameraDistance, cameraHeight, cameraDistance]}
+        fov={wallMounted || ceilingMounted ? 30 : 28}
+      />
+      <PreviewCameraRig targetY={cameraTargetY} />
+      <color attach="background" args={["#0d141d"]} />
+      <ambientLight intensity={1.16} />
+      <hemisphereLight args={["#e8f2ff", "#493524", 0.82]} />
+      <directionalLight position={[3.8, 5.4, 3.4]} intensity={1.26} />
+      <directionalLight
+        position={[-3.2, 3.2, -2]}
+        intensity={0.5}
+        color="#d7e9ff"
+      />
+
+      <group rotation={[0, rotationY - 0.58, 0]} position={[0, -0.04, 0]}>
+        <mesh rotation-x={-Math.PI / 2} receiveShadow>
+          <planeGeometry args={[floorSize, floorSize]} />
+          <meshStandardMaterial color="#162231" roughness={0.94} />
+        </mesh>
+        <mesh rotation-x={-Math.PI / 2} position={[0, 0.012, 0]} receiveShadow>
+          <ringGeometry args={[floorSize * 0.19, floorSize * 0.46, 40]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0.07} />
+        </mesh>
+
+        {wallMounted || ceilingMounted ? (
+          <mesh
+            position={[
+              0,
+              wallHeight / 2,
+              -Math.max(previewObject.dimensions.depth * 0.58, 0.18),
+            ]}
+            receiveShadow
+          >
+            <planeGeometry args={[wallWidth, wallHeight]} />
+            <meshStandardMaterial color="#182330" roughness={0.88} />
+          </mesh>
+        ) : null}
+
+        <group position={[0, objectLift, 0]}>
+          <Generator object={previewObject} selected={false} />
+        </group>
+
+        <ContactShadows
+          position={[0, 0.012, 0]}
+          scale={floorSize * 0.64}
+          blur={2.6}
+          opacity={0.32}
+          far={7}
+        />
+      </group>
+    </>
   );
 }
 
-export function InventoryPreview({ item }: { item: InventoryTemplate }) {
-  const baseShape = getBaseShape(item);
-  const accentStyle = colorStyle(item.color);
+export function InventoryPreviewCanvas() {
+  return (
+    <Canvas
+      dpr={[1, 1.35]}
+      gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
+      style={{
+        height: "100vh",
+        inset: 0,
+        pointerEvents: "none",
+        position: "fixed",
+        width: "100vw",
+        zIndex: 40,
+      }}
+      onCreated={({ gl }) => {
+        gl.setClearAlpha(0);
+      }}
+    >
+      <View.Port />
+    </Canvas>
+  );
+}
 
-  if (baseShape === "divider_wall_tool" || item.previewType === "wall") {
-    return (
-      <PreviewShell>
-        <div
-          className="absolute bottom-5 left-1/2 h-14 w-24 -translate-x-1/2 rounded-md border border-white/15 shadow-[0_16px_28px_rgba(0,0,0,0.34)]"
-          style={accentStyle}
-        />
-        <div className="absolute bottom-[4.25rem] left-1/2 h-1.5 w-24 -translate-x-1/2 rounded-full bg-white/18" />
-        <div className="absolute bottom-5 left-[calc(50%-1.45rem)] h-14 w-px bg-white/18" />
-        <div className="absolute bottom-5 left-[calc(50%+1.45rem)] h-14 w-px bg-white/18" />
-      </PreviewShell>
-    );
-  }
+export function InventoryPreview({
+  item,
+  index,
+}: {
+  item: InventoryTemplate;
+  index: number;
+}) {
+  const [rotationY, setRotationY] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startRotation: number;
+  } | null>(null);
 
-  if (baseShape === "door_panel") {
-    return (
-      <PreviewShell>
-        <div
-          className="absolute bottom-4 left-1/2 h-16 w-11 -translate-x-1/2 rounded-t-lg border border-white/15 shadow-[0_16px_28px_rgba(0,0,0,0.34)]"
-          style={accentStyle}
-        />
-        <div className="absolute bottom-10 left-[calc(50%+0.65rem)] h-2 w-2 rounded-full bg-[#f1d08d]" />
-      </PreviewShell>
-    );
-  }
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
 
-  if (baseShape === "window_panel" || item.previewType === "window") {
-    return (
-      <PreviewShell>
-        <div
-          className="absolute left-1/2 top-1/2 h-12 w-16 -translate-x-1/2 -translate-y-1/2 rounded-lg border-[5px] border-white/30 shadow-[0_16px_28px_rgba(0,0,0,0.28)]"
-          style={accentStyle}
-        />
-        <div className="absolute left-1/2 top-1/2 h-12 w-px -translate-x-1/2 -translate-y-1/2 bg-white/45" />
-        <div className="absolute left-1/2 top-1/2 h-px w-16 -translate-x-1/2 -translate-y-1/2 bg-white/45" />
-        <div className="absolute left-[calc(50%-1.4rem)] top-[calc(50%-0.8rem)] h-4 w-5 rounded bg-white/20" />
-      </PreviewShell>
-    );
-  }
+    event.preventDefault();
+    event.stopPropagation();
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startRotation: rotationY,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
 
-  if (baseShape === "radiator") {
-    return (
-      <PreviewShell>
-        <div className="absolute bottom-5 left-1/2 flex h-10 -translate-x-1/2 items-end gap-1">
-          {[0, 1, 2, 3, 4, 5].map((rib) => (
-            <div
-              key={rib}
-              className="h-10 w-2 rounded-md border border-white/10 shadow-[0_12px_22px_rgba(0,0,0,0.28)]"
-              style={accentStyle}
-            />
-          ))}
-        </div>
-        <div className="absolute bottom-4 left-1/2 h-1.5 w-16 -translate-x-1/2 rounded-full bg-[#e8b275]" />
-      </PreviewShell>
-    );
-  }
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const dragState = dragStateRef.current;
 
-  if (baseShape === "wall_box") {
-    return (
-      <PreviewShell>
-        <BoxBody color={item.color} className="bottom-7 left-1/2 h-9 w-20 -translate-x-1/2" />
-        <div className="absolute bottom-11 left-1/2 h-1.5 w-12 -translate-x-1/2 rounded-full bg-white/30" />
-      </PreviewShell>
-    );
-  }
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
 
-  if (baseShape === "wall_tv") {
-    return (
-      <PreviewShell>
-        <div className="absolute bottom-8 left-1/2 h-11 w-20 -translate-x-1/2 rounded-lg border border-white/15 bg-[#111820] shadow-[0_16px_28px_rgba(0,0,0,0.34)]" />
-        <div className="absolute bottom-10 left-1/2 h-7 w-16 -translate-x-1/2 rounded bg-[#24465b]" />
-        <div className="absolute bottom-7 left-1/2 h-1.5 w-9 -translate-x-1/2 rounded-full bg-white/20" />
-      </PreviewShell>
-    );
-  }
+    event.preventDefault();
+    event.stopPropagation();
+    setRotationY(dragState.startRotation + (event.clientX - dragState.startX) * 0.012);
+  };
 
-  if (baseShape === "pegboard") {
-    return (
-      <PreviewShell>
-        <BoxBody color={item.color} className="bottom-6 left-1/2 h-12 w-16 -translate-x-1/2" />
-        {[0, 1, 2, 3, 4, 5].map((dot) => (
-          <div
-            key={dot}
-            className="absolute h-1.5 w-1.5 rounded-full bg-[#27313a]"
-            style={{
-              left: `calc(50% + ${dot % 3 === 0 ? "-1.2rem" : dot % 3 === 1 ? "-0.1rem" : "1rem"})`,
-              bottom: dot < 3 ? "2.55rem" : "3.35rem",
-            }}
-          />
-        ))}
-      </PreviewShell>
-    );
-  }
+  const handlePointerEnd = (event: PointerEvent<HTMLDivElement>) => {
+    const dragState = dragStateRef.current;
 
-  if (baseShape === "wall_panel") {
-    return (
-      <PreviewShell>
-        <BoxBody color={item.color} className="bottom-5 left-1/2 h-14 w-12 -translate-x-1/2" />
-        <div className="absolute bottom-9 left-1/2 h-8 w-8 -translate-x-1/2 rounded-md bg-white/35" />
-      </PreviewShell>
-    );
-  }
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
 
-  if (baseShape === "ceiling_light" || baseShape === "wall_sconce" || item.previewType === "lighting") {
-    return (
-      <PreviewShell>
-        <div className="absolute left-1/2 top-5 h-8 w-8 -translate-x-1/2 rounded-full border border-white/15 bg-[#f1d8a7] shadow-[0_0_26px_rgba(241,216,167,0.34)]" />
-        <div className="absolute left-1/2 top-9 h-10 w-px -translate-x-1/2 bg-[#bda37a]" />
-        <div className="absolute bottom-5 left-1/2 h-5 w-12 -translate-x-1/2 rounded-full bg-[#f1d8a7]/35 blur-md" />
-      </PreviewShell>
-    );
-  }
+    event.preventDefault();
+    event.stopPropagation();
+    dragStateRef.current = null;
 
-  if (baseShape === "utility_cart") {
-    return (
-      <PreviewShell>
-        <BoxBody color={item.color} className="bottom-4 left-1/2 h-12 w-14 -translate-x-1/2" />
-        <div className="absolute bottom-8 left-1/2 h-1.5 w-12 -translate-x-1/2 rounded bg-white/25" />
-        <div className="absolute bottom-11 left-1/2 h-1.5 w-12 -translate-x-1/2 rounded bg-white/25" />
-        <div className="absolute bottom-3 left-[calc(50%-1.6rem)] h-2 w-2 rounded-full bg-[#2f3438]" />
-        <div className="absolute bottom-3 left-[calc(50%+1.2rem)] h-2 w-2 rounded-full bg-[#2f3438]" />
-      </PreviewShell>
-    );
-  }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
 
-  if (baseShape === "ironing_board") {
-    return (
-      <PreviewShell>
-        <div className="absolute bottom-11 left-1/2 h-3 w-24 -translate-x-1/2 rounded-full border border-white/15 shadow-[0_16px_28px_rgba(0,0,0,0.28)]" style={accentStyle} />
-        <div className="absolute bottom-4 left-[calc(50%-0.9rem)] h-8 w-1.5 rotate-[-22deg] rounded bg-[#6f6256]" />
-        <div className="absolute bottom-4 left-[calc(50%+0.9rem)] h-8 w-1.5 rotate-[22deg] rounded bg-[#6f6256]" />
-      </PreviewShell>
-    );
-  }
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setZoom((currentZoom) => clamp(currentZoom + event.deltaY * 0.0014, 0.72, 1.62));
+  };
 
-  if (baseShape === "drying_rack") {
-    return (
-      <PreviewShell>
-        {[0, 1, 2, 3].map((rail) => (
-          <div
-            key={rail}
-            className="absolute left-1/2 h-1 w-20 -translate-x-1/2 rounded bg-[#d5d9dc]"
-            style={{ bottom: `${2.1 + rail * 0.55}rem` }}
-          />
-        ))}
-        <div className="absolute bottom-4 left-[calc(50%-2.2rem)] h-12 w-1.5 rotate-[-14deg] rounded bg-[#8a8178]" />
-        <div className="absolute bottom-4 left-[calc(50%+2rem)] h-12 w-1.5 rotate-[14deg] rounded bg-[#8a8178]" />
-      </PreviewShell>
-    );
-  }
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      event.preventDefault();
+      setRotationY((currentRotation) =>
+        currentRotation + (event.key === "ArrowLeft" ? -0.18 : 0.18),
+      );
+    }
 
-  if (baseShape === "umbrella_stand") {
-    return (
-      <PreviewShell>
-        <div className="absolute bottom-4 left-1/2 h-12 w-9 -translate-x-1/2 rounded-b-xl rounded-t-lg border border-white/15 shadow-[0_16px_28px_rgba(0,0,0,0.28)]" style={accentStyle} />
-        <div className="absolute bottom-5 left-[calc(50%-0.4rem)] h-14 w-1 rotate-[-8deg] rounded bg-[#4f565f]" />
-        <div className="absolute bottom-5 left-[calc(50%+0.5rem)] h-14 w-1 rotate-[10deg] rounded bg-[#4f565f]" />
-      </PreviewShell>
-    );
-  }
-
-  if (baseShape === "kitchen_sink") {
-    return (
-      <PreviewShell>
-        <BoxBody color={item.color} className="bottom-4 left-1/2 h-10 w-20 -translate-x-1/2" />
-        <div className="absolute bottom-12 left-1/2 h-3 w-10 -translate-x-1/2 rounded-full bg-[#d8e0e5]" />
-        <div className="absolute bottom-[3.45rem] left-[calc(50%+0.8rem)] h-5 w-1 rounded bg-[#d8c59d]" />
-      </PreviewShell>
-    );
-  }
-
-  if (baseShape === "appliance_box" || baseShape === "washer" || item.previewType === "appliance") {
-    return (
-      <PreviewShell>
-        <BoxBody color={item.color} className="bottom-4 left-1/2 h-14 w-11 -translate-x-1/2" />
-        {baseShape === "washer" ? (
-          <div className="absolute bottom-9 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full border-4 border-[#8fa1af] bg-[#c8d6df]" />
-        ) : (
-          <div className="absolute bottom-8 left-[calc(50%+0.8rem)] h-9 w-px bg-[#8e959c]" />
-        )}
-      </PreviewShell>
-    );
-  }
-
-  if (baseShape === "bathtub" || item.previewType === "bath") {
-    return (
-      <PreviewShell>
-        <div
-          className="absolute bottom-5 left-1/2 h-9 w-20 -translate-x-1/2 rounded-b-2xl rounded-t-lg border border-white/15 shadow-[0_16px_28px_rgba(0,0,0,0.28)]"
-          style={accentStyle}
-        />
-        <div className="absolute bottom-11 left-1/2 h-2.5 w-14 -translate-x-1/2 rounded-full bg-white/65" />
-      </PreviewShell>
-    );
-  }
-
-  if (baseShape === "toilet") {
-    return (
-      <PreviewShell>
-        <div className="absolute bottom-5 left-1/2 h-8 w-9 -translate-x-1/2 rounded-full border border-white/15 bg-[#e5edf1]" />
-        <div className="absolute bottom-11 left-1/2 h-7 w-11 -translate-x-1/2 rounded-lg border border-white/15 bg-[#e5edf1]" />
-      </PreviewShell>
-    );
-  }
-
-  if (baseShape === "stairs" || baseShape === "spiral_stairs" || baseShape === "ladder_stairs" || item.previewType === "stairs") {
-    return (
-      <PreviewShell>
-        {[0, 1, 2, 3, 4, 5].map((step) => (
-          <div
-            key={step}
-            className="absolute bottom-4 rounded-sm border border-white/10 shadow-[0_10px_18px_rgba(0,0,0,0.22)]"
-            style={{
-              left: `${18 + step * 9}%`,
-              width: baseShape === "ladder_stairs" ? "7%" : "12%",
-              height: `${12 + step * 6}px`,
-              backgroundColor: item.color,
-              transform: baseShape === "spiral_stairs" ? `rotate(${step * 12}deg)` : undefined,
-            }}
-          />
-        ))}
-      </PreviewShell>
-    );
-  }
-
-  if (baseShape === "plant" || item.previewType === "plant") {
-    return (
-      <PreviewShell>
-        <div className="absolute bottom-4 left-1/2 h-5 w-9 -translate-x-1/2 rounded-b-lg bg-[#8b6044]" />
-        <div className="absolute bottom-8 left-1/2 h-12 w-12 -translate-x-1/2 rounded-full border border-white/10" style={accentStyle} />
-        <div className="absolute bottom-12 left-[calc(50%-0.9rem)] h-7 w-7 rounded-full bg-[#6f9a63]" />
-      </PreviewShell>
-    );
-  }
-
-  if (baseShape === "guitar" || item.previewType === "instrument") {
-    return (
-      <PreviewShell>
-        <div className="absolute bottom-5 left-1/2 h-9 w-8 -translate-x-1/2 rounded-full border border-white/15" style={accentStyle} />
-        <div className="absolute bottom-12 left-1/2 h-8 w-2 -translate-x-1/2 rounded bg-[#6c4d36]" />
-        <div className="absolute bottom-3 left-1/2 h-2 w-12 -translate-x-1/2 rounded bg-[#4f4037]" />
-      </PreviewShell>
-    );
-  }
-
-  if (baseShape === "piano") {
-    return (
-      <PreviewShell>
-        <BoxBody color={item.color} className="bottom-5 left-1/2 h-11 w-20 -translate-x-1/2" />
-        <div className="absolute bottom-9 left-1/2 h-2 w-14 -translate-x-1/2 rounded-sm bg-white/80" />
-        <div className="absolute bottom-4 left-1/2 h-3 w-16 -translate-x-1/2 rounded bg-black/35" />
-      </PreviewShell>
-    );
-  }
-
-  if (baseShape === "low_shelf" || item.previewType === "storage") {
-    return (
-      <PreviewShell>
-        <BoxBody color={item.color} className="bottom-4 left-1/2 h-9 w-16 -translate-x-1/2" />
-        <div className="absolute bottom-9 left-1/2 h-1.5 w-12 -translate-x-1/2 rounded bg-white/20" />
-        <div className="absolute bottom-7 left-1/2 h-1.5 w-12 -translate-x-1/2 rounded bg-white/20" />
-      </PreviewShell>
-    );
-  }
-
-  if (item.previewType === "sofa") {
-    return (
-      <PreviewShell>
-        <div className="absolute bottom-4 left-1/2 h-8 w-20 -translate-x-1/2 rounded-2xl border border-white/15 shadow-[0_16px_28px_rgba(0,0,0,0.3)]" style={accentStyle} />
-        <div className="absolute bottom-11 left-1/2 h-5 w-20 -translate-x-1/2 rounded-t-2xl border border-white/15 bg-white/20" />
-        <div className="absolute bottom-5 left-[calc(50%-2.7rem)] h-8 w-2 rounded bg-black/15" />
-        <div className="absolute bottom-5 left-[calc(50%+2.2rem)] h-8 w-2 rounded bg-black/15" />
-      </PreviewShell>
-    );
-  }
-
-  if (item.previewType === "bed") {
-    return (
-      <PreviewShell>
-        <div className="absolute bottom-4 left-1/2 h-[3.25rem] w-[4.5rem] -translate-x-1/2 rounded-xl border border-white/15 shadow-[0_16px_28px_rgba(0,0,0,0.3)]" style={accentStyle} />
-        <div className="absolute bottom-11 left-[calc(50%-1.45rem)] h-3.5 w-6 rounded-lg bg-white/85" />
-        <div className="absolute bottom-11 left-[calc(50%+0.25rem)] h-3.5 w-6 rounded-lg bg-white/85" />
-      </PreviewShell>
-    );
-  }
-
-  if (item.previewType === "table") {
-    return (
-      <PreviewShell>
-        <div className="absolute bottom-11 left-1/2 h-3.5 w-20 -translate-x-1/2 rounded-md border border-white/15 shadow-[0_14px_22px_rgba(0,0,0,0.28)]" style={accentStyle} />
-        <div className="absolute bottom-4 left-[calc(50%-2.1rem)] h-7 w-1.5 rounded bg-[#6f4f37]" />
-        <div className="absolute bottom-4 left-[calc(50%+1.85rem)] h-7 w-1.5 rounded bg-[#6f4f37]" />
-      </PreviewShell>
-    );
-  }
-
-  if (item.previewType === "chair") {
-    return (
-      <PreviewShell>
-        <div className="absolute bottom-7 left-1/2 h-3.5 w-9 -translate-x-1/2 rounded-md border border-white/15" style={accentStyle} />
-        <div className="absolute bottom-11 left-1/2 h-8 w-9 -translate-x-1/2 rounded-t-lg border border-white/15 bg-white/20" />
-        <div className="absolute bottom-4 left-[calc(50%-1rem)] h-4 w-1 rounded bg-[#3f5158]" />
-        <div className="absolute bottom-4 left-[calc(50%+0.8rem)] h-4 w-1 rounded bg-[#3f5158]" />
-      </PreviewShell>
-    );
-  }
-
-  if (item.previewType === "wardrobe") {
-    return (
-      <PreviewShell>
-        <BoxBody color={item.color} className="bottom-4 left-1/2 h-14 w-12 -translate-x-1/2" />
-        <div className="absolute bottom-4 left-1/2 h-14 w-px -translate-x-1/2 bg-white/30" />
-        <div className="absolute bottom-10 left-[calc(50%+0.75rem)] h-1.5 w-1.5 rounded-full bg-[#e7c17f]" />
-      </PreviewShell>
-    );
-  }
-
-  if (item.previewType === "tv") {
-    return (
-      <PreviewShell>
-        <BoxBody color={item.color} className="bottom-4 left-1/2 h-4 w-20 -translate-x-1/2" />
-        <div className="absolute bottom-10 left-1/2 h-9 w-16 -translate-x-1/2 rounded-lg border border-white/15 bg-[#202a34] shadow-[0_12px_24px_rgba(0,0,0,0.3)]" />
-        <div className="absolute bottom-8 left-1/2 h-3 w-5 -translate-x-1/2 rounded bg-[#282f35]" />
-      </PreviewShell>
-    );
-  }
-
-  if (item.previewType === "rug") {
-    return (
-      <PreviewShell>
-        <div className="absolute bottom-4 left-1/2 h-10 w-20 -translate-x-1/2 rounded-2xl border border-white/15 shadow-[0_14px_24px_rgba(0,0,0,0.22)]" style={accentStyle} />
-        <div className="absolute bottom-7 left-1/2 h-4 w-14 -translate-x-1/2 rounded-full border border-white/18" />
-      </PreviewShell>
-    );
-  }
-
-  if (item.previewType === "lamp") {
-    return (
-      <PreviewShell>
-        <div className="absolute bottom-4 left-1/2 h-10 w-1 -translate-x-1/2 rounded bg-[#bda37a]" />
-        <div className="absolute bottom-14 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[15px] border-b-[21px] border-x-transparent border-b-[#f0d5aa]" />
-        <div className="absolute bottom-3 left-1/2 h-2 w-9 -translate-x-1/2 rounded-full bg-[#6f5d4e]" />
-      </PreviewShell>
-    );
-  }
-
-  if (item.previewType === "column") {
-    return (
-      <PreviewShell>
-        <div className="absolute bottom-4 left-1/2 h-[3.75rem] w-6 -translate-x-1/2 rounded-full border border-white/20 shadow-[0_16px_28px_rgba(0,0,0,0.32)]" style={accentStyle} />
-        <div className="absolute bottom-3 left-1/2 h-2 w-12 -translate-x-1/2 rounded-full bg-white/20" />
-      </PreviewShell>
-    );
-  }
-
-  if (item.previewType === "cube") {
-    return (
-      <PreviewShell>
-        <BoxBody color={item.color} className="bottom-6 left-1/2 h-12 w-12 -translate-x-1/2 rotate-6" />
-      </PreviewShell>
-    );
-  }
+    if (event.key === "+" || event.key === "=" || event.key === "-") {
+      event.preventDefault();
+      setZoom((currentZoom) =>
+        clamp(currentZoom + (event.key === "-" ? 0.08 : -0.08), 0.72, 1.62),
+      );
+    }
+  };
 
   return (
-    <PreviewShell>
-      <BoxBody color={item.color} className="bottom-5 left-1/2 h-11 w-12 -translate-x-1/2" />
-      <div className="absolute bottom-10 left-1/2 h-5 w-6 -translate-x-1/2 rounded bg-white/28" />
-    </PreviewShell>
+    <div className={`${shellClass} group/preview`}>
+      <InteractiveView
+        as="div"
+        className={viewTrackClass}
+        frames={Infinity}
+        index={index + 1}
+        role="application"
+        tabIndex={0}
+        aria-label={`${item.label} live preview`}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
+        onWheel={handleWheel}
+        onKeyDown={handleKeyDown}
+      >
+        <InventoryPreviewScene item={item} rotationY={rotationY} zoom={zoom} />
+      </InteractiveView>
+      <div className="absolute left-4 top-4 z-10 h-2 w-2 rounded-full bg-white/25" />
+      <div className="pointer-events-none absolute right-3 top-3 z-10 rounded-full border border-[#4ea8ff]/40 bg-[#102234]/85 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#8cb9ff]">
+        Live
+      </div>
+      <div className="pointer-events-none absolute bottom-2 left-3 z-10 rounded-full bg-black/25 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-300 opacity-0 transition group-hover/preview:opacity-100">
+        Drag to rotate
+      </div>
+    </div>
   );
 }

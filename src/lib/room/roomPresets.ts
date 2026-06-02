@@ -1,10 +1,12 @@
 import { getInventoryTemplateById } from "@/lib/room/inventoryCatalog";
-import { getRotatedHalfExtents } from "@/lib/room/collision";
+import { getObjectBounds, getRotatedHalfExtents } from "@/lib/room/collision";
 import {
   clampObjectPositionToRoom,
   getWallAttachedObjectTransform,
+  isFloorCovering,
   isWallAttachedObject,
   normalizeRotation,
+  objectsHavePlacementCollision,
 } from "@/lib/room/constraints";
 import {
   buildRoomWalls,
@@ -21,6 +23,7 @@ import type {
   RoomData,
   RoomDefinition,
   RoomObject,
+  RoomObjectGroup,
   RoomPurpose,
   RoomShape,
 } from "@/types/room";
@@ -38,6 +41,11 @@ type PresetItem = {
   color?: string;
   params?: RoomObject["params"];
   locked?: boolean;
+};
+
+type PresetObjectEntry = {
+  item: PresetItem;
+  object: RoomObject;
 };
 
 export const roomPurposeOptions: Array<{
@@ -159,10 +167,10 @@ const baseDimensions: Record<
   study: { width: 5.8, depth: 4.6 },
   bathroom: { width: 5, depth: 4.2 },
   dining: { width: 6.8, depth: 5.4 },
-  laundry: { width: 5.2, depth: 4.2 },
+  laundry: { width: 6.4, depth: 4.8 },
   entry: { width: 5.6, depth: 4.2 },
   balcony: { width: 5.4, depth: 3.8 },
-  dressing: { width: 5.8, depth: 4.4 },
+  dressing: { width: 6.8, depth: 5 },
 };
 
 const getShapeDimensions = (shape: RoomShape, purpose: RoomPurpose) => {
@@ -212,9 +220,19 @@ const getShapeDimensions = (shape: RoomShape, purpose: RoomPurpose) => {
 const createRoomOpenings = (room: RoomDefinition, purpose: RoomPurpose): Opening[] => {
   const wall2Length = room.shape === "l_shape" ? room.depth - room.cutoutDepth : room.depth;
   const doorWallLength = getWallLength(room, "wall_4") || room.depth;
-  const mainWindowWall = room.shape === "l_shape" ? "wall_5" : "wall_2";
+  const mainWindowWall =
+    room.shape === "l_shape"
+      ? purpose === "bedroom" || purpose === "kids" || purpose === "study"
+        ? "wall_2"
+        : "wall_5"
+      : "wall_2";
+  const mainWindowLength = getWallLength(room, mainWindowWall) || wall2Length;
   const mainWindowPosition =
-    room.shape === "l_shape" ? Math.max(1.1, room.width * 0.42) : Math.max(1.2, wall2Length * 0.68);
+    room.shape === "l_shape" && mainWindowWall === "wall_2"
+      ? Math.max(0.95, Math.min(mainWindowLength - 0.95, mainWindowLength * 0.48))
+      : room.shape === "l_shape"
+        ? Math.max(1.1, room.width * 0.42)
+        : Math.max(1.2, wall2Length * 0.68);
   const openings: Opening[] = [
     {
       id: "door_1",
@@ -262,11 +280,60 @@ const presetOffsets = [
   [0, -1.05],
 ] as const;
 
-const getWarningScore = (roomData: RoomData) =>
+const getBoundsGap = (left: RoomObject, right: RoomObject) => {
+  const leftBounds = getObjectBounds(left);
+  const rightBounds = getObjectBounds(right);
+  const gapX = Math.max(0, leftBounds.minX - rightBounds.maxX, rightBounds.minX - leftBounds.maxX);
+  const gapZ = Math.max(0, leftBounds.minZ - rightBounds.maxZ, rightBounds.minZ - leftBounds.maxZ);
+
+  return Math.hypot(gapX, gapZ);
+};
+
+const getPresetSpacingPenalty = (roomData: RoomData) => {
+  let penalty = 0;
+
+  for (let index = 0; index < roomData.objects.length; index += 1) {
+    for (let compareIndex = index + 1; compareIndex < roomData.objects.length; compareIndex += 1) {
+      const left = roomData.objects[index];
+      const right = roomData.objects[compareIndex];
+
+      if (
+        isFloorCovering(left) ||
+        isFloorCovering(right) ||
+        isWallAttachedObject(left) ||
+        isWallAttachedObject(right)
+      ) {
+        continue;
+      }
+
+      if (
+        (left.category === "table" && right.category === "chair") ||
+        (left.category === "chair" && right.category === "table")
+      ) {
+        continue;
+      }
+
+      if (objectsHavePlacementCollision(left, right, 0.08)) {
+        penalty += 4.5;
+        continue;
+      }
+
+      const gap = getBoundsGap(left, right);
+
+      if (gap < 0.09) {
+        penalty += (0.09 - gap) * 10;
+      }
+    }
+  }
+
+  return penalty;
+};
+
+const getPresetQualityScore = (roomData: RoomData) =>
   validateRoomLayout(roomData).reduce(
     (score, warning) => score + (warning.level === "error" ? 10 : 1),
     0,
-  );
+  ) + getPresetSpacingPenalty(roomData);
 
 const clonePresetObject = (object: RoomObject): RoomObject => ({
   ...object,
@@ -318,32 +385,38 @@ const stabilizePresetLayout = (roomData: RoomData): RoomData => {
 
       const object = current.objects[objectIndex];
       let bestObjects = current.objects;
-      let bestScore = getWarningScore(current);
+      let bestScore = getPresetQualityScore(current);
+      const candidateRotations = Array.from(
+        new Set([object.rotation, 0, 90, 180, 270].map((rotation) => normalizeRotation(rotation))),
+      );
 
-      for (const [offsetX, offsetZ] of presetOffsets) {
-        const candidateObject = clonePresetObject(object);
-        candidateObject.position = clampObjectPositionToRoom(
-          current,
-          candidateObject,
-          {
-            x: object.position.x + offsetX,
-            z: object.position.z + offsetZ,
-          },
-          object.rotation,
-        );
+      for (const candidateRotation of candidateRotations) {
+        for (const [offsetX, offsetZ] of presetOffsets) {
+          const candidateObject = clonePresetObject(object);
+          candidateObject.rotation = candidateRotation;
+          candidateObject.position = clampObjectPositionToRoom(
+            current,
+            candidateObject,
+            {
+              x: object.position.x + offsetX,
+              z: object.position.z + offsetZ,
+            },
+            candidateRotation,
+          );
 
-        const candidateObjects = current.objects.map((entry, index) =>
-          index === objectIndex ? candidateObject : entry,
-        );
-        const candidateRoomData = {
-          ...current,
-          objects: candidateObjects,
-        };
-        const score = getWarningScore(candidateRoomData);
+          const candidateObjects = current.objects.map((entry, index) =>
+            index === objectIndex ? candidateObject : entry,
+          );
+          const candidateRoomData = {
+            ...current,
+            objects: candidateObjects,
+          };
+          const score = getPresetQualityScore(candidateRoomData);
 
-        if (score < bestScore) {
-          bestScore = score;
-          bestObjects = candidateObjects;
+          if (score < bestScore) {
+            bestScore = score;
+            bestObjects = candidateObjects;
+          }
         }
       }
 
@@ -363,6 +436,248 @@ const stabilizePresetLayout = (roomData: RoomData): RoomData => {
 
   return current;
 };
+
+type PresetGroupRule = {
+  id: string;
+  label: string;
+  templateIds: string[];
+};
+
+const presetGroupRules: Partial<Record<RoomPurpose, PresetGroupRule[]>> = {
+  living: [
+    {
+      id: "lounge",
+      label: "Lounge Zone",
+      templateIds: [
+        "template_l_sofa",
+        "template_loveseat",
+        "template_armchair",
+        "template_storage_ottoman",
+        "template_coffee_table",
+        "template_carpet_large",
+        "template_floor_lamp",
+      ],
+    },
+    {
+      id: "media",
+      label: "Media Wall",
+      templateIds: ["template_media_console", "template_gallery_frame_set"],
+    },
+  ],
+  kitchen: [
+    {
+      id: "service-line",
+      label: "Kitchen Line",
+      templateIds: [
+        "template_corner_base_cabinet",
+        "template_base_cabinet",
+        "template_kitchen_sink",
+        "template_dishwasher",
+        "template_cooktop",
+        "template_range_hood",
+        "template_upper_cabinet",
+        "template_open_kitchen_shelf",
+        "template_fridge",
+        "template_tall_oven_cabinet",
+        "template_trash_pullout",
+      ],
+    },
+    {
+      id: "island",
+      label: "Island Set",
+      templateIds: [
+        "template_kitchen_island",
+        "template_bar_stool",
+        "template_pendant_light",
+      ],
+    },
+  ],
+  bedroom: [
+    {
+      id: "sleep",
+      label: "Sleep Zone",
+      templateIds: [
+        "template_bed_double",
+        "template_nightstand",
+        "template_bedroom_bench",
+        "template_carpet_large",
+        "template_large_art_panel",
+        "template_pendant_light",
+      ],
+    },
+    {
+      id: "storage",
+      label: "Storage Zone",
+      templateIds: [
+        "template_wardrobe_tall",
+        "template_makeup_vanity",
+        "template_full_height_mirror",
+      ],
+    },
+  ],
+  kids: [
+    {
+      id: "study",
+      label: "Study Zone",
+      templateIds: [
+        "template_desk",
+        "template_chair_office",
+        "template_monitor",
+        "template_wall_shelf",
+      ],
+    },
+    {
+      id: "sleep-play",
+      label: "Sleep and Play",
+      templateIds: [
+        "template_bed_single",
+        "template_storage_bench",
+        "template_carpet_large",
+        "template_bookshelf",
+      ],
+    },
+  ],
+  study: [
+    {
+      id: "focus",
+      label: "Focus Zone",
+      templateIds: [
+        "template_desk",
+        "template_chair_office",
+        "template_monitor",
+        "template_bookshelf",
+        "template_wall_shelf",
+      ],
+    },
+    {
+      id: "reading",
+      label: "Reading Corner",
+      templateIds: [
+        "template_armchair",
+        "template_floor_lamp",
+        "template_carpet_large",
+      ],
+    },
+  ],
+  bathroom: [
+    {
+      id: "wet",
+      label: "Wet Zone",
+      templateIds: [
+        "template_shower_cabin",
+        "template_round_sink",
+        "template_round_wall_mirror",
+        "template_towel_rack",
+        "template_bath_storage_column",
+      ],
+    },
+  ],
+  dining: [
+    {
+      id: "dining-set",
+      label: "Dining Set",
+      templateIds: [
+        "template_dining_table",
+        "template_chair_dining",
+        "template_ceiling_light",
+      ],
+    },
+  ],
+  laundry: [
+    {
+      id: "service",
+      label: "Laundry Line",
+      templateIds: [
+        "template_washer",
+        "template_dryer",
+        "template_laundry_counter",
+        "template_round_sink",
+        "template_upper_cabinet",
+        "template_linen_cabinet",
+      ],
+    },
+    {
+      id: "care",
+      label: "Care Zone",
+      templateIds: [
+        "template_laundry_basket",
+        "template_ironing_board",
+        "template_utility_cart",
+        "template_drying_rack",
+      ],
+    },
+  ],
+  entry: [
+    {
+      id: "landing",
+      label: "Landing Zone",
+      templateIds: [
+        "template_shoe_rack",
+        "template_key_tray_console",
+        "template_round_wall_mirror",
+        "template_entry_hanger_panel",
+        "template_umbrella_stand",
+        "template_storage_bench",
+        "template_carpet_runner",
+      ],
+    },
+  ],
+  balcony: [
+    {
+      id: "balcony-set",
+      label: "Balcony Set",
+      templateIds: [
+        "template_round_table",
+        "template_chair_dining",
+        "template_tall_plant",
+        "template_storage_bench",
+      ],
+    },
+  ],
+  dressing: [
+    {
+      id: "wardrobe-run",
+      label: "Wardrobe Run",
+      templateIds: [
+        "template_wardrobe_tall",
+        "template_clothes_rack",
+        "template_full_height_mirror",
+      ],
+    },
+    {
+      id: "dressing",
+      label: "Dressing Spot",
+      templateIds: [
+        "template_bedroom_bench",
+        "template_storage_ottoman",
+        "template_makeup_vanity",
+        "template_carpet_runner",
+      ],
+    },
+  ],
+};
+
+const createPresetGroups = (
+  purpose: RoomPurpose,
+  entries: PresetObjectEntry[],
+): RoomObjectGroup[] =>
+  (presetGroupRules[purpose] ?? [])
+    .map((rule) => {
+      const objectIds = entries
+        .filter((entry) => rule.templateIds.includes(entry.item.templateId))
+        .map((entry) => entry.object.id);
+
+      if (objectIds.length < 2) {
+        return null;
+      }
+
+      return {
+        id: `group_${purpose}_${rule.id}`,
+        label: rule.label,
+        objectIds,
+      };
+    })
+    .filter((group): group is RoomObjectGroup => Boolean(group));
 
 const createRoomDefinition = (
   shape: RoomShape,
@@ -609,16 +924,17 @@ const getPresetItems = (purpose: RoomPurpose): PresetItem[] => {
       ];
     case "laundry":
       return [
-        { templateId: "template_washer", ...ratio(0.17, 0.16), ...wall("north", 0.17) },
-        { templateId: "template_dryer", ...ratio(0.32, 0.16), ...wall("north", 0.32) },
-        { templateId: "template_laundry_counter", ...ratio(0.52, 0.16), ...wall("north", 0.52) },
-        { templateId: "template_round_sink", ...ratio(0.72, 0.16), ...wall("north", 0.72) },
-        { templateId: "template_upper_cabinet", ...ratio(0.35, 0.04), ...wall("north", 0.35) },
-        { templateId: "template_upper_cabinet", ...ratio(0.62, 0.04), ...wall("north", 0.62) },
-        { templateId: "template_linen_cabinet", ...ratio(0.88, 0.32), ...wall("east", 0.32) },
-        { templateId: "template_laundry_basket", ...ratio(0.22, 0.78), ...wall("south", 0.22) },
-        { templateId: "template_ironing_board", ...ratio(0.58, 0.82), ...wall("south", 0.58) },
-        { templateId: "template_utility_cart", ...ratio(0.82, 0.78), ...wall("south", 0.82) },
+        { templateId: "template_washer", ...ratio(0.16, 0.14), ...wall("north", 0.16) },
+        { templateId: "template_dryer", ...ratio(0.29, 0.14), ...wall("north", 0.29) },
+        { templateId: "template_laundry_counter", ...ratio(0.48, 0.14), ...wall("north", 0.48), dimensions: { width: 1.55 } },
+        { templateId: "template_round_sink", ...ratio(0.68, 0.14), ...wall("north", 0.68) },
+        { templateId: "template_upper_cabinet", ...ratio(0.28, 0.04), ...wall("north", 0.28), dimensions: { width: 1.35 } },
+        { templateId: "template_upper_cabinet", ...ratio(0.58, 0.04), ...wall("north", 0.58), dimensions: { width: 1.2 } },
+        { templateId: "template_linen_cabinet", ...ratio(0.88, 0.22), ...wall("east", 0.22) },
+        { templateId: "template_utility_cart", ...ratio(0.88, 0.56), ...wall("east", 0.56) },
+        { templateId: "template_laundry_basket", ...ratio(0.18, 0.78), ...wall("south", 0.18) },
+        { templateId: "template_ironing_board", ...ratio(0.54, 0.82), ...wall("south", 0.54) },
+        { templateId: "template_drying_rack", ...ratio(0.78, 0.76), rotation: 0 },
         { templateId: "template_ceiling_light", ...ratio(0.5, 0.5), rotation: 0 },
       ];
     case "entry":
@@ -643,13 +959,15 @@ const getPresetItems = (purpose: RoomPurpose): PresetItem[] => {
       ];
     case "dressing":
       return [
-        { templateId: "template_wardrobe_tall", ...ratio(0.22, 0.18), ...wall("north", 0.22) },
-        { templateId: "template_wardrobe_tall", ...ratio(0.52, 0.18), ...wall("north", 0.52) },
-        { templateId: "template_clothes_rack", ...ratio(0.82, 0.24), ...wall("east", 0.24) },
-        { templateId: "template_full_height_mirror", ...ratio(0.82, 0.76), ...wall("east", 0.76) },
-        { templateId: "template_bedroom_bench", ...ratio(0.48, 0.78), rotation: 0 },
-        { templateId: "template_makeup_vanity", ...ratio(0.16, 0.72), ...wall("west", 0.72) },
-        { templateId: "template_carpet_runner", ...ratio(0.46, 0.5), rotation: 90 },
+        { templateId: "template_wardrobe_tall", ...ratio(0.2, 0.14), ...wall("north", 0.2) },
+        { templateId: "template_wardrobe_tall", ...ratio(0.43, 0.14), ...wall("north", 0.43) },
+        { templateId: "template_wardrobe_tall", ...ratio(0.66, 0.14), ...wall("north", 0.66) },
+        { templateId: "template_clothes_rack", ...ratio(0.88, 0.28), ...wall("east", 0.28) },
+        { templateId: "template_full_height_mirror", ...ratio(0.88, 0.62), ...wall("east", 0.62) },
+        { templateId: "template_makeup_vanity", ...ratio(0.24, 0.86), ...wall("south", 0.24) },
+        { templateId: "template_bedroom_bench", ...ratio(0.52, 0.62), rotation: 0 },
+        { templateId: "template_storage_ottoman", ...ratio(0.72, 0.68), rotation: 0 },
+        { templateId: "template_carpet_runner", ...ratio(0.52, 0.5), rotation: 90, dimensions: { width: 1.05, depth: 2.55 } },
         { templateId: "template_track_light", ...ratio(0.5, 0.5), rotation: 0 },
       ];
     case "living":
@@ -787,9 +1105,16 @@ export const createRoomPreset = (
     objects: [],
   };
 
-  roomData.objects = getPresetItems(purpose)
-    .map((item, index) => createObjectFromPresetItem(roomData, item, index))
-    .filter((object): object is RoomObject => Boolean(object));
+  const objectEntries = getPresetItems(purpose)
+    .map((item, index) => {
+      const object = createObjectFromPresetItem(roomData, item, index);
+
+      return object ? { item, object } : null;
+    })
+    .filter((entry): entry is PresetObjectEntry => Boolean(entry));
+
+  roomData.objects = objectEntries.map((entry) => entry.object);
+  roomData.groups = createPresetGroups(purpose, objectEntries);
 
   return stabilizePresetLayout(roomData);
 };

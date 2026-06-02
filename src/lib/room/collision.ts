@@ -12,6 +12,81 @@ export interface Point2D {
   z: number;
 }
 
+const clampCollisionScale = (value: number) =>
+  Number.isFinite(value) ? Math.min(1, Math.max(0.55, value)) : 1;
+
+const getHeuristicCollisionScale = (
+  object: Pick<RoomObject, "category" | "params">,
+) => {
+  const baseShape = String(object.params.baseShape ?? "");
+
+  if (object.category === "chair") {
+    return { widthScale: 0.86, depthScale: 0.84 };
+  }
+
+  if (object.category === "sofa") {
+    return { widthScale: 0.93, depthScale: 0.88 };
+  }
+
+  if (object.category === "bed") {
+    return { widthScale: 0.94, depthScale: 0.9 };
+  }
+
+  if (object.category === "table") {
+    return { widthScale: 0.9, depthScale: 0.86 };
+  }
+
+  if (object.category === "wardrobe") {
+    return { widthScale: 0.95, depthScale: 0.9 };
+  }
+
+  if (object.category === "tv_unit") {
+    return { widthScale: 0.94, depthScale: 0.84 };
+  }
+
+  if (
+    baseShape === "plant" ||
+    baseShape === "guitar" ||
+    baseShape === "lamp" ||
+    baseShape === "umbrella_stand"
+  ) {
+    return { widthScale: 0.8, depthScale: 0.78 };
+  }
+
+  if (baseShape === "spiral_stairs" || baseShape === "stairs" || baseShape === "ladder_stairs") {
+    return { widthScale: 0.9, depthScale: 0.88 };
+  }
+
+  if (baseShape === "laundry_basket" || baseShape === "utility_cart") {
+    return { widthScale: 0.88, depthScale: 0.84 };
+  }
+
+  if (object.category === "generic_box") {
+    return { widthScale: 0.94, depthScale: 0.9 };
+  }
+
+  return { widthScale: 1, depthScale: 1 };
+};
+
+export const getCollisionDimensions = (
+  object: Pick<RoomObject, "category" | "dimensions" | "params">,
+) => {
+  const heuristic = getHeuristicCollisionScale(object);
+  const widthScale =
+    typeof object.params.collisionScaleX === "number"
+      ? clampCollisionScale(object.params.collisionScaleX)
+      : heuristic.widthScale;
+  const depthScale =
+    typeof object.params.collisionScaleZ === "number"
+      ? clampCollisionScale(object.params.collisionScaleZ)
+      : heuristic.depthScale;
+
+  return {
+    width: Math.max(0.05, object.dimensions.width * widthScale),
+    depth: Math.max(0.05, object.dimensions.depth * depthScale),
+  };
+};
+
 export const getRotatedHalfExtents = (
   width: number,
   depth: number,
@@ -28,9 +103,10 @@ export const getRotatedHalfExtents = (
 };
 
 export const getObjectBounds = (object: RoomObject): Bounds2D => {
+  const collisionDimensions = getCollisionDimensions(object);
   const { halfWidth, halfDepth } = getRotatedHalfExtents(
-    object.dimensions.width,
-    object.dimensions.depth,
+    collisionDimensions.width,
+    collisionDimensions.depth,
     object.rotation,
   );
 
@@ -46,8 +122,9 @@ export const getObjectFootprint = (object: RoomObject): Point2D[] => {
   const radians = (object.rotation * Math.PI) / 180;
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
-  const halfWidth = object.dimensions.width / 2;
-  const halfDepth = object.dimensions.depth / 2;
+  const collisionDimensions = getCollisionDimensions(object);
+  const halfWidth = collisionDimensions.width / 2;
+  const halfDepth = collisionDimensions.depth / 2;
   const corners: Array<[number, number]> = [
     [-halfWidth, -halfDepth],
     [halfWidth, -halfDepth],

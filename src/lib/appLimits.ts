@@ -1,0 +1,6 @@
+export const USERNAME_MIN_LENGTH = 3;
+export const USERNAME_MAX_LENGTH = 24;
+
+export const PROJECT_NAME_MIN_LENGTH = 3;
+export const PROJECT_NAME_MAX_LENGTH = 80;
+export const PROJECT_DESCRIPTION_MAX_LENGTH = 280;

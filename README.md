@@ -18,6 +18,33 @@ Open [http://localhost:3000](http://localhost:3000) on a desktop browser to see 
 
 Mobile browsers show a locked guidance screen that asks users to continue on desktop.
 
+## Authentication and project storage
+
+This project now includes:
+
+- email + username + password authentication
+- session-based login
+- "Projelerim" dashboard
+- SQLite-backed project persistence
+- a migration baseline stored in `src/server/db/migrations/0000_initial.sql`
+
+### Database runtime
+
+The database layer uses an adapter-oriented design so the repository / service / controller stack can move to Supabase or PostgreSQL later with minimal surface changes.
+
+Environment variables:
+
+```bash
+DESAIN_RUNTIME_ENV=local
+DESAIN_SESSION_COOKIE_NAME=desain_session
+```
+
+Current behavior:
+
+- `local` runtime writes to `data/local/desain.local.sqlite`
+- `production` runtime writes to `data/production/desain.production.sqlite`
+- both currently use SQLite
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More

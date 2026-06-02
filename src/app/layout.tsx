@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "İşin Mutfağı | 3D Oda Editörü",
+  title: "desAIn",
   description: "Professional 3D room planning and layout editor.",
 };
 

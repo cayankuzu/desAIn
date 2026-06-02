@@ -88,19 +88,19 @@ export function EditorHotkeys() {
 
       if (key === "q") {
         event.preventDefault();
-        store.setTransformMode("select");
+        store.requestTransformMode("select");
         return;
       }
 
       if (key === "w") {
         event.preventDefault();
-        store.setTransformMode("translate");
+        store.requestTransformMode("translate");
         return;
       }
 
       if (key === "e") {
         event.preventDefault();
-        store.setTransformMode("rotate");
+        store.requestTransformMode("rotate");
         return;
       }
 

@@ -16,6 +16,8 @@ interface RoomWallsProps {
   room: RoomDefinition;
   onWallReady?: (wallId: string, node: Group | null) => void;
   onOpeningReady?: (openingId: string, node: Group | null) => void;
+  interactive?: boolean;
+  showSelection?: boolean;
 }
 
 const openingColorMap: Record<Opening["type"], string> = {
@@ -115,7 +117,13 @@ function OpeningVisual({
   );
 }
 
-export function RoomWalls({ room, onWallReady, onOpeningReady }: RoomWallsProps) {
+export function RoomWalls({
+  room,
+  onWallReady,
+  onOpeningReady,
+  interactive = true,
+  showSelection = true,
+}: RoomWallsProps) {
   const selectedStructure = useUIStore((state) => state.selectedStructure);
   const setSelectedStructure = useUIStore((state) => state.setSelectedStructure);
   const setActiveSidebarTab = useUIStore((state) => state.setActiveSidebarTab);
@@ -134,7 +142,7 @@ export function RoomWalls({ room, onWallReady, onOpeningReady }: RoomWallsProps)
       {room.walls.map((wall, index) => {
         const { length, directionX, directionZ, rotationY } = getWallMetrics(wall);
         const selected =
-          selectedStructure?.type === "wall" && selectedStructure.id === wall.id;
+          showSelection && selectedStructure?.type === "wall" && selectedStructure.id === wall.id;
         const locked = isWallLocked(wall);
         const wallColor = selected
           ? "#8cb9ff"
@@ -182,10 +190,14 @@ export function RoomWalls({ room, onWallReady, onOpeningReady }: RoomWallsProps)
               rotation={[0, rotationY, 0]}
               castShadow
               receiveShadow
-              onClick={(event) => {
-                event.stopPropagation();
-                handleStructureSelect("wall", wall.id);
-              }}
+              onClick={
+                interactive
+                  ? (event) => {
+                      event.stopPropagation();
+                      handleStructureSelect("wall", wall.id);
+                    }
+                  : undefined
+              }
             >
               <boxGeometry args={[pieceLength, height, wallThickness]} />
               <meshStandardMaterial color={wallColor} />
@@ -240,7 +252,9 @@ export function RoomWalls({ room, onWallReady, onOpeningReady }: RoomWallsProps)
 
       {room.openings.map((opening) => {
         const selected =
-          selectedStructure?.type === "opening" && selectedStructure.id === opening.id;
+          showSelection &&
+          selectedStructure?.type === "opening" &&
+          selectedStructure.id === opening.id;
         const wall = getWallSegment(room, opening.wallId);
 
         if (!wall) {
@@ -259,10 +273,14 @@ export function RoomWalls({ room, onWallReady, onOpeningReady }: RoomWallsProps)
               transform.position.z,
             ]}
             rotation={[0, transform.rotationY, 0]}
-            onClick={(event) => {
-              event.stopPropagation();
-              handleStructureSelect("opening", opening.id);
-            }}
+            onClick={
+              interactive
+                ? (event) => {
+                    event.stopPropagation();
+                    handleStructureSelect("opening", opening.id);
+                  }
+                : undefined
+            }
           >
             <OpeningVisual
               opening={opening}

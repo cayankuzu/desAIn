@@ -1,10 +1,17 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Boxes, Lock, Monitor, Shuffle, Trash2, Ungroup } from "lucide-react";
+import { Boxes, Lock, Monitor, RefreshCw, Shuffle, Trash2, Ungroup, Unlock } from "lucide-react";
 import {
+  getLocalizedRoomLabel,
   t,
 } from "@/lib/i18n/translations";
+import {
+  getAccountCopy,
+  localizeApiMessage,
+  type AccountWorkspaceTab,
+} from "@/lib/i18n/accountTranslations";
 import {
   getInventoryTemplateById,
   INVENTORY_DRAG_MIME,
@@ -18,14 +25,19 @@ import {
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { useRoomStore } from "@/store/roomStore";
 import { useUIStore } from "@/store/uiStore";
+import { AccountWorkspace } from "@/components/account/AccountWorkspace";
 import { EditorHotkeys } from "@/components/layout/EditorHotkeys";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { ViewportHud } from "@/components/layout/ViewportHud";
 import { MobileRoomViewportPreview } from "@/components/layout/MobileRoomViewportPreview";
+import { AccountBar } from "@/components/projects/AccountBar";
+import { CoverCaptureOverlay } from "@/components/projects/CoverCaptureOverlay";
+import { ProjectSaveDialog } from "@/components/projects/ProjectSaveDialog";
 import { RoomScene } from "@/components/room/RoomScene";
 import { buildEditorStatusToast, buildStructureToast, type EditorToast } from "@/lib/editor/toasts";
 import type { RoomData, RoomObject } from "@/types/room";
+import type { EditorProject, ProjectDraftPayload, ProjectSummary, Viewer } from "@/types/project";
 
 type DragPreviewState = {
   templateId: string | null;
@@ -40,6 +52,20 @@ const emptyDragPreview: DragPreviewState = {
   y: 0,
   position: null,
 };
+
+const toProjectSummary = (project: EditorProject | null): ProjectSummary | null =>
+  project
+    ? {
+        id: project.id,
+        name: project.name,
+        description: project.description,
+        coverImageDataUrl: project.coverImageDataUrl,
+        itemCount: project.itemCount,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+        lastOpenedAt: project.lastOpenedAt,
+      }
+    : null;
 
 function getMobileDesktopNoticeCopy(locale: "tr" | "en") {
   return locale === "en"
@@ -176,8 +202,32 @@ const createPreviewObjectFromTemplate = (
   };
 };
 
-export function AppShell() {
+const getRoomDataSignature = (roomData: RoomData) => JSON.stringify(roomData);
+
+interface AppShellProps {
+  initialViewer: Viewer | null;
+  initialProject: EditorProject | null;
+  openCoverCaptureOnLoad?: boolean;
+  returnToPath?: string | null;
+  startInDraftSession?: boolean;
+}
+
+type PendingProjectAction =
+  | { kind: "close-project" }
+  | { kind: "new-project" }
+  | { kind: "open-project"; projectId: string }
+  | { kind: "logout" };
+
+export function AppShell({
+  initialViewer,
+  initialProject,
+  openCoverCaptureOnLoad = false,
+  returnToPath = null,
+  startInDraftSession = false,
+}: AppShellProps) {
+  const router = useRouter();
   const locale = useUIStore((state) => state.locale);
+  const accountCopy = getAccountCopy(locale);
   const setLocale = useUIStore((state) => state.setLocale);
   const selectedStructure = useUIStore((state) => state.selectedStructure);
   const isMobile = useMediaQuery("(max-width: 767px)");
@@ -186,6 +236,9 @@ export function AppShell() {
   const multiSelectMenu = useUIStore((state) => state.multiSelectMenu);
   const setMultiSelectMenu = useUIStore((state) => state.setMultiSelectMenu);
   const roomData = useRoomStore((state) => state.roomData);
+  const loadRoomData = useRoomStore((state) => state.loadRoomData);
+  const resetRoom = useRoomStore((state) => state.resetRoom);
+  const saveRoomSnapshot = useRoomStore((state) => state.saveRoomSnapshot);
   const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
   const selectedObjectIds = useRoomStore((state) => state.selectedObjectIds);
   const selectedGroupId = useRoomStore((state) => state.selectedGroupId);
@@ -196,22 +249,79 @@ export function AppShell() {
   const randomizeSelectedObjects = useRoomStore((state) => state.randomizeSelectedObjects);
   const deleteSelectedObjects = useRoomStore((state) => state.deleteSelectedObjects);
   const toggleSelectedObjectsLock = useRoomStore((state) => state.toggleSelectedObjectsLock);
+  const initialProjectSummary = useMemo(
+    () => toProjectSummary(initialProject),
+    [initialProject],
+  );
 
   const [panelsHidden, setPanelsHidden] = useState(false);
+  const [viewerOverride, setViewerOverride] = useState<Viewer | null | undefined>(
+    undefined,
+  );
+  const [activeProject, setActiveProject] = useState<ProjectSummary | null | undefined>(
+    undefined,
+  );
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [accountWorkspaceOpen, setAccountWorkspaceOpen] = useState(false);
+  const [accountWorkspaceTab, setAccountWorkspaceTab] =
+    useState<AccountWorkspaceTab>("register");
+  const [accountWorkspaceDraft, setAccountWorkspaceDraft] =
+    useState<ProjectDraftPayload | null>(null);
+  const [accountWorkspaceProjects, setAccountWorkspaceProjects] = useState<
+    ProjectSummary[] | undefined
+  >(undefined);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [logoutSubmitting, setLogoutSubmitting] = useState(false);
+  const [coverCaptureMode, setCoverCaptureMode] = useState(openCoverCaptureOnLoad);
+  const [coverCaptureContext, setCoverCaptureContext] = useState<
+    "save-dialog" | "project-route" | null
+  >(openCoverCaptureOnLoad ? "project-route" : null);
+  const [coverCaptureResetToken, setCoverCaptureResetToken] = useState(0);
+  const [coverSelection, setCoverSelection] = useState<{
+    ownerKey: string;
+    value: string | null;
+  }>({
+    ownerKey: initialProject?.id ?? "__draft__",
+    value: initialProject?.coverImageDataUrl ?? null,
+  });
   const [toast, setToast] = useState<{
     id: number;
     title: string;
     detail?: string;
     tone?: EditorToast["tone"];
   } | null>(null);
+  const [savedRoomSignature, setSavedRoomSignature] = useState(() =>
+    getRoomDataSignature(initialProject?.roomData ?? roomData),
+  );
+  const [savedCoverImageDataUrl, setSavedCoverImageDataUrl] = useState<string | null>(
+    initialProject?.coverImageDataUrl ?? null,
+  );
+  const [unsavedAction, setUnsavedAction] = useState<PendingProjectAction | null>(null);
+  const [postSaveAction, setPostSaveAction] = useState<PendingProjectAction | null>(null);
   const roomDataRef = useRef(roomData);
+  const loadedProjectIdRef = useRef<string | null>(initialProject?.id ?? null);
   const toastTimeoutRef = useRef<number | null>(null);
   const activeInventoryDragTemplateIdRef = useRef<string | null>(null);
   const [dragPreview, setDragPreview] = useState<DragPreviewState>(emptyDragPreview);
+  const roomDataSignature = useMemo(() => getRoomDataSignature(roomData), [roomData]);
   const selectedIdsSet = useMemo(
     () => new Set(selectedObjectIds),
     [selectedObjectIds],
   );
+  const currentProjectSummary =
+    activeProject === undefined ? initialProjectSummary : activeProject;
+  const currentProject = useMemo<EditorProject | null>(() => {
+    if (currentProjectSummary) {
+      return {
+        ...currentProjectSummary,
+        roomData,
+      };
+    }
+
+    return null;
+  }, [currentProjectSummary, roomData]);
+  const activeProjectId = currentProject?.id ?? null;
+  const activeProjectKey = activeProjectId ?? "__draft__";
   const selectedWholeGroup = useMemo(
     () =>
       roomData.groups?.find(
@@ -221,6 +331,17 @@ export function AppShell() {
       ) ?? null,
     [roomData.groups, selectedIdsSet, selectedObjectIds.length],
   );
+  const selectedObjects = useMemo(
+    () =>
+      roomData.objects.filter((object) => selectedObjectIds.includes(object.id)),
+    [roomData.objects, selectedObjectIds],
+  );
+  const allSelectedObjectsLocked =
+    selectedObjects.length > 0 && selectedObjects.every((object) => object.locked);
+  const selectionLockLabel = allSelectedObjectsLocked
+    ? t(locale, "unlockSelection")
+    : t(locale, "lockSelection");
+  const SelectionLockIcon = allSelectedObjectsLocked ? Unlock : Lock;
   const shouldShowUngroup = Boolean(selectedGroupId || selectedWholeGroup);
   const shouldShowGroup =
     selectedObjectIds.length > 1 && !selectedWholeGroup;
@@ -240,8 +361,10 @@ export function AppShell() {
 
   useEffect(() => {
     document.documentElement.lang = locale;
-    document.title = t(locale, "appTitle");
-  }, [locale]);
+    if (!accountWorkspaceOpen) {
+      document.title = t(locale, "appTitle");
+    }
+  }, [accountWorkspaceOpen, locale]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -257,6 +380,19 @@ export function AppShell() {
   useEffect(() => {
     roomDataRef.current = roomData;
   }, [roomData]);
+
+  useEffect(() => {
+    if (initialProject) {
+      loadRoomData(initialProject.roomData);
+      loadedProjectIdRef.current = initialProject.id;
+      return;
+    }
+
+    if (loadedProjectIdRef.current) {
+      resetRoom("default");
+      loadedProjectIdRef.current = null;
+    }
+  }, [initialProject, loadRoomData, resetRoom]);
 
   useEffect(() => {
     if (selectedObjectIds.length < 2) {
@@ -353,11 +489,418 @@ export function AppShell() {
     }
 
     const link = document.createElement("a");
-    link.download = `isin-mutfagi-room-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png`;
+    link.download = `desain-room-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
     showToast({ title: t(locale, "captureScreenshot"), tone: "success" });
   };
+
+  const captureViewportImageDataUrl = useCallback(() => {
+    const canvas = document.querySelector<HTMLCanvasElement>(".room-canvas canvas");
+
+    if (!canvas) {
+      throw new Error(accountCopy.viewportNotReady);
+    }
+
+    return canvas.toDataURL("image/png");
+  }, [accountCopy.viewportNotReady]);
+
+  const buildDefaultProjectName = useCallback(() => {
+    const roomLabel = getLocalizedRoomLabel(locale, roomDataRef.current.room);
+    return `${roomLabel} ${locale === "en" ? "Project" : "Projesi"}`;
+  }, [locale]);
+
+  const buildProjectDraft = useCallback(
+    (coverImageDataUrl: string | null) => ({
+      name: currentProject?.name ?? buildDefaultProjectName(),
+      description: currentProject?.description ?? "",
+      coverImageDataUrl,
+      roomData: roomDataRef.current,
+    }),
+    [buildDefaultProjectName, currentProject],
+  );
+  const effectiveCoverImageDataUrl =
+    coverSelection.ownerKey === activeProjectKey
+      ? coverSelection.value
+      : currentProject?.coverImageDataUrl ?? null;
+  const viewer = viewerOverride === undefined ? initialViewer : viewerOverride;
+  const projectSessionActive = Boolean(currentProject || startInDraftSession);
+  const hasUnsavedChanges =
+    roomDataSignature !== savedRoomSignature ||
+    effectiveCoverImageDataUrl !== savedCoverImageDataUrl;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !hasUnsavedChanges) {
+      return;
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const navigateToEditor = useCallback(
+    (href: string, options?: { replace?: boolean }) => {
+      setAccountWorkspaceOpen(false);
+      setAccountWorkspaceDraft(null);
+      setAccountWorkspaceProjects(undefined);
+      setPostSaveAction(null);
+      setUnsavedAction(null);
+
+      if (typeof window !== "undefined") {
+        if (options?.replace) {
+          window.location.replace(href);
+          return;
+        }
+
+        window.location.assign(href);
+        return;
+      }
+
+      if (options?.replace) {
+        router.replace(href, { scroll: false });
+        return;
+      }
+
+      router.push(href, { scroll: false });
+    },
+    [router],
+  );
+
+  const closeActiveProjectSession = useCallback(() => {
+    setActiveProject(null);
+    setSaveDialogOpen(false);
+    setCoverCaptureMode(false);
+    setCoverCaptureContext(null);
+    setCoverSelection({
+      ownerKey: "__draft__",
+      value: null,
+    });
+    setSavedCoverImageDataUrl(null);
+    setPanelsHidden(false);
+    loadedProjectIdRef.current = null;
+    setSelectedStructure(null);
+    resetRoom("default");
+    setSavedRoomSignature(getRoomDataSignature(useRoomStore.getState().roomData));
+  }, [resetRoom, setSelectedStructure]);
+
+  const performLogout = useCallback(async () => {
+    setLogoutSubmitting(true);
+
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+      });
+      const json = (await response.json()) as { ok: boolean; message?: string };
+
+      if (!response.ok || !json.ok) {
+        throw new Error(
+          localizeApiMessage(json.message, locale) ?? accountCopy.networkError,
+        );
+      }
+
+      setViewerOverride(null);
+      setActiveProject(null);
+      setLogoutConfirmOpen(false);
+      setAccountWorkspaceOpen(false);
+      setAccountWorkspaceDraft(null);
+      setAccountWorkspaceProjects(undefined);
+      setCoverCaptureMode(false);
+      setCoverCaptureContext(null);
+      setCoverSelection({
+        ownerKey: "__draft__",
+        value: null,
+      });
+      loadedProjectIdRef.current = null;
+      setPanelsHidden(false);
+      resetRoom("default");
+
+      if (typeof window !== "undefined") {
+        window.location.replace("/");
+        return;
+      }
+
+      router.replace("/", { scroll: false });
+    } catch (error) {
+      showToast({
+        title: accountCopy.logout,
+        detail:
+          error instanceof Error
+            ? localizeApiMessage(error.message, locale) ?? error.message
+            : accountCopy.networkError,
+        tone: "warning",
+      });
+    } finally {
+      setLogoutSubmitting(false);
+    }
+  }, [accountCopy.logout, accountCopy.networkError, locale, resetRoom, router, showToast]);
+
+  const executePendingProjectAction = useCallback(
+    (action: PendingProjectAction) => {
+      setUnsavedAction(null);
+      setPostSaveAction(null);
+
+      if (action.kind === "open-project") {
+        navigateToEditor(`/?projectId=${encodeURIComponent(action.projectId)}`);
+        return;
+      }
+
+      if (action.kind === "new-project") {
+        navigateToEditor("/?draft=1");
+        return;
+      }
+
+      if (action.kind === "close-project") {
+        closeActiveProjectSession();
+        navigateToEditor(viewer ? "/projelerim" : "/", { replace: true });
+        return;
+      }
+
+      void performLogout();
+    },
+    [closeActiveProjectSession, navigateToEditor, performLogout, viewer],
+  );
+
+  const handleSaveProjectRequest = useCallback(() => {
+    let nextCover = effectiveCoverImageDataUrl;
+
+    if (!nextCover) {
+      try {
+        nextCover = currentProject?.coverImageDataUrl ?? captureViewportImageDataUrl();
+      } catch {
+        nextCover = currentProject?.coverImageDataUrl ?? null;
+      }
+    }
+
+    setCoverSelection({
+      ownerKey: activeProjectKey,
+      value: nextCover,
+    });
+
+    if (!viewer) {
+      setAccountWorkspaceDraft(buildProjectDraft(nextCover));
+      setAccountWorkspaceTab("register");
+      setAccountWorkspaceProjects(undefined);
+      setAccountWorkspaceOpen(true);
+      return;
+    }
+
+    setSaveDialogOpen(true);
+  }, [
+    activeProjectKey,
+    buildProjectDraft,
+    captureViewportImageDataUrl,
+    effectiveCoverImageDataUrl,
+    currentProject,
+    viewer,
+  ]);
+
+  const saveProjectToDatabase = useCallback(
+    async ({
+      name,
+      description,
+      coverImageDataUrl,
+    }: {
+      name: string;
+      description: string;
+      coverImageDataUrl: string | null;
+    }) => {
+      const currentProjectId = currentProject?.id;
+      const isUpdatingExistingProject = Boolean(currentProjectId);
+      const response = await fetch(
+        currentProjectId ? `/api/projects/${currentProjectId}` : "/api/projects",
+        {
+          method: currentProjectId ? "PUT" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name,
+            description,
+            coverImageDataUrl,
+            roomData: roomDataRef.current,
+          }),
+        },
+      );
+      const json = (await response.json()) as {
+        ok: boolean;
+        message?: string;
+        project?: ProjectSummary;
+      };
+
+      if (!response.ok || !json.ok || !json.project) {
+        throw new Error(
+          localizeApiMessage(json.message, locale) ?? accountCopy.projectSaveFailure,
+        );
+      }
+
+      saveRoomSnapshot();
+      setSaveDialogOpen(false);
+      setActiveProject(json.project);
+      setSavedRoomSignature(getRoomDataSignature(roomDataRef.current));
+      setSavedCoverImageDataUrl(json.project.coverImageDataUrl);
+      setCoverSelection({
+        ownerKey: json.project.id,
+        value: json.project.coverImageDataUrl,
+      });
+      showToast({
+        title: isUpdatingExistingProject
+          ? accountCopy.updatedToastTitle
+          : accountCopy.savedToastTitle,
+        detail: isUpdatingExistingProject
+          ? accountCopy.updatedToastDetail(json.project.name)
+          : accountCopy.savedToastDetail(json.project.name),
+        tone: "success",
+      });
+
+      if (postSaveAction) {
+        executePendingProjectAction(postSaveAction);
+        return;
+      }
+
+      if (!currentProjectId || currentProjectId !== json.project.id) {
+        router.replace(`/?projectId=${json.project.id}`, { scroll: false });
+      }
+    },
+    [
+      accountCopy,
+      currentProject,
+      executePendingProjectAction,
+      locale,
+      postSaveAction,
+      router,
+      saveRoomSnapshot,
+      showToast,
+    ],
+  );
+
+  const handleAccountWorkspaceAuthSuccess = useCallback(
+    (payload: { user: Viewer | null; project: ProjectSummary | null }) => {
+      setViewerOverride(payload.user);
+      setAccountWorkspaceDraft(null);
+
+      if (payload.project) {
+        const projectUrl = `/?projectId=${payload.project.id}`;
+        setAccountWorkspaceOpen(false);
+        setAccountWorkspaceProjects(undefined);
+        setActiveProject(payload.project);
+        setSavedRoomSignature(getRoomDataSignature(roomDataRef.current));
+        setSavedCoverImageDataUrl(payload.project.coverImageDataUrl);
+        setCoverSelection({
+          ownerKey: payload.project.id,
+          value: payload.project.coverImageDataUrl,
+        });
+
+        if (postSaveAction) {
+          executePendingProjectAction(postSaveAction);
+          return;
+        }
+
+        showToast({
+          title: accountCopy.firstProjectToastTitle,
+          detail: accountCopy.firstProjectToastDetail(payload.project.name),
+          tone: "success",
+        });
+
+        if (typeof window !== "undefined") {
+          window.location.replace(projectUrl);
+          return;
+        }
+
+        router.replace(projectUrl, { scroll: false });
+        return;
+      }
+
+      if (payload.user) {
+        setAccountWorkspaceOpen(false);
+        setAccountWorkspaceProjects(undefined);
+        navigateToEditor("/projelerim", { replace: true });
+      }
+    },
+    [
+      accountCopy,
+      executePendingProjectAction,
+      navigateToEditor,
+      postSaveAction,
+      router,
+      showToast,
+    ],
+  );
+
+  const handleStartCoverCaptureFromSaveDialog = useCallback(() => {
+    setSaveDialogOpen(false);
+    setCoverCaptureContext("save-dialog");
+    setCoverCaptureMode(true);
+  }, []);
+
+  const handleCoverCapture = useCallback(async () => {
+    const dataUrl = captureViewportImageDataUrl();
+    const projectRouteReturnPath = `${returnToPath ?? "/projelerim"}?flash=cover-updated`;
+
+    if (coverCaptureContext === "save-dialog") {
+      setCoverSelection({
+        ownerKey: activeProjectKey,
+        value: dataUrl,
+      });
+      setCoverCaptureMode(false);
+      setCoverCaptureContext(null);
+      setSaveDialogOpen(true);
+      return;
+    }
+
+    if (coverCaptureContext === "project-route" && activeProjectId) {
+      const response = await fetch(`/api/projects/${activeProjectId}/cover`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          coverImageDataUrl: dataUrl,
+        }),
+      });
+      const json = (await response.json()) as {
+        ok: boolean;
+        message?: string;
+        project?: ProjectSummary;
+      };
+
+      if (!response.ok || !json.ok) {
+        throw new Error(
+          localizeApiMessage(json.message, locale) ?? accountCopy.coverUpdateFailure,
+        );
+      }
+
+      if (json.project) {
+        setActiveProject(json.project);
+      }
+
+      setCoverCaptureMode(false);
+      setCoverCaptureContext(null);
+      if (typeof window !== "undefined") {
+        window.location.replace(projectRouteReturnPath);
+        return;
+      }
+
+      router.replace(projectRouteReturnPath, { scroll: false });
+      return;
+    }
+
+    setCoverCaptureMode(false);
+    setCoverCaptureContext(null);
+  }, [
+    activeProjectKey,
+    activeProjectId,
+    captureViewportImageDataUrl,
+    coverCaptureContext,
+    accountCopy.coverUpdateFailure,
+    locale,
+    returnToPath,
+    router,
+  ]);
 
   const togglePanels = () => {
     setPanelsHidden((current) => {
@@ -370,23 +913,218 @@ export function AppShell() {
     });
   };
 
+  const openAccountWorkspace = useCallback(
+    async (tab: AccountWorkspaceTab, draft: ProjectDraftPayload | null = null) => {
+      setAccountWorkspaceDraft(draft);
+      setAccountWorkspaceTab(tab);
+
+      if (viewer && (tab === "projects" || tab === "profile")) {
+        try {
+          const response = await fetch("/api/projects", {
+            method: "GET",
+            headers: {
+              "Cache-Control": "no-store",
+            },
+          });
+          const json = (await response.json()) as {
+            ok: boolean;
+            message?: string;
+            projects?: ProjectSummary[];
+          };
+
+          if (!response.ok || !json.ok) {
+            throw new Error(
+              localizeApiMessage(json.message, locale) ?? accountCopy.projectsLoadError,
+            );
+          }
+
+          setAccountWorkspaceProjects(json.projects ?? []);
+        } catch (error) {
+          setAccountWorkspaceProjects([]);
+          showToast({
+            title: accountCopy.projectsLoadError,
+            detail:
+              error instanceof Error
+                ? localizeApiMessage(error.message, locale) ?? error.message
+                : accountCopy.retry,
+            tone: "warning",
+          });
+        }
+      } else {
+        setAccountWorkspaceProjects(undefined);
+      }
+
+      setAccountWorkspaceOpen(true);
+    },
+    [accountCopy.projectsLoadError, accountCopy.retry, locale, showToast, viewer],
+  );
+
+  const closeAccountWorkspace = useCallback(() => {
+    setAccountWorkspaceOpen(false);
+    setPostSaveAction(null);
+    if (!viewer) {
+      setAccountWorkspaceDraft(null);
+    }
+  }, [viewer]);
+
+  const requestEditorAction = useCallback(
+    (action: PendingProjectAction) => {
+      if (hasUnsavedChanges) {
+        setUnsavedAction(action);
+        return;
+      }
+
+      executePendingProjectAction(action);
+    },
+    [executePendingProjectAction, hasUnsavedChanges],
+  );
+
+  const handleProjectActivated = useCallback(
+    (projectId: string) => {
+      requestEditorAction({ kind: "open-project", projectId });
+    },
+    [requestEditorAction],
+  );
+
+  const handleCreateProject = useCallback(() => {
+    requestEditorAction({ kind: "new-project" });
+  }, [requestEditorAction]);
+
+  const handleCloseProject = useCallback(() => {
+    requestEditorAction({ kind: "close-project" });
+  }, [requestEditorAction]);
+
+  const handleLogoutRequest = useCallback(() => {
+    if (hasUnsavedChanges) {
+      setUnsavedAction({ kind: "logout" });
+      return;
+    }
+
+    setLogoutConfirmOpen(true);
+  }, [hasUnsavedChanges]);
+
   if (isMobile) {
     return <MobileDesktopNotice locale={locale} />;
   }
 
+  const effectivePanelsHidden = panelsHidden || coverCaptureMode;
+  const currentProjectName = currentProject?.name ?? null;
+  const saveActionLabel = currentProject ? accountCopy.saveChanges : accountCopy.createProject;
+  const unsavedActionBody =
+    unsavedAction?.kind === "close-project"
+      ? accountCopy.unsavedCloseProjectBody(currentProjectName)
+      : unsavedAction?.kind === "open-project"
+        ? accountCopy.unsavedOpenProjectBody(currentProjectName)
+        : unsavedAction?.kind === "new-project"
+        ? accountCopy.unsavedNewProjectBody(currentProjectName)
+        : unsavedAction?.kind === "logout"
+          ? accountCopy.unsavedLogoutBody(currentProjectName)
+          : null;
+  const unsavedDiscardLabel =
+    unsavedAction?.kind === "close-project"
+      ? accountCopy.closeWithoutSaving
+      : accountCopy.continueWithoutSaving;
+  const unsavedSaveLabel =
+    unsavedAction?.kind === "close-project"
+      ? viewer
+        ? accountCopy.saveAndClose
+        : accountCopy.signInSaveAndClose
+      : viewer
+        ? accountCopy.saveAndContinue
+        : accountCopy.signInAndSave;
+
   return (
     <main className="h-dvh overflow-hidden px-3 py-3 md:px-4 md:py-4">
       <EditorHotkeys />
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1820px] flex-col gap-3 md:gap-4">
-        <Topbar
-          panelsHidden={panelsHidden}
-          onTogglePanels={togglePanels}
-          onCaptureScreenshot={captureScreenshot}
+      {accountWorkspaceOpen ? (
+        <AccountWorkspace
+          variant="overlay"
+          initialViewer={viewer}
+          initialProjects={accountWorkspaceProjects}
+          initialTab={accountWorkspaceTab}
+          currentProjectName={currentProjectName}
+          currentProjectId={activeProjectId}
+          draftProject={accountWorkspaceDraft}
+          onClose={closeAccountWorkspace}
+          onViewerChange={(nextViewer) => setViewerOverride(nextViewer)}
+          onAuthSuccess={handleAccountWorkspaceAuthSuccess}
+          onProjectActivated={handleProjectActivated}
+          onCreateProject={handleCreateProject}
         />
+      ) : null}
+      <ProjectSaveDialog
+        key={`${activeProjectKey}:${saveDialogOpen ? "open" : "closed"}`}
+        open={saveDialogOpen}
+        currentProject={currentProject}
+        initialCoverImageDataUrl={effectiveCoverImageDataUrl}
+        onClose={() => {
+          setSaveDialogOpen(false);
+          setPostSaveAction(null);
+        }}
+        onCaptureCover={handleStartCoverCaptureFromSaveDialog}
+        onSave={saveProjectToDatabase}
+      />
+      <CoverCaptureOverlay
+        open={coverCaptureMode}
+        onResetView={() => setCoverCaptureResetToken((current) => current + 1)}
+        onCapture={() => {
+          void handleCoverCapture().catch((error: unknown) => {
+            showToast({
+              title: accountCopy.coverCreateFailure,
+              detail:
+                error instanceof Error
+                  ? localizeApiMessage(error.message, locale) ?? error.message
+                  : accountCopy.retry,
+              tone: "warning",
+            });
+          });
+        }}
+        onClose={() => {
+          setCoverCaptureMode(false);
+          const nextContext = coverCaptureContext;
+          setCoverCaptureContext(null);
+          if (nextContext === "save-dialog") {
+            setSaveDialogOpen(true);
+            return;
+          }
+          if (nextContext === "project-route" && activeProjectId) {
+            if (typeof window !== "undefined") {
+              window.location.replace(returnToPath ?? "/projelerim");
+              return;
+            }
+
+            router.replace(returnToPath ?? "/projelerim", { scroll: false });
+          }
+        }}
+      />
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1820px] flex-col gap-3 md:gap-4">
+        {coverCaptureMode ? null : (
+          <AccountBar
+            viewer={viewer}
+            currentProjectName={currentProjectName}
+            projectSessionActive={projectSessionActive}
+            onOpenProjects={() => openAccountWorkspace("projects")}
+            onOpenProfile={() => openAccountWorkspace("profile")}
+            onOpenLogin={() => openAccountWorkspace("login")}
+            onOpenRegister={() => openAccountWorkspace("register")}
+            onRequestLogout={handleLogoutRequest}
+            onRequestCloseProject={handleCloseProject}
+          />
+        )}
+        {coverCaptureMode ? null : (
+          <Topbar
+            panelsHidden={panelsHidden}
+            onTogglePanels={togglePanels}
+            onCaptureScreenshot={captureScreenshot}
+            onRequestSaveProject={handleSaveProjectRequest}
+            canSaveProject={Boolean(viewer)}
+            saveActionLabel={saveActionLabel}
+          />
+        )}
 
         <section
           className={`grid min-h-0 flex-1 gap-4 ${
-            panelsHidden
+            effectivePanelsHidden
               ? "grid-cols-1"
               : "grid-rows-[minmax(320px,44vh)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_560px] xl:grid-rows-none"
           }`}
@@ -458,7 +1196,7 @@ export function AppShell() {
               }}
             >
             <div className="viewport-grid absolute inset-0 opacity-55" />
-            {multiSelectMenu && selectedObjectIds.length > 1 ? (
+            {!coverCaptureMode && multiSelectMenu && selectedObjectIds.length > 1 ? (
               <div
                 className="fixed z-50 w-56 rounded-xl border border-white/10 bg-[#0d141d]/96 p-2 text-xs font-semibold text-slate-200 shadow-[0_20px_50px_rgba(0,0,0,0.42)] backdrop-blur"
                 style={{
@@ -502,8 +1240,8 @@ export function AppShell() {
                   }}
                   className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left transition hover:bg-white/8 hover:text-white"
                 >
-                  <Lock className="h-3.5 w-3.5 text-[#8cb9ff]" />
-                  {t(locale, "lockSelection")}
+                  <SelectionLockIcon className="h-3.5 w-3.5 text-[#8cb9ff]" />
+                  {selectionLockLabel}
                 </button>
                 {shouldShowUngroup ? (
                   <button
@@ -531,13 +1269,17 @@ export function AppShell() {
                 </button>
               </div>
             ) : null}
-            <ViewportHud />
+            {coverCaptureMode ? null : <ViewportHud />}
             <div className="h-full">
-              <RoomScene previewObject={dragPreviewObject} />
+              <RoomScene
+                previewObject={dragPreviewObject}
+                presentationMode={coverCaptureMode}
+                cameraResetToken={coverCaptureResetToken}
+              />
             </div>
           </div>
 
-          {panelsHidden ? null : <Sidebar />}
+          {effectivePanelsHidden ? null : <Sidebar />}
         </section>
       </div>
       {toast ? (
@@ -551,12 +1293,100 @@ export function AppShell() {
           }`}
         >
           <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/60">
-            İşin Mutfağı
+            desAIn
           </div>
           <div className="mt-1 text-sm font-semibold text-white">{toast.title}</div>
           {toast.detail ? (
             <div className="mt-1 text-sm leading-6 text-white/80">{toast.detail}</div>
           ) : null}
+        </div>
+      ) : null}
+      {unsavedAction && unsavedActionBody ? (
+        <div className="fixed inset-0 z-[168] flex items-center justify-center bg-[#03070bcc] px-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-[1.6rem] border border-white/10 bg-[#0c131b] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.5)]">
+            <h3 className="text-xl font-semibold text-white">
+              {accountCopy.unsavedChangesTitle}
+            </h3>
+            <p className="mt-3 text-sm leading-6 text-slate-300">
+              {unsavedActionBody}
+            </p>
+            <div className="mt-3 rounded-2xl border border-[#6d4a29] bg-[#25180f] px-4 py-3 text-sm leading-6 text-[#f5c28b]">
+              {accountCopy.unsavedChangesHint}
+            </div>
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setUnsavedAction(null)}
+                className="inline-flex h-11 items-center rounded-full border border-white/10 bg-[#0f1720] px-4 text-sm font-semibold text-slate-300 transition hover:border-[#32516c] hover:text-white"
+              >
+                {accountCopy.stayHere}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextAction = unsavedAction;
+                  if (!nextAction) {
+                    return;
+                  }
+
+                  executePendingProjectAction(nextAction);
+                }}
+                className="inline-flex h-11 items-center rounded-full border border-white/10 bg-[#151d28] px-4 text-sm font-semibold text-slate-200 transition hover:border-[#32516c] hover:text-white"
+              >
+                {unsavedDiscardLabel}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextAction = unsavedAction;
+                  if (!nextAction) {
+                    return;
+                  }
+
+                  setPostSaveAction(nextAction);
+                  setUnsavedAction(null);
+                  handleSaveProjectRequest();
+                }}
+                className="inline-flex h-11 items-center gap-2 rounded-full border border-[#4ea8ff] bg-[#102234] px-4 text-sm font-semibold text-white transition hover:border-[#76beff]"
+              >
+                {unsavedSaveLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {logoutConfirmOpen ? (
+        <div className="fixed inset-0 z-[170] flex items-center justify-center bg-[#03070bcc] px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[1.6rem] border border-white/10 bg-[#0c131b] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.5)]">
+            <h3 className="text-xl font-semibold text-white">
+              {accountCopy.logoutConfirmTitle}
+            </h3>
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              {accountCopy.logoutConfirmBody}
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setLogoutConfirmOpen(false)}
+                className="inline-flex h-11 items-center rounded-full border border-white/10 bg-[#0f1720] px-4 text-sm font-semibold text-slate-300 transition hover:border-[#32516c] hover:text-white"
+              >
+                {accountCopy.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void performLogout();
+                }}
+                disabled={logoutSubmitting}
+                className="inline-flex h-11 items-center gap-2 rounded-full border border-[#4ea8ff] bg-[#102234] px-4 text-sm font-semibold text-white transition hover:border-[#76beff] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {logoutSubmitting ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : null}
+                {accountCopy.logoutConfirmAction}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </main>

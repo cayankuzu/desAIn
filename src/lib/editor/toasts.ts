@@ -109,6 +109,13 @@ export function buildEditorStatusToast(params: {
           : "Seçim sahneden kaldırıldı";
       tone = "warning";
       break;
+    case "transformBlockedLocked":
+      detail =
+        locale === "en"
+          ? "Unlock the selected item before using move or rotate."
+          : "Tasi veya dondur icin once secili ogenin kilidini ac.";
+      tone = "warning";
+      break;
     case "objectAdded":
     case "objectUpdated":
     case "objectPropertiesUpdated":
@@ -165,4 +172,3 @@ export function buildStructureToast(params: {
     tone: "info",
   };
 }
-

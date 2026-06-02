@@ -47,6 +47,7 @@ import type {
 } from "@/types/room";
 
 const SAVED_ROOM_KEY = "desain-saved-room-data";
+const SAVED_ROOM_EVENT = "desain:saved-room-changed";
 
 const createDefaultRoomData = () => createRoomPreset("rectangle", "living");
 const initialRoomData = createDefaultRoomData();
@@ -128,6 +129,53 @@ const createGroupId = (groups: RoomObjectGroup[]) =>
 
 const getRoomGroups = (roomData: RoomData) => roomData.groups ?? [];
 
+type FunctionalRun = "kitchen" | "laundry" | "bath" | "storage" | null;
+
+type SourceGroupContext = {
+  groupId: string;
+  objectIds: Set<string>;
+  objects: RoomObject[];
+  sourceObjectById: Map<string, RoomObject>;
+  centroid: RoomObject["position"];
+  preferredWallId: string | null;
+  dominantRun: FunctionalRun;
+};
+
+type SourceGroupCache = {
+  groupByObjectId: Map<string, SourceGroupContext>;
+};
+
+const sourceGroupCache = new WeakMap<RoomData, SourceGroupCache>();
+
+const getObjectsCentroid = (objects: RoomObject[]): RoomObject["position"] => {
+  if (!objects.length) {
+    return { x: 0, z: 0 };
+  }
+
+  const total = objects.reduce(
+    (sum, object) => ({
+      x: sum.x + object.position.x,
+      z: sum.z + object.position.z,
+    }),
+    { x: 0, z: 0 },
+  );
+
+  return {
+    x: total.x / objects.length,
+    z: total.z / objects.length,
+  };
+};
+
+const getNormalizedRoomDistance = (
+  roomData: RoomData,
+  left: RoomObject["position"],
+  right: RoomObject["position"],
+) =>
+  Math.hypot(
+    (left.x - right.x) / Math.max(roomData.room.width, 0.01),
+    (left.z - right.z) / Math.max(roomData.room.depth, 0.01),
+  );
+
 const pruneGroups = (roomData: RoomData) => {
   const objectIds = new Set(roomData.objects.map((object) => object.id));
 
@@ -161,6 +209,22 @@ const getNextGroupLabel = (roomData: RoomData, objectIds: string[]) => {
 
 const getObjectBaseShape = (object: Pick<RoomObject, "params">) =>
   String(object.params.baseShape ?? "");
+
+const hasLockedSelection = (roomData: RoomData, selectedObjectIds: string[]) =>
+  selectedObjectIds.some((selectedId) => {
+    const selectedObject = roomData.objects.find((object) => object.id === selectedId);
+    return selectedObject?.locked === true;
+  });
+
+const haveSameObjectIds = (left: string[], right: string[]) => {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const rightIds = new Set(right);
+
+  return left.every((objectId) => rightIds.has(objectId));
+};
 
 const serviceWallShapes = new Set([
   "appliance_box",
@@ -382,13 +446,71 @@ const getWallBackGap = (roomData: RoomData, object: RoomObject) => {
   return Math.max(0, projection.distance - object.dimensions.depth / 2);
 };
 
-const getFunctionalRun = (object: RoomObject) => {
+const getFunctionalRun = (object: RoomObject): FunctionalRun => {
   if (kitchenRunLabels.has(object.labelKey)) return "kitchen";
   if (laundryRunLabels.has(object.labelKey)) return "laundry";
   if (bathRunLabels.has(object.labelKey)) return "bath";
   if (object.category === "wardrobe") return "storage";
 
   return null;
+};
+
+const getSourceGroupCache = (roomData: RoomData): SourceGroupCache => {
+  const cached = sourceGroupCache.get(roomData);
+
+  if (cached) {
+    return cached;
+  }
+
+  const groupByObjectId = new Map<string, SourceGroupContext>();
+  const sourceObjectsById = new Map(roomData.objects.map((object) => [object.id, object]));
+
+  getRoomGroups(roomData).forEach((group) => {
+    const objects = group.objectIds
+      .map((objectId) => sourceObjectsById.get(objectId))
+      .filter((object): object is RoomObject => Boolean(object));
+
+    if (objects.length < 2) {
+      return;
+    }
+
+    const centroid = getObjectsCentroid(objects);
+    const preferredWallCounts = new Map<string, number>();
+    let dominantRun: FunctionalRun = null;
+
+    objects.forEach((object) => {
+      const wallId = getNearestWallProjection(roomData, object)?.wall.id;
+      const objectRun = getFunctionalRun(object);
+
+      if (wallId) {
+        preferredWallCounts.set(wallId, (preferredWallCounts.get(wallId) ?? 0) + 1);
+      }
+
+      if (objectRun && (dominantRun === null || dominantRun === "storage")) {
+        dominantRun = objectRun;
+      }
+    });
+
+    const preferredWallId =
+      [...preferredWallCounts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? null;
+    const context: SourceGroupContext = {
+      groupId: group.id,
+      objectIds: new Set(objects.map((object) => object.id)),
+      objects,
+      sourceObjectById: new Map(objects.map((object) => [object.id, object])),
+      centroid,
+      preferredWallId,
+      dominantRun,
+    };
+
+    objects.forEach((object) => {
+      groupByObjectId.set(object.id, context);
+    });
+  });
+
+  const nextCache = { groupByObjectId };
+  sourceGroupCache.set(roomData, nextCache);
+  return nextCache;
 };
 
 const isConversationTable = (object: RoomObject) =>
@@ -476,6 +598,97 @@ const getNearestMatchingObject = (
 const getObjectDistance = (left: RoomObject, right: RoomObject) =>
   Math.hypot(left.position.x - right.position.x, left.position.z - right.position.z);
 
+const getExplicitGroupRelationshipPenalty = (
+  roomData: RoomData,
+  objects: RoomObject[],
+  object: RoomObject,
+) => {
+  const group = getSourceGroupCache(roomData).groupByObjectId.get(object.id);
+
+  if (!group) {
+    return 0;
+  }
+
+  const sourceObject = group.sourceObjectById.get(object.id);
+
+  if (!sourceObject) {
+    return 0;
+  }
+
+  const groupedObjects = objects.filter((candidate) => group.objectIds.has(candidate.id));
+  const currentCentroid = getObjectsCentroid(groupedObjects);
+  const centroidShift = getNormalizedRoomDistance(roomData, currentCentroid, group.centroid);
+  const centroidTolerance = group.dominantRun ? 0.1 : 0.16;
+  const centroidWeight = group.dominantRun ? 120 : 78;
+  let penalty =
+    centroidShift > centroidTolerance
+      ? ((centroidShift - centroidTolerance) * centroidWeight) / groupedObjects.length
+      : 0;
+  const sourceOffset = {
+    x: sourceObject.position.x - group.centroid.x,
+    z: sourceObject.position.z - group.centroid.z,
+  };
+  const currentOffset = {
+    x: object.position.x - currentCentroid.x,
+    z: object.position.z - currentCentroid.z,
+  };
+  const sourceOffsetLength = Math.hypot(sourceOffset.x, sourceOffset.z);
+  const currentOffsetLength = Math.hypot(currentOffset.x, currentOffset.z);
+  const offsetDelta = Math.abs(currentOffsetLength - sourceOffsetLength);
+
+  penalty += offsetDelta * (group.dominantRun ? 26 : 16);
+
+  const currentWallId = getNearestWallProjection(roomData, object)?.wall.id ?? null;
+
+  if (group.dominantRun && currentWallId && group.preferredWallId && currentWallId !== group.preferredWallId) {
+    penalty += 18;
+  }
+
+  groupedObjects.forEach((peer) => {
+    if (peer.id === object.id) {
+      return;
+    }
+
+    const sourcePeer = group.sourceObjectById.get(peer.id);
+
+    if (!sourcePeer) {
+      return;
+    }
+
+    const sourceDistance = getObjectDistance(sourceObject, sourcePeer);
+    const currentDistance = getObjectDistance(object, peer);
+    const minDistance = Math.max(0.16, sourceDistance * 0.55);
+    const maxDistance = Math.max(sourceDistance + 0.32, sourceDistance * 1.45 + 0.12);
+
+    penalty += getDistanceRangePenalty(
+      currentDistance,
+      minDistance,
+      maxDistance,
+      group.dominantRun ? 34 : 20,
+    );
+
+    if (sourceDistance <= 1.8) {
+      const driftTolerance = group.dominantRun ? 0.42 : 0.58;
+
+      if (currentDistance > sourceDistance + driftTolerance) {
+        penalty +=
+          (currentDistance - sourceDistance - driftTolerance) *
+          (group.dominantRun ? 42 : 26);
+      }
+    }
+
+    if (group.dominantRun && currentWallId) {
+      const peerWallId = getNearestWallProjection(roomData, peer)?.wall.id ?? null;
+
+      if (peerWallId && peerWallId !== currentWallId) {
+        penalty += 10;
+      }
+    }
+  });
+
+  return penalty;
+};
+
 const getDistanceRangePenalty = (
   distance: number,
   min: number,
@@ -551,7 +764,7 @@ const getProfessionalObjectRelationshipPenalty = (
   object: RoomObject,
 ) => {
   const relatedObjects = objects.filter((candidate) => candidate.id !== object.id);
-  let penalty = 0;
+  let penalty = getExplicitGroupRelationshipPenalty(roomData, objects, object);
 
   if (isSeatObject(object)) {
     const nearestMedia = getNearestMatchingObject(object, relatedObjects, isMediaObject);
@@ -1661,7 +1874,7 @@ const getRoomDataSignature = (
 
 const getRandomLayoutInputSignature = (roomData: RoomData) =>
   JSON.stringify({
-    algorithm: "professional-layout-v5",
+    algorithm: "professional-layout-v6",
     room: {
       shape: roomData.room.shape,
       purpose: roomData.room.purpose,
@@ -2901,7 +3114,19 @@ const createRandomLayoutOptions = (
     }
   }
 
-  return selectedOptions
+  const baseLayoutObjects = sourceLayoutObjects.map((object) => ({
+    ...cloneRoomObject(object),
+    position: {
+      x: Number(object.position.x.toFixed(3)),
+      z: Number(object.position.z.toFixed(3)),
+    },
+    rotation: Math.round(normalizeRotation(object.rotation)),
+  }));
+  const baseLayoutWarnings = validateRoomLayout({
+    ...roomData,
+    objects: baseLayoutObjects,
+  });
+  const generatedOptions = selectedOptions
     .sort(
       (left, right) =>
         getRandomLayoutQualityScore(roomData, left.objects, left.warnings) -
@@ -2913,6 +3138,16 @@ const createRandomLayoutOptions = (
       id: `random_${index + 1}`,
       label: `random_${index + 1}`,
     }));
+
+  return [
+    {
+      id: "layout_0",
+      label: "layout_0",
+      objects: baseLayoutObjects,
+      warnings: baseLayoutWarnings,
+    },
+    ...generatedOptions,
+  ];
 };
 
 interface RoomStore {
@@ -2939,6 +3174,7 @@ interface RoomStore {
   selectGroup: (groupId: string) => void;
   setCameraMode: (mode: CameraMode) => void;
   setTransformMode: (mode: TransformMode) => void;
+  requestTransformMode: (mode: TransformMode) => void;
   beginTransform: (objectId: string) => void;
   beginStructureTransform: (structureId: string) => void;
   endTransform: () => void;
@@ -3100,6 +3336,29 @@ export const useRoomStore = create<RoomStore>((set) => ({
               ? "modeTranslate"
               : "modeRotate",
       },
+    }),
+  requestTransformMode: (mode) =>
+    set((state) => {
+      if (mode !== "select" && hasLockedSelection(state.roomData, state.selectedObjectIds)) {
+        return {
+          lastEditorStatus: {
+            key: "transformBlockedLocked",
+            objectId: state.selectedObjectId ?? undefined,
+          },
+        };
+      }
+
+      return {
+        transformMode: mode,
+        lastEditorStatus: {
+          key:
+            mode === "select"
+              ? "modeSelect"
+              : mode === "translate"
+                ? "modeTranslate"
+                : "modeRotate",
+        },
+      };
     }),
   beginTransform: (objectId) =>
     set((state) => {
@@ -3760,6 +4019,19 @@ export const useRoomStore = create<RoomStore>((set) => ({
         return state;
       }
 
+      const existingExactGroup = getRoomGroups(state.roomData).find((group) =>
+        haveSameObjectIds(group.objectIds, selectedObjectIds),
+      );
+
+      if (existingExactGroup) {
+        return {
+          selectedObjectId: selectedObjectIds.at(-1) ?? null,
+          selectedObjectIds,
+          selectedGroupId: existingExactGroup.id,
+          lastEditorStatus: { key: "selectionUpdated" },
+        };
+      }
+
       const roomData = cloneRoomData(state.roomData);
       const existingGroups = getRoomGroups(roomData)
         .map((group) => ({
@@ -3797,17 +4069,34 @@ export const useRoomStore = create<RoomStore>((set) => ({
       const selectedGroup = state.selectedGroupId
         ? groups.find((group) => group.id === state.selectedGroupId)
         : null;
+      const groupsToRemove = new Set<string>();
+
+      if (selectedGroup) {
+        groupsToRemove.add(selectedGroup.id);
+      }
+
+      groups.forEach((group) => {
+        if (group.objectIds.some((objectId) => selectedIds.has(objectId))) {
+          groupsToRemove.add(group.id);
+        }
+      });
+
+      if (!groupsToRemove.size) {
+        return state;
+      }
 
       roomData.groups = groups.filter((group) => {
-        if (selectedGroup && group.id === selectedGroup.id) {
+        if (groupsToRemove.has(group.id)) {
           return false;
         }
 
-        return !group.objectIds.some((objectId) => selectedIds.has(objectId));
+        return true;
       });
 
       return {
         roomData,
+        selectedObjectId: null,
+        selectedObjectIds: [],
         selectedGroupId: null,
         ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
@@ -3998,7 +4287,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
 
       return {
         randomLayoutOptions,
-        activeRandomLayoutOptionId: null,
+        activeRandomLayoutOptionId: "layout_0",
         randomLayoutSourceSignature,
         randomLayoutOptionSignatures,
         randomLayoutOptionsVisible: true,
@@ -4045,11 +4334,18 @@ export const useRoomStore = create<RoomStore>((set) => ({
     }),
   randomizeSelectedObjects: () =>
     set((state) => {
-      if (!state.selectedObjectIds.length) {
+      const selectedGroup = state.selectedGroupId
+        ? getRoomGroups(state.roomData).find((group) => group.id === state.selectedGroupId)
+        : null;
+      const scopeObjectIds = (selectedGroup?.objectIds ?? state.selectedObjectIds).filter(
+        (objectId) => state.roomData.objects.some((object) => object.id === objectId),
+      );
+
+      if (!scopeObjectIds.length) {
         return state;
       }
 
-      const scopeIds = new Set(state.selectedObjectIds);
+      const scopeIds = new Set(scopeObjectIds);
       const roomData = cloneRoomData(state.roomData);
       const validationWarnings = validateRoomLayout(roomData);
 
@@ -4107,6 +4403,9 @@ export const useRoomStore = create<RoomStore>((set) => ({
 
       return {
         roomData,
+        selectedObjectId: scopeObjectIds.at(-1) ?? null,
+        selectedObjectIds: scopeObjectIds,
+        selectedGroupId: selectedGroup?.id ?? state.selectedGroupId,
         validationWarnings: validateRoomLayout(roomData),
         ...getRandomLayoutCacheUpdate(state.randomLayoutSourceSignature, roomData),
         historyPast: limitHistory([
@@ -4124,6 +4423,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
           SAVED_ROOM_KEY,
           JSON.stringify(cloneRoomData(state.roomData)),
         );
+        window.dispatchEvent(new Event(SAVED_ROOM_EVENT));
       }
 
       return {
