@@ -276,7 +276,7 @@ const featuredInventoryIdSet = new Set(featuredInventory.map((item) => item.id))
 const uniqueFeaturedInventory = uniqueInventoryCatalog.filter((item) =>
   featuredInventoryIdSet.has(item.id),
 );
-const inventoryCardHeight = 196;
+const inventoryCardHeight = 214;
 const inventoryGridGap = 12;
 const inventoryDefaultVirtualRows = 3;
 const inventoryOverscanRows = 0;
@@ -1970,7 +1970,7 @@ function InventoryPanel({ locale }: { locale: Locale }) {
         <VirtualizedInventoryGrid
           items={visibleInventory}
           locale={locale}
-          previewIndexOffset={uniqueFeaturedInventory.length}
+          previewIndexOffset={showRecommended ? uniqueFeaturedInventory.length : 0}
         />
       </div>
     </section>

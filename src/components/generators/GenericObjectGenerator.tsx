@@ -707,149 +707,210 @@ export function GenericObjectGenerator({
   }
 
   if (baseShape === "stairs") {
-    const stepCount = 8;
+    const stepCount = 9;
     const stepHeight = height / stepCount;
-    const runDepth = depth * 0.88;
+    const runDepth = depth * 0.94;
     const treadDepth = runDepth / stepCount;
-    const treadWidth = width * 0.82;
-    const stringerWidth = Math.max(width * 0.08, 0.05);
+    const treadWidth = width * 0.86;
+    const stringerWidth = Math.max(width * 0.055, 0.045);
     const diagonalLength = Math.sqrt(height * height + runDepth * runDepth);
-    const stringerAngle = Math.atan(runDepth / height);
+    const stringerAngle = Math.atan2(runDepth, height);
+    const railAngle = -Math.atan2(height, runDepth);
 
     return (
       <group>
-        <mesh position={[0, 0.03, 0]} castShadow receiveShadow>
-          <boxGeometry args={[width * 0.9, 0.06, runDepth]} />
-          <meshStandardMaterial color="#4b4036" />
+        <mesh position={[0, 0.035, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.96, 0.07, runDepth * 1.03]} />
+          <meshStandardMaterial color={detail.darkTrimColor} />
         </mesh>
         {[-1, 1].map((direction) => (
           <mesh
-            key={direction}
-            position={[direction * (treadWidth * 0.5 - stringerWidth * 0.5), height * 0.48, 0]}
-            rotation={[-stringerAngle, 0, 0]}
+            key={`stringer-${direction}`}
+            position={[
+              direction * (treadWidth * 0.5 + stringerWidth * 0.22),
+              height * 0.5,
+              0,
+            ]}
+            rotation={[stringerAngle, 0, 0]}
             castShadow
             receiveShadow
           >
-            <boxGeometry args={[stringerWidth, diagonalLength, 0.08]} />
-            <meshStandardMaterial color="#5e4e42" />
+            <boxGeometry args={[stringerWidth, diagonalLength, 0.09]} />
+            <meshStandardMaterial color={detail.trimColor} />
           </mesh>
         ))}
         {[...Array(stepCount)].map((_, index) => {
           const z = -runDepth / 2 + treadDepth * (index + 0.5);
-          const y = stepHeight * index + stepHeight * 0.36;
-          const topRailHeight = y + stepHeight * 0.95;
+          const y = stepHeight * index + stepHeight * 0.5;
+          const postY = y + stepHeight * 0.92;
 
           return (
             <group key={index}>
               <mesh position={[0, y, z]} castShadow receiveShadow>
-                <boxGeometry args={[treadWidth, stepHeight * 0.72, treadDepth * 0.92]} />
+                <boxGeometry args={[treadWidth, stepHeight * 0.68, treadDepth * 0.96]} />
                 <meshStandardMaterial color={primaryColor} />
               </mesh>
-              {index % 2 === 0 ? (
+              <mesh position={[0, y + stepHeight * 0.36, z - treadDepth * 0.48]} castShadow>
+                <boxGeometry args={[treadWidth * 0.96, stepHeight * 0.12, 0.025]} />
+                <meshStandardMaterial color={detail.accentColor} />
+              </mesh>
+              {index % 2 === 0 || index === stepCount - 1 ? (
                 <>
                   <mesh
-                    position={[treadWidth * 0.46, topRailHeight, z]}
+                    position={[treadWidth * 0.52, postY, z]}
                     castShadow
                     receiveShadow
                   >
-                    <cylinderGeometry args={[0.018, 0.018, stepHeight * 1.15, 10]} />
-                    <meshStandardMaterial color="#cdc7c1" />
+                    <cylinderGeometry args={[0.02, 0.02, stepHeight * 1.45, 10]} />
+                    <meshStandardMaterial color={detail.metalColor} metalness={0.18} roughness={0.42} />
                   </mesh>
                   <mesh
-                    position={[-treadWidth * 0.46, topRailHeight, z]}
+                    position={[-treadWidth * 0.52, postY, z]}
                     castShadow
                     receiveShadow
                   >
-                    <cylinderGeometry args={[0.018, 0.018, stepHeight * 1.15, 10]} />
-                    <meshStandardMaterial color="#cdc7c1" />
+                    <cylinderGeometry args={[0.02, 0.02, stepHeight * 1.45, 10]} />
+                    <meshStandardMaterial color={detail.metalColor} metalness={0.18} roughness={0.42} />
                   </mesh>
                 </>
               ) : null}
             </group>
           );
         })}
+        {[-1, 1].map((direction) => (
+          <mesh
+            key={`rail-${direction}`}
+            position={[direction * treadWidth * 0.52, height * 0.68, 0]}
+            rotation={[railAngle, 0, 0]}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry args={[0.05, 0.045, diagonalLength * 0.92]} />
+            <meshStandardMaterial color={detail.metalColor} metalness={0.16} roughness={0.38} />
+          </mesh>
+        ))}
+        <mesh position={[0, height + 0.035, runDepth * 0.49]} castShadow receiveShadow>
+          <boxGeometry args={[treadWidth * 1.05, 0.07, treadDepth * 1.2]} />
+          <meshStandardMaterial color={detail.trimColor} />
+        </mesh>
       </group>
     );
   }
 
   if (baseShape === "spiral_stairs") {
-    const stepCount = 11;
+    const stepCount = 14;
     const stepHeight = height / stepCount;
-    const outerRadius = Math.min(width, depth) * 0.46;
+    const outerRadius = Math.min(width, depth) * 0.48;
     const stepOrbitRadius = outerRadius * 0.42;
-    const treadLength = outerRadius * 0.72;
-    const treadDepth = outerRadius * 0.28;
-    const postRadius = Math.max(width * 0.022, 0.016);
+    const treadLength = outerRadius * 0.86;
+    const treadDepth = outerRadius * 0.24;
+    const postRadius = Math.max(width * 0.026, 0.018);
+    const centerPostRadius = Math.max(width * 0.06, 0.045);
+    const angleStart = -Math.PI * 0.78;
+    const angleStep = (Math.PI * 1.62) / (stepCount - 1);
 
     return (
       <group>
         <mesh position={[0, 0.03, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[outerRadius * 1.03, outerRadius * 1.08, 0.06, 28]} />
-          <meshStandardMaterial color="#4b4036" />
+          <cylinderGeometry args={[outerRadius * 1.08, outerRadius * 1.12, 0.06, 36]} />
+          <meshStandardMaterial color={detail.darkTrimColor} />
         </mesh>
         <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[outerRadius * 0.1, outerRadius * 0.12, height, 18]} />
-          <meshStandardMaterial color="#6b5a4f" />
+          <cylinderGeometry args={[centerPostRadius, centerPostRadius * 1.08, height, 24]} />
+          <meshStandardMaterial color={detail.metalColor} metalness={0.2} roughness={0.36} />
         </mesh>
         {[...Array(stepCount)].map((_, index) => {
-          const angle = -Math.PI * 0.72 + index * 0.58;
+          const angle = angleStart + index * angleStep;
           const x = Math.cos(angle) * stepOrbitRadius;
           const z = Math.sin(angle) * stepOrbitRadius;
-          const y = stepHeight * index + stepHeight * 0.34;
+          const y = stepHeight * index + stepHeight * 0.42;
+          const outerX = Math.cos(angle) * outerRadius * 0.82;
+          const outerZ = Math.sin(angle) * outerRadius * 0.82;
 
           return (
-            <group key={index} position={[x, y, z]} rotation={[0, Math.PI / 2 - angle, 0]}>
-              <mesh position={[outerRadius * 0.12, 0, 0]} castShadow receiveShadow>
-                <boxGeometry args={[treadLength, stepHeight * 0.68, treadDepth]} />
-                <meshStandardMaterial color={primaryColor} />
+            <group key={index}>
+              <group position={[x, y, z]} rotation={[0, -angle, 0]}>
+                <mesh position={[outerRadius * 0.22, 0, 0]} castShadow receiveShadow>
+                  <boxGeometry args={[treadLength, stepHeight * 0.62, treadDepth]} />
+                  <meshStandardMaterial color={primaryColor} />
+                </mesh>
+                <mesh position={[outerRadius * 0.64, stepHeight * 0.08, 0]} castShadow>
+                  <boxGeometry args={[outerRadius * 0.08, stepHeight * 0.18, treadDepth * 1.06]} />
+                  <meshStandardMaterial color={detail.accentColor} />
+                </mesh>
+              </group>
+              <mesh position={[outerX, y + stepHeight * 0.78, outerZ]} castShadow receiveShadow>
+                <cylinderGeometry args={[postRadius, postRadius, stepHeight * 1.42, 10]} />
+                <meshStandardMaterial color={detail.metalColor} metalness={0.18} roughness={0.4} />
               </mesh>
-              {index % 2 === 0 ? (
+              {index > 0 ? (
                 <mesh
-                  position={[outerRadius * 0.38, stepHeight * 0.58, 0]}
+                  position={[
+                    Math.cos(angle - angleStep / 2) * outerRadius * 0.82,
+                    y + stepHeight * 1.34,
+                    Math.sin(angle - angleStep / 2) * outerRadius * 0.82,
+                  ]}
+                  rotation={[0, -(angle - angleStep / 2), 0]}
                   castShadow
                   receiveShadow
                 >
-                  <cylinderGeometry args={[postRadius, postRadius, stepHeight * 1.2, 10]} />
-                  <meshStandardMaterial color="#d7d2cd" />
+                  <boxGeometry args={[outerRadius * angleStep * 0.92, 0.045, 0.045]} />
+                  <meshStandardMaterial color={detail.metalColor} metalness={0.18} roughness={0.38} />
                 </mesh>
               ) : null}
             </group>
           );
         })}
-        <mesh position={[0, height - 0.04, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[outerRadius * 0.22, outerRadius * 0.32, 0.08, 18]} />
-          <meshStandardMaterial color="#7a6b60" />
+        <mesh position={[0, height + 0.035, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[outerRadius * 0.42, outerRadius * 0.48, 0.08, 28]} />
+          <meshStandardMaterial color={detail.trimColor} />
+        </mesh>
+        <mesh position={[0, height * 0.98, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <torusGeometry args={[outerRadius * 0.84, 0.026, 8, 72]} />
+          <meshStandardMaterial color={detail.metalColor} metalness={0.18} roughness={0.38} />
         </mesh>
       </group>
     );
   }
 
   if (baseShape === "ladder_stairs") {
+    const rungCount = 7;
+    const ladderAngle = Math.atan2(depth * 0.42, height);
+    const rungSpacing = height / (rungCount + 1);
+
     return (
       <group>
         {[-0.24, 0.24].map((offset) => (
           <mesh
             key={offset}
             position={[offset * width, height / 2, 0]}
-            rotation={[0.28, 0, 0]}
+            rotation={[ladderAngle, 0, 0]}
             castShadow
             receiveShadow
           >
-            <boxGeometry args={[width * 0.07, height, depth * 0.035]} />
+            <boxGeometry args={[width * 0.07, height * 1.02, depth * 0.04]} />
             <meshStandardMaterial color={primaryColor} />
           </mesh>
         ))}
-        {[0, 1, 2, 3, 4].map((step) => (
+        {[...Array(rungCount)].map((_, step) => (
           <mesh
             key={step}
-            position={[0, height * (0.15 + step * 0.16), -depth * 0.32 + step * depth * 0.16]}
+            position={[
+              0,
+              rungSpacing * (step + 1),
+              -depth * 0.36 + step * (depth * 0.72) / Math.max(1, rungCount - 1),
+            ]}
             castShadow
             receiveShadow
           >
-            <boxGeometry args={[width * 0.62, height * 0.03, depth * 0.07]} />
-            <meshStandardMaterial color="#d2c0aa" />
+            <boxGeometry args={[width * 0.62, height * 0.026, depth * 0.075]} />
+            <meshStandardMaterial color={detail.accentColor} />
           </mesh>
         ))}
+        <mesh position={[0, 0.035, -depth * 0.42]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.72, 0.07, depth * 0.16]} />
+          <meshStandardMaterial color={detail.darkTrimColor} />
+        </mesh>
       </group>
     );
   }

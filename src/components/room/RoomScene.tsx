@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ContactShadows, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
-import { Plane, Vector2, Vector3, type Group } from "three";
+import { Plane, Vector2, Vector3, type Group, type Object3D } from "three";
 import {
   clampObjectPositionToRoom,
+  getMountHeight,
   getWallAttachedObjectTransform,
   isWallAttachedObject,
   normalizeRotation,
@@ -56,6 +57,8 @@ const getSignedRotationDelta = (from: number, to: number) => {
 const getSceneRotationDegrees = (rotationY: number) =>
   normalizeRotation((rotationY * 180) / Math.PI);
 
+const rotationDegreesPerPixel = 0.78;
+
 function ViewportRoomPositionProbe({
   roomDepth,
   roomWidth,
@@ -97,6 +100,221 @@ function ViewportRoomPositionProbe({
   }, [camera, onResolverChange, raycaster, roomDepth, roomWidth]);
 
   return null;
+}
+
+function ObjectRotationRing({
+  enabled,
+  object,
+  roomDepth,
+  roomWidth,
+  sourceObject,
+  onBegin,
+  onEnd,
+  onRotate,
+}: {
+  enabled: boolean;
+  object: Object3D | null;
+  roomDepth: number;
+  roomWidth: number;
+  sourceObject: RoomObjectType | null;
+  onBegin: () => void;
+  onEnd: () => void;
+  onRotate: (rotation: number) => void;
+}) {
+  const { camera, gl } = useThree();
+  const [isDragging, setIsDragging] = useState(false);
+  const projectedCenterRef = useRef(new Vector3());
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startClientX: number;
+    lastAngle: number | null;
+    rotation: number;
+  } | null>(null);
+  const ringRadius = sourceObject
+    ? Math.max(
+        0.72,
+        Math.max(sourceObject.dimensions.width, sourceObject.dimensions.depth) * 0.72,
+      )
+    : 0.72;
+  const ringY = sourceObject
+    ? Math.max(0.08, Math.min(sourceObject.dimensions.height + 0.16, 1.45))
+    : 0.08;
+
+  const rotateTo = useCallback(
+    (rotation: number) => {
+      if (!object) {
+        return;
+      }
+
+      object.rotation.set(0, (rotation * Math.PI) / 180, 0);
+      onRotate(rotation);
+    },
+    [object, onRotate],
+  );
+
+  const getPointerAngleDegrees = useCallback(
+    (event: Pick<PointerEvent, "clientX" | "clientY">) => {
+      if (!object) {
+        return null;
+      }
+
+      const bounds = gl.domElement.getBoundingClientRect();
+      object.getWorldPosition(projectedCenterRef.current);
+      projectedCenterRef.current.project(camera);
+
+      const centerX = bounds.left + ((projectedCenterRef.current.x + 1) * bounds.width) / 2;
+      const centerY = bounds.top + ((1 - projectedCenterRef.current.y) * bounds.height) / 2;
+      const deltaX = event.clientX - centerX;
+      const deltaY = event.clientY - centerY;
+
+      if (Math.hypot(deltaX, deltaY) < 18) {
+        return null;
+      }
+
+      return normalizeRotation((Math.atan2(deltaY, deltaX) * 180) / Math.PI);
+    },
+    [camera, gl, object],
+  );
+
+  const endDrag = useCallback(
+    (event?: PointerEvent) => {
+      const dragState = dragStateRef.current;
+
+      if (!dragState || (event && dragState.pointerId !== event.pointerId)) {
+        return;
+      }
+
+      event?.preventDefault();
+      event?.stopPropagation();
+
+      if (gl.domElement.hasPointerCapture(dragState.pointerId)) {
+        gl.domElement.releasePointerCapture(dragState.pointerId);
+      }
+
+      dragStateRef.current = null;
+      setIsDragging(false);
+      onEnd();
+    },
+    [gl, onEnd],
+  );
+
+  const handleCanvasPointerDown = useCallback(
+    (event: PointerEvent) => {
+      if (!enabled || !object || !sourceObject || event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      gl.domElement.setPointerCapture(event.pointerId);
+      dragStateRef.current = {
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        lastAngle: getPointerAngleDegrees(event),
+        rotation: normalizeRotation(sourceObject.rotation),
+      };
+      setIsDragging(true);
+      onBegin();
+    },
+    [enabled, getPointerAngleDegrees, gl, object, onBegin, sourceObject],
+  );
+
+  const handleWindowPointerMove = useCallback(
+    (event: PointerEvent) => {
+      const dragState = dragStateRef.current;
+
+      if (!dragState || dragState.pointerId !== event.pointerId) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const currentAngle = getPointerAngleDegrees(event);
+      const nextRotation =
+        dragState.lastAngle === null || currentAngle === null
+          ? normalizeRotation(
+              dragState.rotation +
+                (event.clientX - dragState.startClientX) * rotationDegreesPerPixel,
+            )
+          : normalizeRotation(
+              dragState.rotation +
+                getSignedRotationDelta(dragState.lastAngle, currentAngle),
+            );
+
+      dragState.rotation = nextRotation;
+      dragState.startClientX = event.clientX;
+      dragState.lastAngle = currentAngle;
+      rotateTo(nextRotation);
+    },
+    [getPointerAngleDegrees, rotateTo],
+  );
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    const canvas = gl.domElement;
+
+    canvas.addEventListener("pointerdown", handleCanvasPointerDown, true);
+
+    return () => {
+      canvas.removeEventListener("pointerdown", handleCanvasPointerDown, true);
+    };
+  }, [enabled, gl, handleCanvasPointerDown]);
+
+  useEffect(() => {
+    if (!isDragging) {
+      return;
+    }
+
+    window.addEventListener("pointermove", handleWindowPointerMove, true);
+    window.addEventListener("pointerup", endDrag, true);
+    window.addEventListener("pointercancel", endDrag, true);
+
+    return () => {
+      window.removeEventListener("pointermove", handleWindowPointerMove, true);
+      window.removeEventListener("pointerup", endDrag, true);
+      window.removeEventListener("pointercancel", endDrag, true);
+    };
+  }, [endDrag, handleWindowPointerMove, isDragging]);
+
+  if (!enabled || !object || !sourceObject) {
+    return null;
+  }
+
+  return (
+    <group
+      position={[
+        sourceObject.position.x - roomWidth / 2,
+        ringY,
+        sourceObject.position.z - roomDepth / 2,
+      ]}
+    >
+      <mesh
+        position={[
+          roomWidth / 2 - sourceObject.position.x,
+          -ringY + 0.035,
+          roomDepth / 2 - sourceObject.position.z,
+        ]}
+        rotation-x={-Math.PI / 2}
+      >
+        <planeGeometry args={[roomWidth * 1.15, roomDepth * 1.15]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+      <mesh rotation-x={Math.PI / 2}>
+        <torusGeometry args={[ringRadius, 0.035, 10, 96]} />
+        <meshBasicMaterial color="#22c55e" transparent opacity={0.92} depthTest={false} />
+      </mesh>
+      {isDragging ? null : (
+        <mesh rotation-x={Math.PI / 2}>
+          <ringGeometry args={[ringRadius * 0.82, ringRadius * 1.18, 96]} />
+          <meshBasicMaterial color="#22c55e" transparent opacity={0.1} depthTest={false} />
+        </mesh>
+      )}
+    </group>
+  );
 }
 
 export function RoomScene({
@@ -405,21 +623,14 @@ export function RoomScene({
 
       <ObjectControls
         object={selectedSceneObject}
-        enabled={canTransform}
-        mode={transformMode === "rotate" ? "rotate" : "translate"}
+        enabled={canTransform && transformMode === "translate"}
+        mode="translate"
         onBegin={() => {
           if (!selectedObjectId || !selectedObject || !selectedSceneObject) {
             return;
           }
 
-          objectRotationTransformRef.current =
-            transformMode === "rotate"
-              ? {
-                  objectId: selectedObjectId,
-                  sceneRotation: getSceneRotationDegrees(selectedSceneObject.rotation.y),
-                  storedRotation: normalizeRotation(selectedObject.rotation),
-                }
-              : null;
+          objectRotationTransformRef.current = null;
           setIsTransforming(true);
           beginTransform(selectedObjectId);
         }}
@@ -430,6 +641,51 @@ export function RoomScene({
         }}
         onObjectChange={syncSelectedFromScene}
         showTranslateY={selectedObject ? isWallAttachedObject(selectedObject) : false}
+      />
+      <ObjectRotationRing
+        enabled={canTransform && transformMode === "rotate"}
+        object={selectedSceneObject}
+        roomDepth={roomData.room.depth}
+        roomWidth={roomData.room.width}
+        sourceObject={selectedObject}
+        onBegin={() => {
+          if (!selectedObjectId) {
+            return;
+          }
+
+          objectRotationTransformRef.current = selectedSceneObject
+            ? {
+                objectId: selectedObjectId,
+                sceneRotation: getSceneRotationDegrees(selectedSceneObject.rotation.y),
+                storedRotation: normalizeRotation(selectedObject?.rotation ?? 0),
+              }
+            : null;
+          setIsTransforming(true);
+          beginTransform(selectedObjectId);
+        }}
+        onEnd={() => {
+          objectRotationTransformRef.current = null;
+          setIsTransforming(false);
+          endTransform();
+        }}
+        onRotate={(rotation) => {
+          if (!selectedObject) {
+            return;
+          }
+
+          const clamped = clampObjectPositionToRoom(
+            roomData,
+            selectedObject,
+            selectedObject.position,
+            rotation,
+          );
+
+          updateObjectTransform(selectedObject.id, {
+            position: clamped,
+            rotation,
+            mountHeight: getMountHeight(selectedObject),
+          });
+        }}
       />
       <ObjectControls
         object={selectedSceneOpening}

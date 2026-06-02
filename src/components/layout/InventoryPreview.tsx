@@ -62,10 +62,12 @@ function PreviewCameraRig({ targetY }: { targetY: number }) {
 function InventoryPreviewScene({
   item,
   rotationY,
+  verticalOffset,
   zoom,
 }: {
   item: InventoryTemplate;
   rotationY: number;
+  verticalOffset: number;
   zoom: number;
 }) {
   const previewObject = useMemo(() => buildPreviewObject(item), [item]);
@@ -114,7 +116,7 @@ function InventoryPreviewScene({
         position={[cameraDistance, cameraHeight, cameraDistance]}
         fov={wallMounted || ceilingMounted ? 30 : 28}
       />
-      <PreviewCameraRig targetY={cameraTargetY} />
+      <PreviewCameraRig targetY={cameraTargetY + verticalOffset * 0.25} />
       <color attach="background" args={["#0d141d"]} />
       <ambientLight intensity={1.16} />
       <hemisphereLight args={["#e8f2ff", "#493524", 0.82]} />
@@ -125,7 +127,7 @@ function InventoryPreviewScene({
         color="#d7e9ff"
       />
 
-      <group rotation={[0, rotationY - 0.58, 0]} position={[0, -0.04, 0]}>
+      <group rotation={[0, rotationY - 0.58, 0]} position={[0, -0.04 + verticalOffset, 0]}>
         <mesh rotation-x={-Math.PI / 2} receiveShadow>
           <planeGeometry args={[floorSize, floorSize]} />
           <meshStandardMaterial color="#162231" roughness={0.94} />
@@ -194,12 +196,17 @@ export function InventoryPreview({
   item: InventoryTemplate;
   index: number;
 }) {
+  const shellRef = useRef<HTMLDivElement>(null);
+  const [isPreviewVisible, setIsPreviewVisible] = useState(false);
   const [rotationY, setRotationY] = useState(0);
+  const [verticalOffset, setVerticalOffset] = useState(0);
   const [zoom, setZoom] = useState(1);
   const dragStateRef = useRef<{
     pointerId: number;
     startX: number;
+    startY: number;
     startRotation: number;
+    startVerticalOffset: number;
   } | null>(null);
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -212,7 +219,9 @@ export function InventoryPreview({
     dragStateRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
+      startY: event.clientY,
       startRotation: rotationY,
+      startVerticalOffset: verticalOffset,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -227,6 +236,9 @@ export function InventoryPreview({
     event.preventDefault();
     event.stopPropagation();
     setRotationY(dragState.startRotation + (event.clientX - dragState.startX) * 0.012);
+    setVerticalOffset(
+      clamp(dragState.startVerticalOffset + (dragState.startY - event.clientY) * 0.004, -0.52, 0.74),
+    );
   };
 
   const handlePointerEnd = (event: PointerEvent<HTMLDivElement>) => {
@@ -259,6 +271,13 @@ export function InventoryPreview({
       );
     }
 
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault();
+      setVerticalOffset((currentOffset) =>
+        clamp(currentOffset + (event.key === "ArrowUp" ? 0.08 : -0.08), -0.52, 0.74),
+      );
+    }
+
     if (event.key === "+" || event.key === "=" || event.key === "-") {
       event.preventDefault();
       setZoom((currentZoom) =>
@@ -267,29 +286,90 @@ export function InventoryPreview({
     }
   };
 
+  useEffect(() => {
+    const shell = shellRef.current;
+
+    if (!shell) {
+      return;
+    }
+
+    const scrollRoot = shell.closest(".scroll-area");
+
+    if (!scrollRoot) {
+      setIsPreviewVisible(true);
+      return;
+    }
+
+    if (typeof IntersectionObserver === "undefined") {
+      const updateVisibility = () => {
+        const shellRect = shell.getBoundingClientRect();
+        const rootRect = scrollRoot.getBoundingClientRect();
+
+        setIsPreviewVisible(
+          shellRect.top >= rootRect.top &&
+            shellRect.bottom <= rootRect.bottom &&
+            shellRect.left >= rootRect.left &&
+            shellRect.right <= rootRect.right,
+        );
+      };
+
+      updateVisibility();
+      scrollRoot.addEventListener("scroll", updateVisibility, { passive: true });
+      window.addEventListener("resize", updateVisibility);
+
+      return () => {
+        scrollRoot.removeEventListener("scroll", updateVisibility);
+        window.removeEventListener("resize", updateVisibility);
+      };
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsPreviewVisible(entry.intersectionRatio >= 0.92);
+      },
+      {
+        root: scrollRoot,
+        threshold: [0, 0.5, 0.92, 1],
+      },
+    );
+
+    observer.observe(shell);
+
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className={`${shellClass} group/preview`}>
-      <InteractiveView
-        as="div"
-        className={viewTrackClass}
-        frames={Infinity}
-        index={index + 1}
-        role="application"
-        tabIndex={0}
-        aria-label={`${item.label} live preview`}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerEnd}
-        onPointerCancel={handlePointerEnd}
-        onWheel={handleWheel}
-        onKeyDown={handleKeyDown}
-      >
-        <InventoryPreviewScene item={item} rotationY={rotationY} zoom={zoom} />
-      </InteractiveView>
+    <div ref={shellRef} className={`${shellClass} group/preview`}>
+      {isPreviewVisible ? (
+        <InteractiveView
+          as="div"
+          className={viewTrackClass}
+          frames={Infinity}
+          index={index + 1}
+          role="application"
+          tabIndex={0}
+          aria-label={`${item.label} live preview`}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerEnd}
+          onPointerCancel={handlePointerEnd}
+          onWheel={handleWheel}
+          onKeyDown={handleKeyDown}
+        >
+          <InventoryPreviewScene
+            item={item}
+            rotationY={rotationY}
+            verticalOffset={verticalOffset}
+            zoom={zoom}
+          />
+        </InteractiveView>
+      ) : null}
       <div className="absolute left-4 top-4 z-10 h-2 w-2 rounded-full bg-white/25" />
-      <div className="pointer-events-none absolute right-3 top-3 z-10 rounded-full border border-[#4ea8ff]/40 bg-[#102234]/85 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#8cb9ff]">
-        Live
-      </div>
+      {isPreviewVisible ? (
+        <div className="pointer-events-none absolute right-3 top-3 z-10 rounded-full border border-[#4ea8ff]/40 bg-[#102234]/85 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#8cb9ff]">
+          Live
+        </div>
+      ) : null}
       <div className="pointer-events-none absolute bottom-2 left-3 z-10 rounded-full bg-black/25 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-300 opacity-0 transition group-hover/preview:opacity-100">
         Drag to rotate
       </div>
