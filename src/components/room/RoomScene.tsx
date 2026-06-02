@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ContactShadows, GizmoHelper, GizmoViewport } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
-import type { Group } from "three";
+import { Canvas, useThree } from "@react-three/fiber";
+import { Plane, Vector2, Vector3, type Group } from "three";
 import {
   clampObjectPositionToRoom,
   getWallAttachedObjectTransform,
@@ -36,12 +36,74 @@ interface RoomSceneProps {
   previewObject?: RoomObjectType | null;
   presentationMode?: boolean;
   cameraResetToken?: number;
+  onViewportRoomPositionResolverChange?: (
+    resolver: ViewportRoomPositionResolver | null,
+  ) => void;
+}
+
+export type ViewportRoomPositionResolver = (
+  clientX: number,
+  clientY: number,
+  bounds: DOMRect,
+) => RoomObjectType["position"] | null;
+
+const getSignedRotationDelta = (from: number, to: number) => {
+  const delta = (to - from + 540) % 360 - 180;
+
+  return delta === -180 ? 180 : delta;
+};
+
+const getSceneRotationDegrees = (rotationY: number) =>
+  normalizeRotation((rotationY * 180) / Math.PI);
+
+function ViewportRoomPositionProbe({
+  roomDepth,
+  roomWidth,
+  onResolverChange,
+}: {
+  roomDepth: number;
+  roomWidth: number;
+  onResolverChange?: (resolver: ViewportRoomPositionResolver | null) => void;
+}) {
+  const { camera, raycaster } = useThree();
+
+  useEffect(() => {
+    if (!onResolverChange) {
+      return;
+    }
+
+    const pointer = new Vector2();
+    const floorPlane = new Plane(new Vector3(0, 1, 0), 0);
+    const intersection = new Vector3();
+
+    onResolverChange((clientX, clientY, bounds) => {
+      pointer.x = ((clientX - bounds.left) / bounds.width) * 2 - 1;
+      pointer.y = -(((clientY - bounds.top) / bounds.height) * 2 - 1);
+      raycaster.setFromCamera(pointer, camera);
+
+      const hit = raycaster.ray.intersectPlane(floorPlane, intersection);
+
+      if (!hit) {
+        return null;
+      }
+
+      return {
+        x: intersection.x + roomWidth / 2,
+        z: intersection.z + roomDepth / 2,
+      };
+    });
+
+    return () => onResolverChange(null);
+  }, [camera, onResolverChange, raycaster, roomDepth, roomWidth]);
+
+  return null;
 }
 
 export function RoomScene({
   previewObject = null,
   presentationMode = false,
   cameraResetToken = 0,
+  onViewportRoomPositionResolverChange,
 }: RoomSceneProps) {
   const roomData = useRoomStore((state) => state.roomData);
   const selectedObjectId = useRoomStore((state) => state.selectedObjectId);
@@ -62,6 +124,11 @@ export function RoomScene({
   const [objectMap, setObjectMap] = useState<Record<string, Group | null>>({});
   const [wallMap, setWallMap] = useState<Record<string, Group | null>>({});
   const [openingMap, setOpeningMap] = useState<Record<string, Group | null>>({});
+  const objectRotationTransformRef = useRef<{
+    objectId: string;
+    sceneRotation: number;
+    storedRotation: number;
+  } | null>(null);
   const selectionEnabled = !presentationMode;
   const effectiveCameraMode = presentationMode ? "orbit" : cameraMode;
 
@@ -159,9 +226,26 @@ export function RoomScene({
           Math.max(0, roomData.room.height - selectedObject.dimensions.height),
         )
       : mountHeight;
-    const nextRotation = normalizeRotation(
-      (selectedSceneObject.rotation.y * 180) / Math.PI,
-    );
+    const sceneRotation = getSceneRotationDegrees(selectedSceneObject.rotation.y);
+    const rotationTransform = objectRotationTransformRef.current;
+    const nextRotation =
+      rotateOnly &&
+      rotationTransform &&
+      rotationTransform.objectId === selectedObject.id
+        ? normalizeRotation(
+            rotationTransform.storedRotation +
+              getSignedRotationDelta(rotationTransform.sceneRotation, sceneRotation),
+          )
+        : sceneRotation;
+
+    if (
+      rotateOnly &&
+      rotationTransform &&
+      rotationTransform.objectId === selectedObject.id
+    ) {
+      rotationTransform.sceneRotation = sceneRotation;
+      rotationTransform.storedRotation = nextRotation;
+    }
     const desiredPosition = {
       x: rotateOnly ? selectedObject.position.x : selectedSceneObject.position.x,
       z: rotateOnly ? selectedObject.position.z : selectedSceneObject.position.z,
@@ -324,14 +408,23 @@ export function RoomScene({
         enabled={canTransform}
         mode={transformMode === "rotate" ? "rotate" : "translate"}
         onBegin={() => {
-          if (!selectedObjectId) {
+          if (!selectedObjectId || !selectedObject || !selectedSceneObject) {
             return;
           }
 
+          objectRotationTransformRef.current =
+            transformMode === "rotate"
+              ? {
+                  objectId: selectedObjectId,
+                  sceneRotation: getSceneRotationDegrees(selectedSceneObject.rotation.y),
+                  storedRotation: normalizeRotation(selectedObject.rotation),
+                }
+              : null;
           setIsTransforming(true);
           beginTransform(selectedObjectId);
         }}
         onEnd={() => {
+          objectRotationTransformRef.current = null;
           setIsTransforming(false);
           endTransform();
         }}
@@ -377,6 +470,11 @@ export function RoomScene({
       />
 
       <group position={roomOffset}>
+        <ViewportRoomPositionProbe
+          roomDepth={roomData.room.depth}
+          roomWidth={roomData.room.width}
+          onResolverChange={onViewportRoomPositionResolverChange}
+        />
         <RoomFloor room={roomData.room} />
         <RoomWalls
           room={roomData.room}

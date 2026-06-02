@@ -1,6 +1,14 @@
 "use client";
 
-import { useMemo, useState, type DragEvent, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+} from "react";
 import {
   AlertTriangle,
   Boxes,
@@ -268,6 +276,15 @@ const featuredInventoryIdSet = new Set(featuredInventory.map((item) => item.id))
 const uniqueFeaturedInventory = uniqueInventoryCatalog.filter((item) =>
   featuredInventoryIdSet.has(item.id),
 );
+const inventoryCardHeight = 196;
+const inventoryGridGap = 12;
+const inventoryDefaultVirtualRows = 3;
+const inventoryOverscanRows = 0;
+const inventoryScrollAreaSelector = ".scroll-area";
+const getInventoryColumnCount = () =>
+  typeof window === "undefined" || window.matchMedia("(min-width: 640px)").matches
+    ? 2
+    : 1;
 
 const formatWallLabel = (locale: Locale, wallId: string) => {
   const wallNumber = wallId.replace("wall_", "");
@@ -1637,6 +1654,196 @@ function OutlinerObjectRow({
   );
 }
 
+type VirtualInventoryWindow = {
+  columns: number;
+  endRow: number;
+  startRow: number;
+};
+
+const clampVirtualRow = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+function VirtualizedInventoryGrid({
+  items,
+  locale,
+  previewIndexOffset,
+}: {
+  items: InventoryTemplate[];
+  locale: Locale;
+  previewIndexOffset: number;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scrollRootRef = useRef<HTMLElement | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const [virtualWindow, setVirtualWindow] = useState<VirtualInventoryWindow>({
+    columns: 2,
+    endRow: Math.min(inventoryDefaultVirtualRows, Math.ceil(items.length / 2)),
+    startRow: 0,
+  });
+
+  const updateVirtualWindow = useCallback(() => {
+    const columns = getInventoryColumnCount();
+    const totalRows = Math.ceil(items.length / columns);
+
+    if (totalRows === 0) {
+      setVirtualWindow((currentWindow) =>
+        currentWindow.columns === columns &&
+        currentWindow.startRow === 0 &&
+        currentWindow.endRow === 0
+          ? currentWindow
+          : { columns, endRow: 0, startRow: 0 },
+      );
+      return;
+    }
+
+    const container = containerRef.current;
+    const scrollRoot = scrollRootRef.current;
+
+    if (!container || !scrollRoot) {
+      const endRow = Math.min(inventoryDefaultVirtualRows, totalRows);
+
+      setVirtualWindow((currentWindow) =>
+        currentWindow.columns === columns &&
+        currentWindow.startRow === 0 &&
+        currentWindow.endRow === endRow
+          ? currentWindow
+          : { columns, endRow, startRow: 0 },
+      );
+      return;
+    }
+
+    const rowStride = inventoryCardHeight + inventoryGridGap;
+    const totalHeight =
+      totalRows * inventoryCardHeight + Math.max(0, totalRows - 1) * inventoryGridGap;
+    const overscanHeight = rowStride * inventoryOverscanRows;
+    const rootRect = scrollRoot.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const visibleTop = rootRect.top - containerRect.top;
+    const visibleBottom = rootRect.bottom - containerRect.top;
+    let startRow = 0;
+    let endRow = 0;
+
+    if (visibleBottom < -overscanHeight) {
+      startRow = 0;
+      endRow = 0;
+    } else if (visibleTop > totalHeight + overscanHeight) {
+      startRow = totalRows;
+      endRow = totalRows;
+    } else {
+      startRow = clampVirtualRow(
+        Math.floor(Math.max(0, visibleTop) / rowStride) - inventoryOverscanRows,
+        0,
+        totalRows,
+      );
+      endRow = clampVirtualRow(
+        Math.ceil(Math.min(totalHeight, visibleBottom) / rowStride) + inventoryOverscanRows,
+        startRow,
+        totalRows,
+      );
+
+      if (endRow === startRow && startRow < totalRows) {
+        endRow = Math.min(totalRows, startRow + 1);
+      }
+    }
+
+    setVirtualWindow((currentWindow) =>
+      currentWindow.columns === columns &&
+      currentWindow.startRow === startRow &&
+      currentWindow.endRow === endRow
+        ? currentWindow
+        : { columns, endRow, startRow },
+    );
+  }, [items.length]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+
+    if (!container) {
+      return;
+    }
+
+    const scrollRoot = container.closest(inventoryScrollAreaSelector) as HTMLElement | null;
+
+    if (!scrollRoot) {
+      return;
+    }
+
+    scrollRootRef.current = scrollRoot;
+
+    const scheduleUpdate = () => {
+      if (rafRef.current !== null) {
+        return;
+      }
+
+      rafRef.current = window.requestAnimationFrame(() => {
+        rafRef.current = null;
+        updateVirtualWindow();
+      });
+    };
+
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleUpdate);
+    const mediaQuery = window.matchMedia("(min-width: 640px)");
+
+    scrollRoot.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    mediaQuery.addEventListener("change", scheduleUpdate);
+    resizeObserver?.observe(scrollRoot);
+    resizeObserver?.observe(container);
+    scheduleUpdate();
+
+    return () => {
+      scrollRoot.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      mediaQuery.removeEventListener("change", scheduleUpdate);
+      resizeObserver?.disconnect();
+
+      if (rafRef.current !== null) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [updateVirtualWindow]);
+
+  const totalRows = Math.ceil(items.length / virtualWindow.columns);
+  const startIndex = virtualWindow.startRow * virtualWindow.columns;
+  const endIndex = Math.min(items.length, virtualWindow.endRow * virtualWindow.columns);
+  const virtualItems = items.slice(startIndex, endIndex);
+  const renderedRows = Math.ceil(virtualItems.length / virtualWindow.columns);
+  const topOffset = virtualWindow.startRow * (inventoryCardHeight + inventoryGridGap);
+  const renderedHeight =
+    renderedRows === 0
+      ? 0
+      : renderedRows * inventoryCardHeight + (renderedRows - 1) * inventoryGridGap;
+  const totalHeight =
+    totalRows === 0
+      ? 0
+      : totalRows * inventoryCardHeight + (totalRows - 1) * inventoryGridGap;
+  const bottomOffset = Math.max(0, totalHeight - topOffset - renderedHeight);
+
+  return (
+    <div ref={containerRef}>
+      <div aria-hidden="true" style={{ height: topOffset }} />
+      {virtualItems.length > 0 ? (
+        <div
+          className="grid gap-3 sm:grid-cols-2"
+          style={{ gridAutoRows: `${inventoryCardHeight}px` }}
+        >
+          {virtualItems.map((item, index) => (
+            <InventoryCard
+              key={item.id}
+              item={item}
+              locale={locale}
+              previewIndex={previewIndexOffset + startIndex + index}
+            />
+          ))}
+        </div>
+      ) : null}
+      <div aria-hidden="true" style={{ height: bottomOffset }} />
+    </div>
+  );
+}
+
 function InventoryPanel({ locale }: { locale: Locale }) {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] =
@@ -1748,16 +1955,11 @@ function InventoryPanel({ locale }: { locale: Locale }) {
           <div className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
             {t(locale, "recommended")}
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {uniqueFeaturedInventory.map((item, index) => (
-              <InventoryCard
-                key={item.id}
-                item={item}
-                locale={locale}
-                previewIndex={index}
-              />
-            ))}
-          </div>
+          <VirtualizedInventoryGrid
+            items={uniqueFeaturedInventory}
+            locale={locale}
+            previewIndexOffset={0}
+          />
         </div>
       ) : null}
 
@@ -1765,16 +1967,11 @@ function InventoryPanel({ locale }: { locale: Locale }) {
         <div className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
           {t(locale, "inventory")}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {visibleInventory.map((item, index) => (
-            <InventoryCard
-              key={item.id}
-              item={item}
-              locale={locale}
-              previewIndex={uniqueFeaturedInventory.length + index}
-            />
-          ))}
-        </div>
+        <VirtualizedInventoryGrid
+          items={visibleInventory}
+          locale={locale}
+          previewIndexOffset={uniqueFeaturedInventory.length}
+        />
       </div>
     </section>
   );
@@ -1819,7 +2016,7 @@ function InventoryCard({
 
   return (
     <div
-      className="rounded-xl border border-white/10 bg-[#111924] p-3 text-left transition hover:border-[#4ea8ff] hover:bg-[#132030]"
+      className="flex h-full flex-col rounded-xl border border-white/10 bg-[#111924] p-3 text-left transition hover:border-[#4ea8ff] hover:bg-[#132030]"
     >
       <InventoryPreview item={item} index={previewIndex} />
       <div
@@ -1831,15 +2028,17 @@ function InventoryCard({
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onKeyDown={handleInfoKeyDown}
-        className="mt-3 flex cursor-grab items-start justify-between gap-2 rounded-lg border border-transparent p-1 transition active:cursor-grabbing hover:border-white/10 hover:bg-white/5 focus:border-[#4ea8ff] focus:outline-none"
+        className="mt-3 flex min-h-0 flex-1 cursor-grab items-start justify-between gap-2 rounded-lg border border-transparent p-1 transition active:cursor-grabbing hover:border-white/10 hover:bg-white/5 focus:border-[#4ea8ff] focus:outline-none"
       >
-        <div>
-          <div className="font-medium text-white">{getLocalizedObjectLabel(locale, item)}</div>
-          <div className="mt-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">
+        <div className="min-w-0">
+          <div className="truncate font-medium text-white">
+            {getLocalizedObjectLabel(locale, item)}
+          </div>
+          <div className="mt-1 truncate text-[11px] uppercase tracking-[0.2em] text-slate-500">
             {categoryLabel}
           </div>
         </div>
-        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">
+        <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">
           {`${item.dimensions.width.toFixed(1)} x ${item.dimensions.depth.toFixed(1)}m`}
         </span>
       </div>

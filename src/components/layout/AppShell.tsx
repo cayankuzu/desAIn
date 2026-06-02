@@ -34,7 +34,10 @@ import { MobileRoomViewportPreview } from "@/components/layout/MobileRoomViewpor
 import { AccountBar } from "@/components/projects/AccountBar";
 import { CoverCaptureOverlay } from "@/components/projects/CoverCaptureOverlay";
 import { ProjectSaveDialog } from "@/components/projects/ProjectSaveDialog";
-import { RoomScene } from "@/components/room/RoomScene";
+import {
+  RoomScene,
+  type ViewportRoomPositionResolver,
+} from "@/components/room/RoomScene";
 import { buildEditorStatusToast, buildStructureToast, type EditorToast } from "@/lib/editor/toasts";
 import type { RoomData, RoomObject } from "@/types/room";
 import type { EditorProject, ProjectDraftPayload, ProjectSummary, Viewer } from "@/types/project";
@@ -302,6 +305,8 @@ export function AppShell({
   const loadedProjectIdRef = useRef<string | null>(initialProject?.id ?? null);
   const toastTimeoutRef = useRef<number | null>(null);
   const activeInventoryDragTemplateIdRef = useRef<string | null>(null);
+  const viewportRoomPositionResolverRef =
+    useRef<ViewportRoomPositionResolver | null>(null);
   const [dragPreview, setDragPreview] = useState<DragPreviewState>(emptyDragPreview);
   const roomDataSignature = useMemo(() => getRoomDataSignature(roomData), [roomData]);
   const selectedIdsSet = useMemo(
@@ -380,6 +385,25 @@ export function AppShell({
   useEffect(() => {
     roomDataRef.current = roomData;
   }, [roomData]);
+
+  const setViewportRoomPositionResolver = useCallback(
+    (resolver: ViewportRoomPositionResolver | null) => {
+      viewportRoomPositionResolverRef.current = resolver;
+    },
+    [],
+  );
+
+  const resolveViewportRoomPosition = useCallback(
+    (clientX: number, clientY: number, bounds: DOMRect) =>
+      viewportRoomPositionResolverRef.current?.(clientX, clientY, bounds) ??
+      getViewportRoomPosition(
+        roomData,
+        clientX - bounds.left,
+        clientY - bounds.top,
+        bounds,
+      ),
+    [roomData],
+  );
 
   useEffect(() => {
     if (initialProject) {
@@ -1150,7 +1174,11 @@ export function AppShell({
                   templateId,
                   x: pointerX,
                   y: pointerY,
-                  position: getViewportRoomPosition(roomData, pointerX, pointerY, bounds),
+                  position: resolveViewportRoomPosition(
+                    event.clientX,
+                    event.clientY,
+                    bounds,
+                  ),
                 });
               }}
               onDragLeave={(event) => {
@@ -1178,9 +1206,11 @@ export function AppShell({
                 event.preventDefault();
 
                 const bounds = event.currentTarget.getBoundingClientRect();
-                const pointerX = event.clientX - bounds.left;
-                const pointerY = event.clientY - bounds.top;
-                const position = getViewportRoomPosition(roomData, pointerX, pointerY, bounds);
+                const position = resolveViewportRoomPosition(
+                  event.clientX,
+                  event.clientY,
+                  bounds,
+                );
                 activeInventoryDragTemplateIdRef.current = null;
                 setDragPreview(emptyDragPreview);
 
@@ -1275,6 +1305,7 @@ export function AppShell({
                 previewObject={dragPreviewObject}
                 presentationMode={coverCaptureMode}
                 cameraResetToken={coverCaptureResetToken}
+                onViewportRoomPositionResolverChange={setViewportRoomPositionResolver}
               />
             </div>
           </div>
