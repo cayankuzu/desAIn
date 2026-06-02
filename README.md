@@ -45,8 +45,8 @@ Current behavior:
 
 - `local` runtime writes to `data/local/desain.local.sqlite`
 - Vercel runtime writes its working SQLite copy to `/tmp/desain/...` because the deployment bundle is read-only
-- production uses Vercel Blob for durable SQLite persistence when `BLOB_READ_WRITE_TOKEN` is configured
-- without Vercel Blob, Vercel can run from `/tmp`, but user accounts and projects are not durable across cold starts
+- production requires Vercel Blob for durable SQLite persistence through `BLOB_READ_WRITE_TOKEN` or `BLOB_STORE_ID` + `VERCEL_OIDC_TOKEN`
+- without Vercel Blob, production requests fail fast instead of silently losing accounts and sessions on cold starts
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

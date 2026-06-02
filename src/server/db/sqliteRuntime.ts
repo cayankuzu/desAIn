@@ -218,12 +218,15 @@ const createDatabaseFromDisk = async (filePath: string) => {
 const hydrateDatabaseFile = async (config: DatabaseConfig) => {
   const databaseBytes = await readDatabaseBlob(config);
 
-  if (!databaseBytes) {
+  if (databaseBytes) {
+    await fs.mkdir(path.dirname(config.filePath), { recursive: true });
+    await fs.writeFile(config.filePath, databaseBytes);
     return;
   }
 
-  await fs.mkdir(path.dirname(config.filePath), { recursive: true });
-  await fs.writeFile(config.filePath, databaseBytes);
+  if (config.storage === "vercel-blob") {
+    await fs.rm(config.filePath, { force: true }).catch(() => undefined);
+  }
 };
 
 const initializeRuntime = async (): Promise<SqliteRuntime> => {

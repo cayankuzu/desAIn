@@ -30,8 +30,15 @@ export const getDatabaseConfig = (): DatabaseConfig => {
       ? "desain.production.sqlite"
       : "desain.local.sqlite";
   const isVercel = Boolean(process.env.VERCEL);
+  const hasDurableBlobStorage = hasBlobCredentials();
+  if (isVercel && runtimeEnvironment === "production" && !hasDurableBlobStorage) {
+    throw new Error(
+      "Production auth storage requires Vercel Blob. Configure BLOB_READ_WRITE_TOKEN or BLOB_STORE_ID with VERCEL_OIDC_TOKEN.",
+    );
+  }
+
   const storage =
-    runtimeEnvironment === "production" && hasBlobCredentials()
+    runtimeEnvironment === "production" && hasDurableBlobStorage
       ? "vercel-blob"
       : "file";
   const filePath =
